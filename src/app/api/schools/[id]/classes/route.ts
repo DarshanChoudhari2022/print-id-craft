@@ -3,41 +3,31 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import crypto from "crypto"
 
 const classSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1, "Class name is required"),
+  expiresAt: z.string().datetime().optional().nullable(),
 })
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user?.role !== "MANUFACTURER") {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Verify school belongs to manufacturer
-    const school = await prisma.school.findUnique({
-      where: { id: params.id, manufacturerId: session.user.id }
-    })
-    
-    if (!school) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 })
-
-    const classes = await prisma.classGroup.findMany({
-      where: {
-        schoolId: params.id,
-        isActive: true
-      },
+    const classes = await prisma.class.findMany({
+      where: { schoolId: params.id },
       include: {
-        _count: {
-          select: { students: true }
-        }
+        _count: { select: { students: true } },
       },
-      orderBy: { name: "asc" }
+      orderBy: { createdAt: "desc" },
     })
 
-    return NextResponse.json({ success: true, data: classes, error: null })
+    return NextResponse.json({ success: true, data: classes })
   } catch (error) {
-    return NextResponse.json({ success: false, error: "Internal Server Error" }, { status: 500 })
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
 
@@ -45,31 +35,30 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user?.role !== "MANUFACTURER") {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const school = await prisma.school.findUnique({
-      where: { id: params.id, manufacturerId: session.user.id }
-    })
-    
-    if (!school) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 })
+    // Verify school exists
+    const school = await prisma.school.findUnique({ where: { id: params.id } })
+    if (!school) return NextResponse.json({ error: "School not found" }, { status: 404 })
 
     const body = await req.json()
-    const validatedData = classSchema.parse(body)
+    const validated = classSchema.parse(body)
 
-    const newClass = await prisma.classGroup.create({
+    const newClass = await prisma.class.create({
       data: {
-        name: validatedData.name,
+        name: validated.name,
         schoolId: params.id,
-        // submissionLink auto-generated as UUID via Prisma schema default
-      }
+        linkToken: crypto.randomUUID(),
+        expiresAt: validated.expiresAt ? new Date(validated.expiresAt) : null,
+      },
     })
 
-    return NextResponse.json({ success: true, data: newClass, error: null }, { status: 201 })
+    return NextResponse.json({ success: true, data: newClass }, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ success: false, error: (error as any).errors }, { status: 400 })
+      return NextResponse.json({ error: error.errors }, { status: 400 })
     }
-    return NextResponse.json({ success: false, error: "Internal Server Error" }, { status: 500 })
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

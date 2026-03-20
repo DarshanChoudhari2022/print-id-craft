@@ -4,35 +4,28 @@ import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 
-type Role = "MANUFACTURER" | "TEACHER" | "SUPER_ADMIN"
+type RoleOption = "MANUFACTURER" | "TEACHER"
 
 const roles = [
   {
-    id: "MANUFACTURER" as Role,
+    id: "MANUFACTURER" as RoleOption,
     label: "Manufacturer Admin",
     description: "Manage schools, templates & print batches",
     color: "#3b82f6",
     bgColor: "#eff6ff",
   },
   {
-    id: "TEACHER" as Role,
+    id: "TEACHER" as RoleOption,
     label: "School Teacher",
     description: "Track student submissions & approvals",
     color: "#22c55e",
     bgColor: "#f0fdf4",
   },
-  {
-    id: "SUPER_ADMIN" as Role,
-    label: "Super Admin",
-    description: "Full system access & analytics",
-    color: "#f59e0b",
-    bgColor: "#fffbeb",
-  },
 ]
 
 export default function LoginPage() {
   const router = useRouter()
-  const [selectedRole, setSelectedRole] = useState<Role>("SUPER_ADMIN")
+  const [selectedRole, setSelectedRole] = useState<RoleOption>("MANUFACTURER")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -56,7 +49,11 @@ export default function LoginPage() {
         return
       }
 
-      router.push("/")
+      if (selectedRole === "MANUFACTURER") {
+        router.push("/dashboard")
+      } else {
+        router.push("/teacher/dashboard")
+      }
       router.refresh()
     } catch (err) {
       console.error(err)
@@ -72,7 +69,7 @@ export default function LoginPage() {
         <div className="login-left-content">
           <div className="login-logo">
             <div className="login-logo-icon">P</div>
-            <span className="login-logo-text">PrintID Pro</span>
+            <span className="login-logo-text">Print ID Craft</span>
           </div>
 
           {/* ID Card Illustration */}
@@ -104,7 +101,6 @@ export default function LoginPage() {
                 </div>
               </div>
             </div>
-            {/* Floating decorative dots */}
             <div className="floating-dot dot-1" />
             <div className="floating-dot dot-2" />
             <div className="floating-dot dot-3" />
@@ -140,9 +136,6 @@ export default function LoginPage() {
                     {role.id === "TEACHER" && (
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 6 3 6 3s3 0 6-3v-5"/></svg>
                     )}
-                    {role.id === "SUPER_ADMIN" && (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                    )}
                   </div>
                   <div>
                     <div className="role-label">{role.label}</div>
@@ -159,14 +152,14 @@ export default function LoginPage() {
           {/* Login Form */}
           <form onSubmit={handleLogin} className="login-form">
             {error && <div className="login-error">{error}</div>}
-            
+
             <div className="form-group">
               <label htmlFor="email">Email</label>
               <input
                 id="email"
                 type="email"
                 required
-                placeholder="admin@printidpro.com"
+                placeholder="admin@printidcraft.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
@@ -197,6 +190,12 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          <div style={{ marginTop: 24, textAlign: 'center' }}>
+            <p style={{ fontSize: 12, color: '#94a3b8' }}>
+              Demo: admin@printidcraft.com / Admin@123
+            </p>
+          </div>
         </div>
       </div>
     </div>

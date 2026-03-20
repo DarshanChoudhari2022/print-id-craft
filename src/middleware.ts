@@ -6,31 +6,72 @@ export default withAuth(
     const token = req.nextauth.token
     const path = req.nextUrl.pathname
 
-    if (path.startsWith("/admin") && token?.role !== "SUPER_ADMIN") {
-      return NextResponse.redirect(new URL("/login", req.url))
-    }
-    
-    if (path.startsWith("/manufacturer") && token?.role !== "MANUFACTURER") {
-      return NextResponse.redirect(new URL("/login", req.url))
-    }
-
-    if (path.startsWith("/teacher") && token?.role !== "TEACHER") {
-      return NextResponse.redirect(new URL("/login", req.url))
+    // Manufacturer routes
+    if (path.startsWith("/dashboard") || path.startsWith("/schools")) {
+      if (token?.role !== "MANUFACTURER") {
+        return NextResponse.redirect(new URL("/login", req.url))
+      }
     }
 
-    if (path === "/" && token) {
-        if (token.role === "SUPER_ADMIN") return NextResponse.redirect(new URL("/admin", req.url))
-        if (token.role === "MANUFACTURER") return NextResponse.redirect(new URL("/manufacturer/schools", req.url))
-        if (token.role === "TEACHER") return NextResponse.redirect(new URL("/teacher/dashboard", req.url))
+    // Teacher routes
+    if (path.startsWith("/teacher")) {
+      if (token?.role !== "TEACHER") {
+        return NextResponse.redirect(new URL("/login", req.url))
+      }
+    }
+
+    // API route protection
+    if (path.startsWith("/api/schools") || path.startsWith("/api/admin")) {
+      if (token?.role !== "MANUFACTURER") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+    }
+
+    if (path.startsWith("/api/teacher")) {
+      if (token?.role !== "TEACHER") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+    }
+
+    // Login redirect if already authenticated
+    if (path === "/login" && token) {
+      if (token.role === "MANUFACTURER") {
+        return NextResponse.redirect(new URL("/dashboard", req.url))
+      }
+      if (token.role === "TEACHER") {
+        return NextResponse.redirect(new URL("/teacher/dashboard", req.url))
+      }
     }
   },
   {
     callbacks: {
-      authorized: ({ token }) => !!token,
+      authorized: ({ token, req }) => {
+        const path = req.nextUrl.pathname
+        // Allow public routes without auth
+        if (
+          path === "/" ||
+          path.startsWith("/submit/") ||
+          path.startsWith("/api/submit/") ||
+          path.startsWith("/api/auth/") ||
+          path.startsWith("/api/health") ||
+          path === "/login"
+        ) {
+          return true
+        }
+        return !!token
+      },
     },
   }
 )
 
 export const config = {
-  matcher: ["/admin/:path*", "/manufacturer/:path*", "/teacher/:path*", "/"],
+  matcher: [
+    "/dashboard/:path*",
+    "/schools/:path*",
+    "/teacher/:path*",
+    "/login",
+    "/api/schools/:path*",
+    "/api/teacher/:path*",
+    "/api/admin/:path*",
+  ],
 }

@@ -2,12 +2,14 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { Providers } from "@/components/providers"
+import { Toaster } from "sonner"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "PrintID Pro",
-  description: "Multi-School ID Card Management & Print Portal",
+  title: "Print ID Craft — Multi-School ID Card Management & Print Portal",
+  description:
+    "Professional ID card printing SaaS for manufacturers. Manage multiple schools, collect student data via smart links, design ID card templates, and generate print-ready PDFs with guaranteed front-back matching.",
 }
 
 export default function RootLayout({
@@ -18,7 +20,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <Toaster richColors position="bottom-right" />
+        </Providers>
       </body>
     </html>
   )

@@ -1,181 +1,224 @@
 "use client"
-import { useSession, signOut } from "next-auth/react"
 import { useState, useEffect } from "react"
-import { useRouter, usePathname } from "next/navigation"
-import Link from "next/link"
+import { useSession, signOut } from "next-auth/react"
 
-type Student = {
+type StudentData = {
   id: string
   serialNumber: string
-  photoUrl: string | null
+  photoUrl: string
   formData: any
-  status: "PENDING" | "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "FLAGGED"
+  status: string
+  flagNote: string | null
   submittedAt: string
-  classGroup: { name: string }
+  class: { name: string }
+}
+
+type DashboardData = {
+  school: { name: string; logoUrl: string | null } | null
+  classes: any[]
+  students: StudentData[]
+  stats: { total: number; submitted: number; approved: number; flagged: number; pending: number; printed: number }
 }
 
 export default function TeacherDashboard() {
   const { data: session } = useSession()
-  const router = useRouter()
-  const pathname = usePathname()
-
-  const [students, setStudents] = useState<Student[]>([])
+  const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [classFilter, setClassFilter] = useState("")
+  const [statusFilter, setStatusFilter] = useState("")
 
-  const fetchStudents = async () => {
+  const fetchData = async () => {
     try {
-      const res = await fetch("/api/teacher/students")
+      const res = await fetch("/api/teacher/dashboard")
       const json = await res.json()
-      if (json.success) setStudents(json.data)
-    } catch (e) {
-      console.error(e)
+      if (json.success) setData(json.data)
+    } catch (err) {
+      console.error(err)
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    if (session?.user?.role === "TEACHER") fetchStudents()
-  }, [session])
+  useEffect(() => { fetchData() }, [])
 
-  const handleStatusChange = async (id: string, status: string) => {
-    await fetch(`/api/students/${id}/status`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status })
-    })
-    fetchStudents()
+  const handleApprove = async (sid: string) => {
+    try {
+      await fetch(`/api/schools/${getSchoolId()}/students/${sid}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "APPROVED" }),
+      })
+      fetchData()
+    } catch (err) { console.error(err) }
   }
 
-  const approvedCount = students.filter(s => s.status === "APPROVED").length
-  const flaggedCount = students.filter(s => s.status === "FLAGGED").length
-  const pendingCount = students.filter(s => s.status === "SUBMITTED" || s.status === "UNDER_REVIEW").length
+  const handleFlag = async (sid: string) => {
+    const note = prompt("Enter reason for flagging:")
+    if (!note) return
+    try {
+      await fetch(`/api/schools/${getSchoolId()}/students/${sid}/flag`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ flagNote: note }),
+      })
+      fetchData()
+    } catch (err) { console.error(err) }
+  }
+
+  const handleUnflag = async (sid: string) => {
+    try {
+      await fetch(`/api/schools/${getSchoolId()}/students/${sid}/flag`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unflag: true }),
+      })
+      fetchData()
+    } catch (err) { console.error(err) }
+  }
+
+  const getSchoolId = () => session?.user?.schoolId || ""
+
+  const filtered = data?.students?.filter(s => {
+    if (classFilter && s.class?.name !== classFilter) return false
+    if (statusFilter && s.status !== statusFilter) return false
+    return true
+  }) || []
+
+  if (loading) return (
+    <div className="teacher-page">
+      <div className="teacher-container">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+          <div className="login-spinner" style={{ width: 32, height: 32, borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6' }} />
+        </div>
+      </div>
+    </div>
+  )
 
   return (
-    <div className="app-layout">
-      <aside className="app-sidebar">
-        <div className="sidebar-header">
-          <div className="sidebar-brand">
-            <div className="sidebar-brand-icon" style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>P</div>
-            <span className="sidebar-brand-text">PrintID Pro</span>
+    <div className="teacher-page">
+      <div className="teacher-container">
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+              {data?.school?.name || "Teacher Dashboard"}
+            </h1>
+            <p style={{ fontSize: 14, color: '#64748b' }}>Welcome, {session?.user?.name || session?.user?.email}</p>
           </div>
+          <button className="btn btn-outline" onClick={() => signOut({ callbackUrl: "/login" })}>Sign Out</button>
         </div>
-        <nav className="sidebar-nav">
-          <Link href="/teacher/dashboard" className={`sidebar-link ${pathname === '/teacher/dashboard' ? 'sidebar-link-active' : ''}`}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
-            Submissions
-          </Link>
-        </nav>
-        <div className="sidebar-footer">
-          <div className="sidebar-user">
-            <div className="sidebar-avatar" style={{ background: 'linear-gradient(135deg, #22c55e, #15803d)' }}>{session?.user?.email?.charAt(0).toUpperCase() || "T"}</div>
-            <div className="sidebar-user-info">
-              <div className="sidebar-user-name" style={{ color: 'white' }}>{session?.user?.email || "Teacher"}</div>
-              <div className="sidebar-user-role">Teacher Portal</div>
-            </div>
-            <button className="btn-ghost" onClick={() => signOut({ callbackUrl: '/login' })} style={{ padding: 4 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
-            </button>
-          </div>
-        </div>
-      </aside>
 
-      <main className="app-content">
-        <div className="page-header">
-          <h1>Teacher Dashboard</h1>
-          <p>Review student data submissions inside your school environment.</p>
+        {/* Stats */}
+        <div className="stat-grid" style={{ marginBottom: 24 }}>
+          <div className="stat-card">
+            <div className="stat-card-label">Total Submissions</div>
+            <div className="stat-card-value">{data?.stats.total || 0}</div>
+          </div>
+          <div className="stat-card" style={{ borderLeftColor: '#22c55e' }}>
+            <div className="stat-card-label">Approved</div>
+            <div className="stat-card-value" style={{ color: '#16a34a' }}>{data?.stats.approved || 0}</div>
+          </div>
+          <div className="stat-card" style={{ borderLeftColor: '#f59e0b' }}>
+            <div className="stat-card-label">Pending Review</div>
+            <div className="stat-card-value" style={{ color: '#d97706' }}>{data?.stats.submitted || 0}</div>
+          </div>
+          <div className="stat-card" style={{ borderLeftColor: '#ef4444' }}>
+            <div className="stat-card-label">Flagged</div>
+            <div className="stat-card-value" style={{ color: '#dc2626' }}>{data?.stats.flagged || 0}</div>
+          </div>
         </div>
-        <div className="page-body">
-          <div className="stat-grid">
-            <div className="stat-card">
-              <div className="stat-card-label">Pending Review</div>
-              <div className="stat-card-value">{pendingCount}</div>
+
+        {/* Progress Bar */}
+        {data && data.stats.total > 0 && (
+          <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 24, border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748b', marginBottom: 8 }}>
+              <span>Approval Progress</span>
+              <span>{Math.round(((data.stats.approved + data.stats.printed) / data.stats.total) * 100)}%</span>
             </div>
-            <div className="stat-card">
-              <div className="stat-card-label">Approved to Print</div>
-              <div className="stat-card-value">{approvedCount}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card-label">Flagged issues</div>
-              <div className="stat-card-value text-red-500">{flaggedCount}</div>
+            <div style={{ height: 8, borderRadius: 4, background: '#f1f5f9', overflow: 'hidden' }}>
+              <div style={{ height: '100%', borderRadius: 4, background: 'linear-gradient(90deg, #22c55e, #16a34a)', width: `${((data.stats.approved + data.stats.printed) / data.stats.total) * 100}%`, transition: 'width 0.3s' }} />
             </div>
           </div>
+        )}
 
-          <div className="data-table-wrapper" style={{ overflowX: 'auto' }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Photo</th>
-                  <th>ID Number</th>
-                  <th>Class</th>
-                  <th>Extracted Info</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {students.map(s => (
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+          <select value={classFilter} onChange={e => setClassFilter(e.target.value)} style={{ height: 38, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}>
+            <option value="">All Classes</option>
+            {data?.classes.map(c => <option key={c.id} value={c.name}>{c.name} ({c._count.students})</option>)}
+          </select>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ height: 38, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}>
+            <option value="">All Status</option>
+            <option value="SUBMITTED">Submitted</option>
+            <option value="APPROVED">Approved</option>
+            <option value="FLAGGED">Flagged</option>
+            <option value="PRINTED">Printed</option>
+          </select>
+          <span style={{ fontSize: 13, color: '#64748b', padding: '10px 0' }}>{filtered.length} students</span>
+        </div>
+
+        {/* Student Table */}
+        <div className="data-table-wrapper" style={{ overflowX: 'auto' }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Photo</th>
+                <th>Serial</th>
+                <th>Name</th>
+                <th>Class</th>
+                <th>Roll No.</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(s => {
+                const fd = s.formData as any
+                return (
                   <tr key={s.id}>
                     <td>
                       {s.photoUrl ? (
-                         <div style={{ width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', border: '2px solid #e2e8f0' }}>
-                           <img src={s.photoUrl} alt="student" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                         </div>
+                        <img src={s.photoUrl} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', border: '2px solid #e2e8f0' }} />
                       ) : (
-                         <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#f1f5f9', border: '2px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                         </div>
+                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f1f5f9', border: '2px dashed #cbd5e1' }} />
                       )}
                     </td>
-                    <td style={{ fontWeight: 600, fontSize: 13 }}>{s.serialNumber}</td>
-                    <td>{s.classGroup.name}</td>
-                    <td style={{ maxWidth: 200 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                         {Object.entries(s.formData).slice(0, 2).map(([k, v]) => (
-                           <div key={k} style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                             <span style={{ color: '#94a3b8' }}>{String(k).substring(0, 10)}:</span> 
-                             <span style={{ fontWeight: 500 }} className="truncate">{String(v)}</span>
-                           </div>
-                         ))}
-                      </div>
-                    </td>
+                    <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{s.serialNumber}</td>
+                    <td style={{ fontWeight: 500 }}>{fd.fullName || "—"}</td>
+                    <td>{s.class?.name || "—"}</td>
+                    <td>{fd.rollNo || "—"}</td>
                     <td>
-                      <span className={`status-badge ${s.status === 'APPROVED' ? 'status-approved' : s.status === 'FLAGGED' ? 'status-flagged' : 'status-submitted'}`}>
-                        {s.status}
-                      </span>
+                      <span className={`status-badge ${
+                        s.status === 'APPROVED' ? 'status-approved' :
+                        s.status === 'FLAGGED' ? 'status-flagged' :
+                        s.status === 'PRINTED' ? 'status-review' :
+                        s.status === 'SUBMITTED' ? 'status-submitted' :
+                        'status-pending'
+                      }`}>{s.status}</span>
+                      {s.flagNote && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>📌 {s.flagNote}</div>}
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                        <button 
-                          className="btn btn-outline" 
-                          style={{ padding: '4px 10px', fontSize: 12, borderColor: '#22c55e', color: '#16a34a' }}
-                          onClick={() => handleStatusChange(s.id, "APPROVED")}
-                        >
-                          Approve
-                        </button>
-                        <button 
-                          className="btn btn-outline" 
-                          style={{ padding: '4px 10px', fontSize: 12, borderColor: '#ef4444', color: '#dc2626' }}
-                          onClick={() => handleStatusChange(s.id, "FLAGGED")}
-                        >
-                          Flag
-                        </button>
+                      <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                        {s.status !== "APPROVED" && s.status !== "PRINTED" && (
+                          <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', color: '#22c55e', borderColor: '#22c55e' }} onClick={() => handleApprove(s.id)}>✓ Approve</button>
+                        )}
+                        {s.status === "FLAGGED" ? (
+                          <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', color: '#3b82f6', borderColor: '#3b82f6' }} onClick={() => handleUnflag(s.id)}>Unflag</button>
+                        ) : s.status !== "PRINTED" ? (
+                          <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', color: '#ef4444', borderColor: '#ef4444' }} onClick={() => handleFlag(s.id)}>🚩</button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
-                ))}
-                {students.length === 0 && !loading && (
-                   <tr>
-                     <td colSpan={6} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>
-                        No submissions available at this time.
-                     </td>
-                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                )
+              })}
+              {filtered.length === 0 && (
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No students found</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
-      </main>
+      </div>
     </div>
   )
 }

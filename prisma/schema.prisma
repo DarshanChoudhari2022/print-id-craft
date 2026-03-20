@@ -7,36 +7,64 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String    @default("")
+  role          Role      @default(TEACHER)
+  schoolId      String?
+  school        School?   @relation(fields: [schoolId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
 enum Role {
-  SUPER_ADMIN
   MANUFACTURER
   TEACHER
 }
 
-enum SchoolStatus {
-  ACTIVE
-  INACTIVE
+model School {
+  id            String       @id @default(cuid())
+  name          String
+  address       String?
+  contactEmail  String       @default("")
+  logoUrl       String?
+  teachers      User[]
+  classes       Class[]
+  template      Template?
+  students      Student[]
+  batches       PrintBatch[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 }
 
-enum FieldType {
-  TEXT
-  DATE
-  SELECT
-  PHOTO
-  SIGNATURE
+model Class {
+  id            String    @id @default(cuid())
+  name          String
+  schoolId      String
+  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  linkToken     String    @unique @default(cuid())
+  isActive      Boolean   @default(true)
+  expiresAt     DateTime?
+  students      Student[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
-enum StudentStatus {
-  PENDING
-  SUBMITTED
-  UNDER_REVIEW
-  APPROVED
-  FLAGGED
-}
-
-enum CardSide {
-  FRONT
-  BACK
+model Template {
+  id              String      @id @default(cuid())
+  schoolId        String      @unique
+  school          School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  frontLayout     Json        @default("[]")
+  backLayout      Json        @default("[]")
+  cardWidthMm     Float       @default(85.6)
+  cardHeightMm    Float       @default(54.0)
+  printDpi        Int         @default(300)
+  orientation     Orientation @default(PORTRAIT)
+  fieldConfig     Json        @default("[]")
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 }
 
 enum Orientation {
@@ -44,121 +72,51 @@ enum Orientation {
   LANDSCAPE
 }
 
-enum PrintBatchStatus {
-  PENDING
-  QUEUED
-  GENERATING
-  READY
-  DOWNLOADED
-}
-
-model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  role      Role     @default(TEACHER)
-  schoolId  String?
-  school    School?  @relation(fields: [schoolId], references: [id])
-  createdAt DateTime @default(now())
-
-  flags     FlagNote[]
-}
-
-model School {
-  id           String       @id @default(uuid())
-  name         String
-  logo         String?
-  address      String?
-  primaryColor String?
-  status       SchoolStatus @default(ACTIVE)
-  createdAt    DateTime     @default(now())
-  manufacturerId String?
-
-  users        User[]
-  classes      ClassGroup[]
-  fields       SubmissionField[]
-  templates    CardTemplate[]
-  batches      PrintBatch[]
-}
-
-model ClassGroup {
-  id             String   @id @default(uuid())
-  schoolId       String
-  name           String
-  submissionLink String   @unique @default(uuid())
-  isActive       Boolean  @default(true)
-
-  school         School   @relation(fields: [schoolId], references: [id])
-  students       Student[]
-  batches        PrintBatch[]
-}
-
-model SubmissionField {
-  id         String    @id @default(uuid())
-  schoolId   String
-  fieldName  String
-  fieldType  FieldType
-  isRequired Boolean   @default(false)
-  sortOrder  Int       @default(0)
-
-  school     School    @relation(fields: [schoolId], references: [id])
-}
-
 model Student {
-  id           String        @id @default(uuid())
-  classGroupId String
-  serialNumber String        @unique
-  formData     Json
-  photoUrl     String?
-  signatureUrl String?
-  status       StudentStatus @default(PENDING)
-  submittedAt  DateTime?     @default(now())
-  qrToken      String        @unique @default(uuid())
+  id            String        @id @default(cuid())
+  schoolId      String
+  school        School        @relation(fields: [schoolId], references: [id])
+  classId       String
+  class         Class         @relation(fields: [classId], references: [id])
+  serialNumber  String        @unique
+  formData      Json
+  photoUrl      String        @default("")
+  qrCodeUrl     String?
+  status        StudentStatus @default(SUBMITTED)
+  flagNote      String?
+  submittedAt   DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  classGroup   ClassGroup    @relation(fields: [classGroupId], references: [id])
-  flags        FlagNote[]
+  @@index([schoolId, serialNumber])
+  @@index([schoolId])
+  @@index([classId])
+  @@index([status])
 }
 
-model CardTemplate {
-  id           String      @id @default(uuid())
-  schoolId     String
-  side         CardSide
-  templateJson Json        @default("[]")
-  background   String      @default("#ffffff")
-  width        Float       @default(600)
-  height       Float       @default(950)
-  dpi          Int         @default(300)
-  orientation  Orientation @default(PORTRAIT)
-  isPublished  Boolean     @default(false)
-
-  school       School      @relation(fields: [schoolId], references: [id])
+enum StudentStatus {
+  PENDING
+  SUBMITTED
+  FLAGGED
+  APPROVED
+  PRINTED
 }
 
 model PrintBatch {
-  id           String           @id @default(uuid())
-  schoolId     String
-  classGroupId String?
-  side         CardSide?
-  status       PrintBatchStatus @default(QUEUED)
-  pdfUrl       String?
-  manifestUrl  String?
-  generatedAt  DateTime?
-  studentCount Int              @default(0)
-  studentIds   Json             @default("[]")
-  createdAt    DateTime         @default(now())
-
-  school       School           @relation(fields: [schoolId], references: [id])
-  classGroup   ClassGroup?      @relation(fields: [classGroupId], references: [id])
+  id              String      @id @default(cuid())
+  schoolId        String
+  school          School      @relation(fields: [schoolId], references: [id])
+  studentCount    Int         @default(0)
+  frontPdfPath    String?
+  backPdfPath     String?
+  manifestPath    String?
+  status          BatchStatus @default(PENDING)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 }
 
-model FlagNote {
-  id        String   @id @default(uuid())
-  studentId String
-  teacherId String
-  note      String
-  createdAt DateTime @default(now())
-  resolved  Boolean  @default(false)
-
-  student   Student  @relation(fields: [studentId], references: [id])
-  teacher   User     @relation(fields: [teacherId], references: [id])
+enum BatchStatus {
+  PENDING
+  GENERATING
+  READY
+  DOWNLOADED
 }
