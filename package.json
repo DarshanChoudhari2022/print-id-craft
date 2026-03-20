@@ -9,7 +9,7 @@
     "lint": "next lint",
     "seed": "npx prisma db seed",
     "db:push": "npx prisma db push",
-    "db:reset": "npx prisma db push --force-reset && npx prisma db seed"
+    "db:reset": "npx prisma db push --force-reset && npx prisma db seed",
         "postinstall": "prisma generate",
   },
   "prisma": {
