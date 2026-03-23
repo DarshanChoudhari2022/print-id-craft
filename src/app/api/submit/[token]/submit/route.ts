@@ -6,7 +6,7 @@ import { uploadWithRetry, getPublicUrl } from "@/lib/supabase"
 import QRCode from "qrcode"
 
 const submitSchema = z.object({
-  formData: z.record(z.any()),
+  formData: z.record(z.string(), z.any()),
   photoUrl: z.string().optional().default(""),
 })
 
@@ -38,13 +38,17 @@ export async function POST(req: Request, { params }: { params: { token: string }
     const validated = submitSchema.parse(body)
 
     // Check for duplicate: same class + same rollNo
-    const rollNo = validated.formData.rollNo || validated.formData["Roll No."]
+    const rollNo = validated.formData.rollNo || validated.formData["Roll No."] || validated.formData["roll"]
     if (rollNo) {
       const existing = await prisma.student.findFirst({
         where: {
           classId: cls.id,
-          formData: { path: ["rollNo"], equals: rollNo },
           status: { not: "FLAGGED" },
+          OR: [
+            { formData: { path: ["rollNo"], equals: rollNo } },
+            { formData: { path: ["Roll No."], equals: rollNo } },
+            { formData: { path: ["roll"], equals: rollNo } },
+          ]
         },
       })
       if (existing) {
@@ -57,10 +61,25 @@ export async function POST(req: Request, { params }: { params: { token: string }
       .replace(/[^A-Za-z]/g, "")
       .substring(0, 6)
       .toUpperCase()
-    const studentCount = await prisma.student.count({
+    
+    // Find last student to get max serial number numeric part
+    const lastStudent = await prisma.student.findFirst({
       where: { schoolId: cls.school.id },
+      orderBy: { serialNumber: 'desc' },
     })
-    const serialNumber = `${schoolCode}-${String(studentCount + 1).padStart(4, "0")}`
+
+    let nextNum = 1
+    if (lastStudent) {
+      const match = lastStudent.serialNumber.match(/-(\d+)$/)
+      if (match) {
+        nextNum = parseInt(match[1]) + 1
+      } else {
+        // Fallback to count if format is weird
+        const count = await prisma.student.count({ where: { schoolId: cls.school.id } })
+        nextNum = count + 1
+      }
+    }
+    const serialNumber = `${schoolCode}-${String(nextNum).padStart(4, "0")}`
 
     // Create student in transaction
     const student = await prisma.$transaction(async (tx) => {
@@ -115,11 +134,13 @@ export async function POST(req: Request, { params }: { params: { token: string }
       },
       { status: 201 }
     )
-  } catch (error) {
+  } catch (error: any) {
     console.error("POST /api/submit/[token] error:", error)
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 })
+      return NextResponse.json({ error: error.issues }, { status: 400 })
     }
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+    // Return specific prisma error message if available
+    const message = error?.message || (typeof error === 'string' ? error : "Internal Server Error")
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

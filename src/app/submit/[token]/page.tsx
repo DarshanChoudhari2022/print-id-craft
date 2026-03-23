@@ -115,22 +115,28 @@ export default function SubmitPage() {
       // Upload photo if exists
       let photoUrl = ""
       if (croppedPhoto) {
-        const blob = await fetch(croppedPhoto).then(r => r.blob())
-        const formD = new FormData()
-        formD.append("file", blob, "photo.jpg")
-        // Upload to Supabase via client-side API
-        const { createClient } = await import("@supabase/supabase-js")
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-        )
-        const fileName = `students/${config.schoolId}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}.jpg`
-        const { data: uploadData, error: uploadErr } = await supabase.storage
-          .from("student-photos")
-          .upload(fileName, blob, { contentType: "image/jpeg", upsert: true })
-        if (!uploadErr && uploadData) {
-          const { data: urlData } = supabase.storage.from("student-photos").getPublicUrl(fileName)
-          photoUrl = urlData.publicUrl
+        try {
+          const blob = await fetch(croppedPhoto).then(r => r.blob())
+          // Upload to Supabase via client-side API
+          const { createClient } = await import("@supabase/supabase-js")
+          const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+          )
+          const fileName = `students/${config.schoolId}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}.jpg`
+          const { data: uploadData, error: uploadErr } = await supabase.storage
+            .from("student-photos")
+            .upload(fileName, blob, { contentType: "image/jpeg", upsert: true })
+          if (uploadErr) {
+            console.error("Photo upload error:", uploadErr)
+          }
+          if (!uploadErr && uploadData) {
+            const { data: urlData } = supabase.storage.from("student-photos").getPublicUrl(fileName)
+            photoUrl = urlData.publicUrl
+          }
+        } catch (photoErr) {
+          console.error("Photo upload failed:", photoErr)
+          // Continue with submission even if photo upload fails
         }
       }
 

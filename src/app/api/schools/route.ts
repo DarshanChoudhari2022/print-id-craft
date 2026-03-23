@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 
+export const dynamic = "force-dynamic"
+
 const schoolSchema = z.object({
   name: z.string().min(2, "School name must be at least 2 characters"),
   contactEmail: z.string().email("Invalid contact email"),
@@ -78,7 +80,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("POST /api/schools error:", error)
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 })
+      return NextResponse.json({ error: error.issues }, { status: 400 })
     }
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
