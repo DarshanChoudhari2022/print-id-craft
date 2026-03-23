@@ -25,6 +25,7 @@ export async function GET() {
       prisma.class.findMany({
         where: { schoolId },
         include: { _count: { select: { students: true } } },
+        orderBy: { createdAt: "desc" },
       }),
       prisma.student.findMany({
         where: { schoolId },

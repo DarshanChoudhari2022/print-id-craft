@@ -141,6 +141,28 @@ export default function TeacherDashboard() {
           </div>
         )}
 
+        {/* Share Links */}
+        {data?.classes && data.classes.length > 0 && (
+          <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 24, border: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>📋 Class Form Links</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {data.classes.map((c: any) => {
+                const linkToken = c.linkToken || (c.students?.[0]?.class?.linkToken)
+                if (!linkToken) return null
+                const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/submit/${linkToken}`
+                return (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#f8fafc', borderRadius: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', flex: 1, minWidth: 100 }}>{c.name}</span>
+                    <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', flex: 2, minWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url}</span>
+                    <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { navigator.clipboard.writeText(url); alert('Link copied!') }}>📋 Copy</button>
+                    <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 10px', color: '#22c55e', borderColor: '#22c55e' }} onClick={() => { const msg = encodeURIComponent(`📋 ID Card Registration Form\n\nSchool: ${data?.school?.name}\nClass: ${c.name}\n\nPlease fill your details:\n${url}`); window.open(`https://wa.me/?text=${msg}`, '_blank') }}>💬 WhatsApp</button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Filters */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
           <select value={classFilter} onChange={e => setClassFilter(e.target.value)} style={{ height: 38, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}>

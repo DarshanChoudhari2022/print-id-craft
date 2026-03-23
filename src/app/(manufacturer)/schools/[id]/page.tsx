@@ -534,9 +534,15 @@ export default function SchoolDetailPage() {
                       <td style={{ fontSize: 13, color: '#64748b' }}>{new Date(b.createdAt).toLocaleDateString()}</td>
                       <td style={{ textAlign: 'right' }}>
                         {b.status === "READY" || b.status === "DOWNLOADED" ? (
-                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                            {b.frontPdfPath && (
+                              <a href={`/api/schools/${schoolId}/batches/${b.id}/download/front`} className="btn btn-outline" style={{ fontSize: 11, padding: '4px 10px', textDecoration: 'none' }}>📄 Front PDF</a>
+                            )}
+                            {b.backPdfPath && (
+                              <a href={`/api/schools/${schoolId}/batches/${b.id}/download/back`} className="btn btn-outline" style={{ fontSize: 11, padding: '4px 10px', textDecoration: 'none' }}>📄 Back PDF</a>
+                            )}
                             {b.manifestPath && (
-                              <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => toast.info("Manifest CSV download coming soon")}>📄 Manifest</button>
+                              <a href={`/api/schools/${schoolId}/batches/${b.id}/download/manifest`} className="btn btn-outline" style={{ fontSize: 11, padding: '4px 10px', textDecoration: 'none' }}>📊 Manifest</a>
                             )}
                           </div>
                         ) : b.status === "GENERATING" ? (
