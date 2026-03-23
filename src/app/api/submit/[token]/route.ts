@@ -8,7 +8,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
       include: {
         school: {
           include: {
-            template: { select: { fieldConfig: true } },
+            template: true,
           },
         },
       },
@@ -26,6 +26,8 @@ export async function GET(req: Request, { params }: { params: { token: string } 
       return NextResponse.json({ error: "This link has expired", code: "EXPIRED" }, { status: 410 })
     }
 
+    const template = cls.school.template
+
     return NextResponse.json({
       success: true,
       data: {
@@ -34,7 +36,12 @@ export async function GET(req: Request, { params }: { params: { token: string } 
         className: cls.name,
         schoolId: cls.school.id,
         classId: cls.id,
-        fieldConfig: cls.school.template?.fieldConfig || [],
+        fieldConfig: template?.fieldConfig || [],
+        frontLayout: template?.frontLayout || [],
+        backLayout: template?.backLayout || [],
+        cardWidthMm: template?.cardWidthMm || 85.6,
+        cardHeightMm: template?.cardHeightMm || 54.0,
+        orientation: template?.orientation || "LANDSCAPE",
       },
     })
   } catch (error) {

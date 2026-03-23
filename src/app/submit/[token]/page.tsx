@@ -5,6 +5,10 @@ import ReactCrop, { type Crop } from "react-image-crop"
 import "react-image-crop/dist/ReactCrop.css"
 
 type FieldConfig = { key: string; label: string; type: string; required: boolean }
+type TemplateElement = { 
+  id: string; type: string; x: number; y: number; width: number; height: number; 
+  content: string; fontSize?: number; fill?: string; align?: string; bold?: boolean 
+}
 
 type FormConfig = {
   schoolName: string
@@ -13,6 +17,75 @@ type FormConfig = {
   schoolId: string
   classId: string
   fieldConfig: FieldConfig[]
+  frontLayout: TemplateElement[]
+  backLayout: TemplateElement[]
+  cardWidthMm: number
+  cardHeightMm: number
+  orientation: "PORTRAIT" | "LANDSCAPE"
+}
+
+// Helper components moved outside to keep SubmitPage clean
+const IDCardPreview = ({ 
+  layout, 
+  widthMm, 
+  heightMm, 
+  formData, 
+  config, 
+  croppedPhoto 
+}: { 
+  layout: TemplateElement[], 
+  widthMm: number, 
+  heightMm: number,
+  formData: Record<string, string>,
+  config: FormConfig | null,
+  croppedPhoto: string
+}) => {
+  const SCALE = 3.8 // px per mm for preview
+  const w = widthMm * SCALE
+  const h = heightMm * SCALE
+
+  const resolveTemplateText = (text: string) => {
+    let resolved = text
+    Object.entries(formData).forEach(([key, value]) => {
+      resolved = resolved.replace(new RegExp(`{{${key}}}`, 'g'), value || "")
+    })
+    resolved = resolved.replace(/{{class}}/g, config?.className || "")
+    resolved = resolved.replace(/{{serialNumber}}/g, "Pending...")
+    return resolved
+  }
+
+  return (
+    <div style={{ position: 'relative', width: w, height: h, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', margin: '0 auto' }}>
+      {layout.map(el => (
+        <div
+          key={el.id}
+          style={{
+            position: 'absolute',
+            left: el.x, top: el.y,
+            width: el.width, height: el.height,
+            display: 'flex', alignItems: 'center', justifyContent: el.align === 'left' ? 'flex-start' : el.align === 'right' ? 'flex-end' : 'center',
+            padding: 2,
+            fontSize: el.fontSize || 14,
+            color: el.fill || '#000',
+            fontWeight: el.bold ? 'bold' : 'normal',
+            background: el.type === 'photo' ? '#f1f5f9' : 'transparent',
+            userSelect: 'none',
+            overflow: 'hidden',
+          }}
+        >
+          {el.type === 'photo' ? (
+            <img src={croppedPhoto || "https://via.placeholder.com/150?text=Photo"} alt="Student" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : el.type === 'logo' ? (
+            <img src={config?.schoolLogo || "https://via.placeholder.com/150?text=Logo"} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          ) : el.type === 'qr' ? (
+            <div style={{ width: '100%', height: '100%', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0' }}>
+              <span style={{ fontSize: 10 }}>[QR]</span>
+            </div>
+          ) : resolveTemplateText(el.content)}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export default function SubmitPage() {
@@ -27,6 +100,7 @@ export default function SubmitPage() {
   const [photoPreview, setPhotoPreview] = useState("")
   const [crop, setCrop] = useState<Crop>({ unit: "%", width: 75, height: 100, x: 12.5, y: 0 })
   const [croppedPhoto, setCroppedPhoto] = useState("")
+  const [cardSide, setCardSide] = useState<"front" | "back">("front")
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ serialNumber: string; studentId: string } | null>(null)
 
@@ -79,7 +153,6 @@ export default function SubmitPage() {
       height: (crop.height / 100) * img.height * scaleY,
     }
 
-    // Target: 3:4 ratio, max 600x800
     const TARGET_W = 600
     const TARGET_H = 800
     canvas.width = TARGET_W
@@ -112,12 +185,10 @@ export default function SubmitPage() {
     if (!config) return
     setSubmitting(true)
     try {
-      // Upload photo if exists
       let photoUrl = ""
       if (croppedPhoto) {
         try {
           const blob = await fetch(croppedPhoto).then(r => r.blob())
-          // Upload to Supabase via client-side API
           const { createClient } = await import("@supabase/supabase-js")
           const supabase = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -136,7 +207,6 @@ export default function SubmitPage() {
           }
         } catch (photoErr) {
           console.error("Photo upload failed:", photoErr)
-          // Continue with submission even if photo upload fails
         }
       }
 
@@ -160,7 +230,6 @@ export default function SubmitPage() {
     }
   }
 
-  // Loading state
   if (step === "loading") return (
     <div className="submit-page">
       <div className="submit-container">
@@ -172,7 +241,6 @@ export default function SubmitPage() {
     </div>
   )
 
-  // Error state  
   if (step === "error") return (
     <div className="submit-page">
       <div className="submit-container">
@@ -189,7 +257,6 @@ export default function SubmitPage() {
     </div>
   )
 
-  // Success state
   if (step === "success") return (
     <div className="submit-page">
       <div className="submit-container" style={{ maxWidth: 480 }}>
@@ -201,7 +268,55 @@ export default function SubmitPage() {
             <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Serial Number</p>
             <p style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>{result?.serialNumber}</p>
           </div>
-          <p style={{ fontSize: 13, color: '#94a3b8' }}>Please save this serial number for your records. Your school will review the submission.</p>
+          <p style={{ fontSize: 13, color: '#94a3b8' }}>Please save this serial number for your records.</p>
+        </div>
+      </div>
+    </div>
+  )
+
+  if (step === "review") return (
+    <div className="submit-page">
+      <div className="submit-container">
+        <div style={{ padding: 24 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Review Card</h2>
+          <p style={{ fontSize: 14, color: '#64748b', marginBottom: 20 }}>This is how your identity card will look.</p>
+
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, background: '#f1f5f9', padding: 4, borderRadius: 8 }}>
+              <button onClick={() => setCardSide("front")} style={{ flex: 1, padding: '8px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer', background: cardSide === "front" ? 'white' : 'transparent', color: cardSide === "front" ? '#3b82f6' : '#64748b', boxShadow: cardSide === "front" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>Front View</button>
+              <button onClick={() => setCardSide("back")} style={{ flex: 1, padding: '8px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer', background: cardSide === "back" ? 'white' : 'transparent', color: cardSide === "back" ? '#3b82f6' : '#64748b', boxShadow: cardSide === "back" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>Back View</button>
+            </div>
+
+            <IDCardPreview 
+              layout={cardSide === 'front' ? config?.frontLayout || [] : config?.backLayout || []} 
+              widthMm={config?.cardWidthMm || 85.6}
+              heightMm={config?.cardHeightMm || 54}
+              formData={formData}
+              config={config}
+              croppedPhoto={croppedPhoto}
+            />
+          </div>
+
+          <div style={{ background: '#f8fafc', borderRadius: 12, padding: 16, marginBottom: 24 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>Details Check</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {config?.fieldConfig.filter(f => f.key !== "class").map(field => (
+                formData[field.key] && (
+                  <div key={field.key}>
+                    <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>{field.label}</p>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{formData[field.key]}</p>
+                  </div>
+                )
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setStep("photo")}>← Back</button>
+            <button className="btn btn-primary" style={{ flex: 1 }} disabled={submitting} onClick={handleSubmit}>
+              {submitting ? "Submitting..." : "Submit Registration"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -319,42 +434,6 @@ export default function SubmitPage() {
                 <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setStep("form")}>← Back</button>
                 <button className="btn btn-primary" style={{ flex: 1 }} disabled={!photoPreview} onClick={async () => { await generateCroppedPhoto(); setStep("review") }}>
                   Review →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* REVIEW STEP */}
-          {step === "review" && (
-            <div>
-              <p style={{ fontSize: 14, color: '#64748b', marginBottom: 16 }}>Please review your details before submitting.</p>
-
-              <div style={{ display: 'flex', gap: 20, marginBottom: 20, flexWrap: 'wrap' }}>
-                {croppedPhoto && (
-                  <div style={{ width: 120, height: 160, borderRadius: 10, overflow: 'hidden', border: '2px solid #e2e8f0', flexShrink: 0 }}>
-                    <img src={croppedPhoto} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  </div>
-                )}
-                <div style={{ flex: 1 }}>
-                  {config?.fieldConfig.filter(f => f.key !== "class").map(field => (
-                    formData[field.key] && (
-                      <div key={field.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
-                        <span style={{ fontSize: 13, color: '#64748b' }}>{field.label}</span>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{formData[field.key]}</span>
-                      </div>
-                    )
-                  ))}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
-                    <span style={{ fontSize: 13, color: '#64748b' }}>Class</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{config?.className}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setStep("photo")}>← Back</button>
-                <button className="btn btn-primary" style={{ flex: 1 }} disabled={submitting} onClick={handleSubmit}>
-                  {submitting ? "Submitting..." : "Submit Registration"}
                 </button>
               </div>
             </div>
