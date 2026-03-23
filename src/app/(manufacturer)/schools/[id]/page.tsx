@@ -70,6 +70,16 @@ export default function SchoolDetailPage() {
   // Batch generation
   const [generatingBatch, setGeneratingBatch] = useState(false)
 
+  // Bulk import
+  const [importOpen, setImportOpen] = useState(false)
+  const [importStep, setImportStep] = useState<"upload" | "preview" | "result">("upload")
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importClassId, setImportClassId] = useState("")
+  const [importUploading, setImportUploading] = useState(false)
+  const [importPreview, setImportPreview] = useState<any>(null)
+  const [importResult, setImportResult] = useState<any>(null)
+  const [dragOver, setDragOver] = useState(false)
+
   const fetchSchool = async () => {
     try {
       const res = await fetch(`/api/schools/${schoolId}`)
@@ -246,6 +256,68 @@ export default function SchoolDetailPage() {
     }
   }
 
+  // Bulk import handlers
+  const handleImportValidate = async () => {
+    if (!importFile || !importClassId) {
+      toast.error("Please select a class and upload a file.")
+      return
+    }
+    setImportUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", importFile)
+      fd.append("classId", importClassId)
+      fd.append("mode", "validate")
+      const res = await fetch(`/api/schools/${schoolId}/students/import`, { method: "POST", body: fd })
+      const data = await res.json()
+      if (data.success) {
+        setImportPreview(data.data)
+        setImportStep("preview")
+      } else {
+        toast.error(data.error || "Validation failed")
+      }
+    } catch (err) {
+      toast.error("Failed to validate file")
+    } finally {
+      setImportUploading(false)
+    }
+  }
+
+  const handleImportConfirm = async () => {
+    if (!importFile || !importClassId) return
+    setImportUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", importFile)
+      fd.append("classId", importClassId)
+      fd.append("mode", "import")
+      const res = await fetch(`/api/schools/${schoolId}/students/import`, { method: "POST", body: fd })
+      const data = await res.json()
+      if (data.success) {
+        setImportResult(data.data)
+        setImportStep("result")
+        toast.success(`${data.data.imported} students imported!`)
+        fetchStudents()
+        fetchSchool()
+      } else {
+        toast.error(data.error || "Import failed")
+      }
+    } catch (err) {
+      toast.error("Import failed")
+    } finally {
+      setImportUploading(false)
+    }
+  }
+
+  const resetImport = () => {
+    setImportOpen(false)
+    setImportStep("upload")
+    setImportFile(null)
+    setImportClassId("")
+    setImportPreview(null)
+    setImportResult(null)
+  }
+
   const handleExport = (format: "csv" | "excel") => {
     const params = new URLSearchParams()
     if (classFilter) params.set("classId", classFilter)
@@ -392,7 +464,20 @@ export default function SchoolDetailPage() {
 
         {/* STUDENTS TAB */}
         {tab === "students" && (
+          <>
           <div>
+            {/* Action Bar */}
+            <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button className="btn btn-primary" onClick={() => setImportOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 20px' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                Bulk Import Excel
+              </button>
+              <a href={`/api/schools/${schoolId}/students/import-template`} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', textDecoration: 'none', fontSize: 13 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                Download Template
+              </a>
+            </div>
+
             <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
               <input placeholder="Search by name or serial..." value={searchQuery} onChange={e => { setSearchQuery(e.target.value) }} style={{ height: 40, padding: '0 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, flex: 1, minWidth: 200 }} />
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ height: 40, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}>
@@ -483,6 +568,248 @@ export default function SchoolDetailPage() {
               </div>
             )}
           </div>
+
+          {/* IMPORT MODAL */}
+          {importOpen && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }} onClick={resetImport}>
+              <div style={{ background: 'white', borderRadius: 20, maxWidth: 720, width: '100%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+                      {importStep === 'upload' ? '📊 Bulk Import Students' : importStep === 'preview' ? '🔍 Preview & Validate' : '✅ Import Complete'}
+                    </h2>
+                    <p style={{ fontSize: 13, color: '#64748b' }}>
+                      {importStep === 'upload' ? 'Upload an Excel or CSV file with student data' : importStep === 'preview' ? 'Review the data before importing' : 'Import results'}
+                    </p>
+                  </div>
+                  <button onClick={resetImport} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#f1f5f9', cursor: 'pointer', fontSize: 16 }}>✕</button>
+                </div>
+
+                <div style={{ padding: 24 }}>
+                  {/* STEP 1: UPLOAD */}
+                  {importStep === 'upload' && (
+                    <div>
+                      {/* Class selector */}
+                      <div style={{ marginBottom: 20 }}>
+                        <label style={{ fontSize: 13, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 6 }}>Select Class *</label>
+                        <select value={importClassId} onChange={e => setImportClassId(e.target.value)} style={{ width: '100%', height: 44, padding: '0 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14 }}>
+                          <option value="">Choose a class...</option>
+                          {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c._count.students} students)</option>)}
+                        </select>
+                      </div>
+
+                      {/* File upload zone */}
+                      <div
+                        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+                        onDragLeave={() => setDragOver(false)}
+                        onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) setImportFile(f) }}
+                        style={{
+                          border: `2px dashed ${dragOver ? '#3b82f6' : importFile ? '#22c55e' : '#e2e8f0'}`,
+                          borderRadius: 16, padding: 40, textAlign: 'center', cursor: 'pointer',
+                          background: dragOver ? '#eff6ff' : importFile ? '#f0fdf4' : '#fafafa',
+                          transition: 'all 0.2s',
+                        }}
+                        onClick={() => document.getElementById('import-file-input')?.click()}
+                      >
+                        <input
+                          id="import-file-input"
+                          type="file"
+                          accept=".xlsx,.xls,.csv"
+                          style={{ display: 'none' }}
+                          onChange={e => { const f = e.target.files?.[0]; if (f) setImportFile(f) }}
+                        />
+                        {importFile ? (
+                          <>
+                            <div style={{ fontSize: 36, marginBottom: 8 }}>📄</div>
+                            <div style={{ fontSize: 15, fontWeight: 600, color: '#16a34a', marginBottom: 4 }}>{importFile.name}</div>
+                            <div style={{ fontSize: 13, color: '#64748b' }}>{(importFile.size / 1024).toFixed(1)} KB — Click to change</div>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: 36, marginBottom: 8 }}>📊</div>
+                            <div style={{ fontSize: 15, fontWeight: 600, color: '#334155', marginBottom: 4 }}>Drop your Excel/CSV file here</div>
+                            <div style={{ fontSize: 13, color: '#94a3b8' }}>or click to browse • .xlsx, .xls, .csv supported • Max 10MB</div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Info box */}
+                      <div style={{ marginTop: 16, padding: 14, background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe' }}>
+                        <div style={{ fontSize: 13, color: '#1e40af', fontWeight: 600, marginBottom: 4 }}>💡 Tips</div>
+                        <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: '#3b82f6', lineHeight: 1.8 }}>
+                          <li>Use the <strong>Download Template</strong> button to get a pre-formatted Excel with correct columns</li>
+                          <li>Column headers are matched automatically (e.g. &quot;Full Name&quot;, &quot;Name&quot;, &quot;Student Name&quot; all work)</li>
+                          <li>Required fields: Full Name, Roll No., Date of Birth, Father Name, Phone</li>
+                          <li>Max 2000 students per import</li>
+                        </ul>
+                      </div>
+
+                      {/* Actions */}
+                      <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'flex-end' }}>
+                        <button className="btn btn-outline" onClick={resetImport}>Cancel</button>
+                        <button
+                          className="btn btn-primary"
+                          onClick={handleImportValidate}
+                          disabled={!importFile || !importClassId || importUploading}
+                          style={{ padding: '10px 24px' }}
+                        >
+                          {importUploading ? 'Validating...' : 'Validate & Preview →'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STEP 2: PREVIEW */}
+                  {importStep === 'preview' && importPreview && (
+                    <div>
+                      {/* Stats cards */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+                        <div style={{ padding: 16, background: '#f0fdf4', borderRadius: 12, border: '1px solid #bbf7d0', textAlign: 'center' }}>
+                          <div style={{ fontSize: 24, fontWeight: 700, color: '#16a34a' }}>{importPreview.validRows}</div>
+                          <div style={{ fontSize: 12, color: '#15803d' }}>Valid Rows</div>
+                        </div>
+                        <div style={{ padding: 16, background: importPreview.errorRows > 0 ? '#fef2f2' : '#f8fafc', borderRadius: 12, border: `1px solid ${importPreview.errorRows > 0 ? '#fecaca' : '#e2e8f0'}`, textAlign: 'center' }}>
+                          <div style={{ fontSize: 24, fontWeight: 700, color: importPreview.errorRows > 0 ? '#dc2626' : '#64748b' }}>{importPreview.errorRows}</div>
+                          <div style={{ fontSize: 12, color: importPreview.errorRows > 0 ? '#b91c1c' : '#64748b' }}>Errors</div>
+                        </div>
+                        <div style={{ padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                          <div style={{ fontSize: 24, fontWeight: 700, color: '#334155' }}>{importPreview.totalRows}</div>
+                          <div style={{ fontSize: 12, color: '#64748b' }}>Total Rows</div>
+                        </div>
+                      </div>
+
+                      {/* Column Mapping */}
+                      <div style={{ marginBottom: 20 }}>
+                        <h4 style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>📋 Column Mapping</h4>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {importPreview.mappedColumns?.map((c: any, i: number) => (
+                            <span key={i} style={{ padding: '4px 10px', background: '#eff6ff', borderRadius: 6, fontSize: 12, color: '#2563eb', border: '1px solid #bfdbfe' }}>
+                              {c.excelColumn} → {c.label}
+                            </span>
+                          ))}
+                        </div>
+                        {importPreview.unmappedColumns?.length > 0 && (
+                          <div style={{ marginTop: 8 }}>
+                            <span style={{ fontSize: 12, color: '#94a3b8' }}>Ignored columns: </span>
+                            {importPreview.unmappedColumns.map((c: string, i: number) => (
+                              <span key={i} style={{ padding: '2px 8px', background: '#f1f5f9', borderRadius: 4, fontSize: 11, color: '#64748b', marginRight: 4 }}>{c}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Data preview table */}
+                      {importPreview.preview?.length > 0 && (
+                        <div style={{ marginBottom: 20 }}>
+                          <h4 style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>👀 Data Preview (first {importPreview.preview.length} rows)</h4>
+                          <div className="data-table-wrapper" style={{ overflowX: 'auto', maxHeight: 240 }}>
+                            <table className="data-table" style={{ fontSize: 12 }}>
+                              <thead>
+                                <tr>
+                                  <th>Row</th>
+                                  {importPreview.mappedColumns?.map((c: any) => <th key={c.mappedTo}>{c.label}</th>)}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {importPreview.preview.map((row: any, i: number) => (
+                                  <tr key={i}>
+                                    <td style={{ fontFamily: 'monospace', color: '#94a3b8' }}>{row._rowNum}</td>
+                                    {importPreview.mappedColumns?.map((c: any) => (
+                                      <td key={c.mappedTo} style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {row[c.mappedTo] || <span style={{ color: '#cbd5e1' }}>—</span>}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Errors */}
+                      {importPreview.errors?.length > 0 && (
+                        <div style={{ marginBottom: 20, padding: 14, background: '#fef2f2', borderRadius: 10, border: '1px solid #fecaca' }}>
+                          <h4 style={{ fontSize: 13, fontWeight: 700, color: '#dc2626', marginBottom: 8 }}>⚠️ Validation Errors ({importPreview.errorRows} rows)</h4>
+                          <div style={{ maxHeight: 160, overflow: 'auto' }}>
+                            {importPreview.errors.map((e: any, i: number) => (
+                              <div key={i} style={{ fontSize: 12, color: '#b91c1c', padding: '3px 0' }}>
+                                Row {e.row}: <strong>{e.field}</strong> — {e.message}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Actions */}
+                      <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                        <button className="btn btn-outline" onClick={() => { setImportStep('upload'); setImportPreview(null) }}>← Back</button>
+                        <button
+                          className="btn btn-primary"
+                          onClick={handleImportConfirm}
+                          disabled={importPreview.validRows === 0 || importUploading}
+                          style={{ padding: '10px 24px', background: importPreview.validRows > 0 ? 'linear-gradient(135deg, #22c55e, #16a34a)' : '#94a3b8' }}
+                        >
+                          {importUploading ? 'Importing...' : `Import ${importPreview.validRows} Students ✓`}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STEP 3: RESULT */}
+                  {importStep === 'result' && importResult && (
+                    <div>
+                      <div style={{ textAlign: 'center', padding: 20 }}>
+                        <div style={{ fontSize: 48, marginBottom: 12 }}>🎉</div>
+                        <h3 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>
+                          {importResult.imported} Students Imported!
+                        </h3>
+                        {importResult.failed > 0 && (
+                          <p style={{ fontSize: 14, color: '#dc2626' }}>{importResult.failed} rows failed</p>
+                        )}
+                      </div>
+
+                      {/* Show first few imported students */}
+                      {importResult.students?.length > 0 && (
+                        <div style={{ marginTop: 16 }}>
+                          <h4 style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Imported Students</h4>
+                          <div className="data-table-wrapper" style={{ maxHeight: 240, overflowY: 'auto' }}>
+                            <table className="data-table" style={{ fontSize: 12 }}>
+                              <thead><tr><th>Serial Number</th><th>Name</th></tr></thead>
+                              <tbody>
+                                {importResult.students.map((s: any) => (
+                                  <tr key={s.id}>
+                                    <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{s.serialNumber}</td>
+                                    <td>{s.name}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Errors */}
+                      {importResult.errors?.length > 0 && (
+                        <div style={{ marginTop: 16, padding: 12, background: '#fef2f2', borderRadius: 10, border: '1px solid #fecaca' }}>
+                          <h4 style={{ fontSize: 13, fontWeight: 700, color: '#dc2626', marginBottom: 8 }}>Failed Rows</h4>
+                          {importResult.errors.map((e: any, i: number) => (
+                            <div key={i} style={{ fontSize: 12, color: '#b91c1c' }}>Row {e.row}: {e.error}</div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
+                        <button className="btn btn-primary" onClick={resetImport} style={{ padding: '10px 28px' }}>Done ✓</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          </>
         )}
 
         {/* TEMPLATE TAB */}
