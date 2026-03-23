@@ -319,7 +319,13 @@ export default function TemplatePage() {
 
         {/* Field Variables */}
         <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Field Variables</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Built-in Variables</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+            <button onClick={() => addElement("text", "{{serialNumber}}")} style={{ padding: '6px 10px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 6, color: '#4ade80', fontSize: 12, cursor: 'pointer', textAlign: 'left' }}>
+              🔗 {'{{serialNumber}}'} — Front/Back Connector
+            </button>
+          </div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Custom Fields</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {template.fieldConfig.map(f => (
               <button key={f.key} onClick={() => addElement("text", `{{${f.key}}}`)} style={{ padding: '6px 10px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 6, color: '#60a5fa', fontSize: 12, cursor: 'pointer', textAlign: 'left' }}>

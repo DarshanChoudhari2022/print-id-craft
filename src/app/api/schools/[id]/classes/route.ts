@@ -7,7 +7,7 @@ import crypto from "crypto"
 
 const classSchema = z.object({
   name: z.string().min(1, "Class name is required"),
-  expiresAt: z.string().datetime().optional().nullable(),
+  expiresAt: z.string().optional().nullable(),
 })
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
@@ -27,6 +27,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
     return NextResponse.json({ success: true, data: classes })
   } catch (error) {
+    console.error(`GET /api/schools/${params.id}/classes error:`, error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
@@ -45,17 +46,27 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const body = await req.json()
     const validated = classSchema.parse(body)
 
+    // Parse expiresAt — handles both ISO strings and datetime-local format
+    let expiresAt: Date | null = null
+    if (validated.expiresAt) {
+      const parsed = new Date(validated.expiresAt)
+      if (!isNaN(parsed.getTime())) {
+        expiresAt = parsed
+      }
+    }
+
     const newClass = await prisma.class.create({
       data: {
         name: validated.name,
         schoolId: params.id,
         linkToken: crypto.randomUUID(),
-        expiresAt: validated.expiresAt ? new Date(validated.expiresAt) : null,
+        expiresAt,
       },
     })
 
     return NextResponse.json({ success: true, data: newClass }, { status: 201 })
   } catch (error) {
+    console.error(`POST /api/schools/${params.id}/classes error:`, error)
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues }, { status: 400 })
     }

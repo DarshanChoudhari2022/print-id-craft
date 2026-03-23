@@ -6,7 +6,7 @@ import { z } from "zod"
 
 const updateClassSchema = z.object({
   isActive: z.boolean().optional(),
-  expiresAt: z.string().datetime().optional().nullable(),
+  expiresAt: z.string().optional().nullable(),
   name: z.string().min(1).optional(),
 })
 

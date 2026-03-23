@@ -75,6 +75,10 @@ export default function SchoolDetailPage() {
   const [selectedStudent, setSelectedStudent] = useState<StudentData | null>(null)
   const [templateData, setTemplateData] = useState<any>(null)
 
+  // Logo upload
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [logoDragOver, setLogoDragOver] = useState(false)
+
   // Bulk import
   const [importOpen, setImportOpen] = useState(false)
   const [importStep, setImportStep] = useState<"upload" | "preview" | "result">("upload")
@@ -353,6 +357,73 @@ export default function SchoolDetailPage() {
     window.open(`/api/schools/${schoolId}/export/${format}?${params}`, "_blank")
   }
 
+  // Logo Upload Handler
+  const handleLogoUpload = async (file: File) => {
+    setUploadingLogo(true)
+    try {
+      const { createClient } = await import("@supabase/supabase-js")
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+      )
+      const ext = file.name.split('.').pop() || 'png'
+      const fileName = `logos/${schoolId}-${Date.now()}.${ext}`
+      const { error: uploadErr } = await supabase.storage
+        .from("student-photos")
+        .upload(fileName, file, { contentType: file.type, upsert: true })
+      if (uploadErr) {
+        toast.error("Failed to upload logo")
+        return
+      }
+      const { data: urlData } = supabase.storage.from("student-photos").getPublicUrl(fileName)
+      const logoUrl = urlData.publicUrl
+
+      // Update school record
+      const res = await fetch(`/api/schools/${schoolId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logoUrl }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success("School logo updated!")
+        fetchSchool()
+      } else {
+        toast.error("Failed to update school record")
+      }
+    } catch (err) {
+      toast.error("Logo upload failed")
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
+  // Template orientation updater
+  const handleOrientationChange = async (orientation: "PORTRAIT" | "LANDSCAPE") => {
+    try {
+      const widthMm = orientation === "LANDSCAPE" ? 85.6 : 54.0
+      const heightMm = orientation === "LANDSCAPE" ? 54.0 : 85.6
+      const res = await fetch(`/api/schools/${schoolId}/template`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orientation,
+          cardWidthMm: widthMm,
+          cardHeightMm: heightMm,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(`Card set to ${orientation === "LANDSCAPE" ? "Horizontal" : "Vertical"} (${widthMm} × ${heightMm} mm)`)
+        fetchTemplate()
+      } else {
+        toast.error("Failed to update orientation")
+      }
+    } catch (err) {
+      toast.error("Update failed")
+    }
+  }
+
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
       <div className="login-spinner" style={{ width: 32, height: 32, borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6' }} />
@@ -417,22 +488,90 @@ export default function SchoolDetailPage() {
       <div className="page-body">
         {/* OVERVIEW TAB */}
         {tab === "overview" && (
-          <div className="stat-grid">
-            <div className="stat-card">
-              <div className="stat-card-label">Total Classes</div>
-              <div className="stat-card-value">{school._count.classes}</div>
+          <div>
+            <div className="stat-grid">
+              <div className="stat-card">
+                <div className="stat-card-label">Total Classes</div>
+                <div className="stat-card-value">{school._count.classes}</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card-label">Total Students</div>
+                <div className="stat-card-value">{school._count.students}</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card-label">Print Batches</div>
+                <div className="stat-card-value">{school._count.batches}</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card-label">Template</div>
+                <div className="stat-card-value">{school.template ? "✓" : "—"}</div>
+              </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-card-label">Total Students</div>
-              <div className="stat-card-value">{school._count.students}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card-label">Print Batches</div>
-              <div className="stat-card-value">{school._count.batches}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card-label">Template</div>
-              <div className="stat-card-value">{school.template ? "✓" : "—"}</div>
+
+            {/* School Logo Upload Section */}
+            <div style={{ marginTop: 24, background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>School Logo</h3>
+              <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>Upload the school logo to appear on ID cards. Supports JPEG, PNG, WebP.</p>
+              
+              <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                {/* Current Logo Preview */}
+                {school.logoUrl && (
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ width: 120, height: 120, borderRadius: 12, overflow: 'hidden', border: '2px solid #e2e8f0', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img src={school.logoUrl} alt="School Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>Current Logo</div>
+                  </div>
+                )}
+
+                {/* Upload Zone */}
+                <div
+                  onDragOver={e => { e.preventDefault(); setLogoDragOver(true) }}
+                  onDragLeave={() => setLogoDragOver(false)}
+                  onDrop={e => {
+                    e.preventDefault()
+                    setLogoDragOver(false)
+                    const file = e.dataTransfer.files[0]
+                    if (file && file.type.startsWith('image/')) handleLogoUpload(file)
+                  }}
+                  onClick={() => document.getElementById('logo-upload-input')?.click()}
+                  style={{
+                    flex: 1,
+                    minWidth: 200,
+                    border: `2px dashed ${logoDragOver ? '#3b82f6' : '#e2e8f0'}`,
+                    borderRadius: 12,
+                    padding: 32,
+                    textAlign: 'center',
+                    cursor: uploadingLogo ? 'wait' : 'pointer',
+                    background: logoDragOver ? '#eff6ff' : '#fafafa',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <input
+                    id="logo-upload-input"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    style={{ display: 'none' }}
+                    onChange={e => {
+                      const file = e.target.files?.[0]
+                      if (file) handleLogoUpload(file)
+                    }}
+                  />
+                  {uploadingLogo ? (
+                    <>
+                      <div className="login-spinner" style={{ width: 24, height: 24, borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6', margin: '0 auto 8px' }} />
+                      <div style={{ fontSize: 13, color: '#3b82f6' }}>Uploading...</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>🏫</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#334155', marginBottom: 4 }}>{school.logoUrl ? 'Replace Logo' : 'Upload School Logo'}</div>
+                      <div style={{ fontSize: 12, color: '#94a3b8' }}>Drag & drop or click to browse</div>
+                      <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 4 }}>JPEG, PNG, WebP — Max 5MB</div>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -856,13 +995,102 @@ export default function SchoolDetailPage() {
 
         {/* TEMPLATE TAB */}
         {tab === "template" && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', justifyContent: 'center', padding: 40, background: 'white', borderRadius: 16, border: '1px solid #e2e8f0' }}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="21" y2="9"/></svg>
-            <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>ID Card Template Studio</h3>
-            <p style={{ color: '#94a3b8', maxWidth: 380, textAlign: 'center', fontSize: 14 }}>Design your ID card front and back using a drag-and-drop canvas. Add student photos, dynamic text fields, QR codes, and more.</p>
-            <Link href={`/schools/${schoolId}/template`} className="btn btn-primary" style={{ marginTop: 8, padding: '12px 28px', fontSize: 15 }}>
-              Open Template Studio →
-            </Link>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* Orientation Selector */}
+            <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Card Orientation</h3>
+              <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>Choose how the school wants their ID cards — Horizontal (like a credit card) or Vertical (like a passport photo). This also affects the template canvas dimensions.</p>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                {/* Horizontal */}
+                <button
+                  onClick={() => handleOrientationChange('LANDSCAPE')}
+                  style={{
+                    flex: 1,
+                    minWidth: 200,
+                    padding: 20,
+                    border: `2px solid ${templateData?.orientation === 'LANDSCAPE' ? '#3b82f6' : '#e2e8f0'}`,
+                    borderRadius: 14,
+                    background: templateData?.orientation === 'LANDSCAPE' ? 'linear-gradient(135deg, #eff6ff, #dbeafe)' : 'white',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 12,
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <div style={{ width: 100, height: 64, border: `2px solid ${templateData?.orientation === 'LANDSCAPE' ? '#3b82f6' : '#94a3b8'}`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'white' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={templateData?.orientation === 'LANDSCAPE' ? '#3b82f6' : '#94a3b8'} strokeWidth="1.5"><rect width="20" height="14" x="2" y="5" rx="2"/><circle cx="12" cy="10" r="2"/><path d="M6 17h12"/></svg>
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: templateData?.orientation === 'LANDSCAPE' ? '#1e40af' : '#334155' }}>Horizontal (Landscape)</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>85.6mm × 54.0mm — Like a credit card</div>
+                  {templateData?.orientation === 'LANDSCAPE' && <span style={{ padding: '3px 12px', background: '#3b82f6', color: 'white', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>Active</span>}
+                </button>
+                {/* Vertical */}
+                <button
+                  onClick={() => handleOrientationChange('PORTRAIT')}
+                  style={{
+                    flex: 1,
+                    minWidth: 200,
+                    padding: 20,
+                    border: `2px solid ${templateData?.orientation === 'PORTRAIT' ? '#3b82f6' : '#e2e8f0'}`,
+                    borderRadius: 14,
+                    background: templateData?.orientation === 'PORTRAIT' ? 'linear-gradient(135deg, #eff6ff, #dbeafe)' : 'white',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 12,
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <div style={{ width: 64, height: 100, border: `2px solid ${templateData?.orientation === 'PORTRAIT' ? '#3b82f6' : '#94a3b8'}`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'white' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={templateData?.orientation === 'PORTRAIT' ? '#3b82f6' : '#94a3b8'} strokeWidth="1.5"><rect width="14" height="20" x="5" y="2" rx="2"/><circle cx="12" cy="9" r="2"/><path d="M8 18h8"/></svg>
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: templateData?.orientation === 'PORTRAIT' ? '#1e40af' : '#334155' }}>Vertical (Portrait)</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>54.0mm × 85.6mm — Like a passport</div>
+                  {templateData?.orientation === 'PORTRAIT' && <span style={{ padding: '3px 12px', background: '#3b82f6', color: 'white', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>Active</span>}
+                </button>
+              </div>
+            </div>
+
+            {/* Front & Back Connector Info */}
+            <div style={{ background: 'linear-gradient(135deg, #fefce8, #fef9c3)', borderRadius: 16, border: '1px solid #fde68a', padding: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <div style={{ fontSize: 28, flexShrink: 0 }}>🔗</div>
+                <div>
+                  <h4 style={{ fontSize: 15, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>Front & Back Connector — Serial Number</h4>
+                  <p style={{ fontSize: 13, color: '#78350f', lineHeight: 1.6, marginBottom: 8 }}>
+                    Every ID card has a unique <strong>Serial Number</strong> printed in the bleed area (bottom-right corner) on <strong>BOTH</strong> the front and back pages. This serial number is the key that connects front and back during printing.
+                  </p>
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                    <div style={{ background: 'white', borderRadius: 10, padding: '12px 16px', border: '1px solid #fde68a', flex: 1, minWidth: 200 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#92400e', marginBottom: 4 }}>📄 FRONT PDF</div>
+                      <div style={{ fontSize: 12, color: '#78350f' }}>Page 1 = Student 1 front, Page 2 = Student 2 front, etc.</div>
+                      <div style={{ marginTop: 4, fontFamily: 'monospace', fontSize: 11, color: '#b45309' }}>Serial: HOLYC-0001 (in bleed area)</div>
+                    </div>
+                    <div style={{ background: 'white', borderRadius: 10, padding: '12px 16px', border: '1px solid #fde68a', flex: 1, minWidth: 200 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#92400e', marginBottom: 4 }}>📄 BACK PDF</div>
+                      <div style={{ fontSize: 12, color: '#78350f' }}>Page 1 = Student 1 back, Page 2 = Student 2 back, etc.</div>
+                      <div style={{ marginTop: 4, fontFamily: 'monospace', fontSize: 11, color: '#b45309' }}>Serial: HOLYC-0001 (in bleed area)</div>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 12, color: '#92400e', marginTop: 8 }}>
+                    ✅ <strong>Printing workflow:</strong> Print all Front pages first → Flip the stack → Print all Back pages. The serial number ensures each front matches its back.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Open Studio Button */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', justifyContent: 'center', padding: 40, background: 'white', borderRadius: 16, border: '1px solid #e2e8f0' }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="21" y2="9"/></svg>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>ID Card Template Studio</h3>
+              <p style={{ color: '#94a3b8', maxWidth: 380, textAlign: 'center', fontSize: 14 }}>Design your ID card front and back using a drag-and-drop canvas. Add student photos, dynamic text fields, QR codes, school logo, and more.</p>
+              <Link href={`/schools/${schoolId}/template`} className="btn btn-primary" style={{ marginTop: 8, padding: '12px 28px', fontSize: 15 }}>
+                Open Template Studio →
+              </Link>
+            </div>
           </div>
         )}
 
