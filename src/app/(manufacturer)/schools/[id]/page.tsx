@@ -450,21 +450,21 @@ export default function SchoolDetailPage() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #1B4F8A)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: 'white' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #1B4F8A)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: 'white', flexShrink: 0 }}>
               {school.name.charAt(0)}
             </div>
-            <div>
-              <h1>{school.name}</h1>
-              <p>{school.address || school.contactEmail}</p>
+            <div style={{ minWidth: 0 }}>
+              <h1 style={{ fontSize: 'min(20px, 5vw)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{school.name}</h1>
+              <p style={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{school.address || school.contactEmail}</p>
             </div>
           </div>
-          <Link href={`/schools/${schoolId}/verify`} className="btn btn-outline" style={{ fontSize: 12, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Link href={`/schools/${schoolId}/verify`} className="btn btn-outline" style={{ fontSize: 12, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="2" width="8" height="8" rx="1" /><rect x="14" y="2" width="8" height="8" rx="1" /><rect x="2" y="14" width="8" height="8" rx="1" /><rect x="14" y="14" width="4" height="4" rx="0.5" /></svg>
-            QR Verify
+            <span className="hide-on-small-mobile">QR Verify</span>
           </Link>
         </div>
 
-        <div style={{ display: 'flex', gap: 4, marginTop: 16, background: '#f1f5f9', borderRadius: 10, padding: 4, overflowX: 'auto' }}>
+        <div className="school-tabs-scroll" style={{ display: 'flex', gap: 4, marginTop: 16, background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
           {tabs.map(t => (
             <button
               key={t}
@@ -489,7 +489,7 @@ export default function SchoolDetailPage() {
         {/* OVERVIEW TAB */}
         {tab === "overview" && (
           <div>
-            <div className="stat-grid">
+            <div className="school-stats-mobile stat-grid">
               <div className="stat-card">
                 <div className="stat-card-label">Total Classes</div>
                 <div className="stat-card-value">{school._count.classes}</div>
@@ -511,9 +511,9 @@ export default function SchoolDetailPage() {
             {/* School Logo Upload Section */}
             <div style={{ marginTop: 24, background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>School Logo</h3>
-              <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>Upload the school logo to appear on ID cards. Supports JPEG, PNG, WebP.</p>
+              <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>Upload the school logo to appear on ID cards.</p>
               
-              <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div className="school-logo-section" style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
                 {/* Current Logo Preview */}
                 {school.logoUrl && (
                   <div style={{ textAlign: 'center' }}>

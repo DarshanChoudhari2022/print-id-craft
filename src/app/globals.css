@@ -60,6 +60,30 @@ input, select, textarea { font-family: inherit; }
   }
 }
 
+/* School Management Specific Mobile Fixes */
+.school-stats-mobile {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .school-stats-mobile {
+    grid-template-columns: 1fr 1fr;
+  }
+  .school-logo-section {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  .school-tabs-scroll {
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+}
+
+
 /* ===== LOGIN PAGE ===== */
 .login-container {
   min-height: 100vh;
