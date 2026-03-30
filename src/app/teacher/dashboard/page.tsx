@@ -178,18 +178,30 @@ export default function TeacherDashboard() {
         {/* Class Breakdown Table */}
         {data?.classes && data.classes.length > 0 && (
           <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 24, border: '1px solid #e2e8f0' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>📊 Class Breakdown</h3>
-              <button className="btn btn-outline" style={{ fontSize: 12, padding: '6px 14px' }} onClick={() => {
-                const params = new URLSearchParams()
-                if (classFilter) {
-                  const cls = data?.classes.find((c: any) => c.name === classFilter)
-                  if (cls) params.set('classId', cls.id)
-                }
-                window.open(`/api/teacher/export/csv?${params}`, '_blank')
-              }}>
-                📄 Download CSV
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="btn btn-outline" style={{ fontSize: 12, padding: '6px 14px' }} onClick={() => {
+                  const params = new URLSearchParams()
+                  if (classFilter) {
+                    const cls = data?.classes.find((c: any) => c.name === classFilter)
+                    if (cls) params.set('classId', cls.id)
+                  }
+                  window.open(`/api/teacher/export/csv?${params}`, '_blank')
+                }}>
+                  📄 Download CSV
+                </button>
+                <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 14px', background: 'linear-gradient(135deg, #22c55e, #16a34a)' }} onClick={() => {
+                  const params = new URLSearchParams()
+                  if (classFilter) {
+                    const cls = data?.classes.find((c: any) => c.name === classFilter)
+                    if (cls) params.set('classId', cls.id)
+                  }
+                  window.open(`/api/teacher/export/excel?${params}`, '_blank')
+                }}>
+                  📊 Download Excel
+                </button>
+              </div>
             </div>
             <div className="data-table-wrapper">
               <table className="data-table">

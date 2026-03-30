@@ -1,0 +1,12 @@
+=== USERS ===
+{"id":"cmmyv4o6l0000wn2hymjf7vro","email":"admin@printidcraft.com","name":"Admin User","role":"MANUFACTURER","schoolId":null}
+{"id":"cmmyv4pn4000bwn2hscp4u6yc","email":"teacher1@xaviers.edu.in","name":"Priya Sharma","role":"TEACHER","schoolId":"cmmyv4ofc0001wn2hi0wrmpem"}
+{"id":"cmmyv4pwp000dwn2h0tqs8m4r","email":"teacher@dps.edu.in","name":"Amit Kumar","role":"TEACHER","schoolId":"cmmyv4ous0004wn2h62375eec"}
+{"id":"cmmyv4q2z000fwn2heasygqf4","email":"teacher@holycross.edu.in","name":"Mary Thomas","role":"TEACHER","schoolId":"cmmyv4p4v0007wn2hx90fqmtb"}
+
+=== SCHOOLS ===
+{"id":"cmmyv4ofc0001wn2hi0wrmpem","name":"St. Xavier's High School"}
+{"id":"cmmyv4ous0004wn2h62375eec","name":"Delhi Public School"}
+{"id":"cmmyv4p4v0007wn2hx90fqmtb","name":"Holy Cross Convent"}
+{"id":"cmn37fyp10000y2jc7097mwzz","name":"Test Academy Pune"}
+{"id":"cmn8upkjw000013v2lau8xhn1","name":"Aaryans Bibevewadi Branch"}

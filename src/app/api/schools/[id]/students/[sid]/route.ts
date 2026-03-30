@@ -27,3 +27,34 @@ export async function GET(
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: { id: string; sid: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session || session.user?.role !== "MANUFACTURER") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const { formData, photoUrl } = body
+
+    // Build update object
+    const updateData: any = {}
+    if (formData) updateData.formData = formData
+    if (photoUrl !== undefined) updateData.photoUrl = photoUrl
+
+    const student = await prisma.student.update({
+      where: { id: params.sid },
+      data: updateData,
+      include: { class: { select: { name: true } } },
+    })
+
+    return NextResponse.json({ success: true, data: student })
+  } catch (error: any) {
+    console.error("Update student error:", error)
+    return NextResponse.json({ error: error?.message || "Update failed" }, { status: 500 })
+  }
+}

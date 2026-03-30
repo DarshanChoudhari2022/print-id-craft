@@ -42,6 +42,9 @@ export async function GET(req: Request, { params }: { params: { token: string } 
         cardWidthMm: template?.cardWidthMm || 85.6,
         cardHeightMm: template?.cardHeightMm || 54.0,
         orientation: template?.orientation || "LANDSCAPE",
+        // JPG template data for card preview
+        templateImageUrl: template?.templateImageUrl || null,
+        fieldMappings: template?.fieldMappings || [],
       },
     })
   } catch (error) {

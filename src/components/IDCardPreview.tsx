@@ -1,4 +1,5 @@
 "use client"
+import { memo } from "react"
 
 type TemplateElement = {
   id: string
@@ -27,7 +28,7 @@ type IDCardPreviewProps = {
   scale?: number
 }
 
-export default function IDCardPreview({
+function IDCardPreview({
   layout,
   widthMm,
   heightMm,
@@ -190,3 +191,5 @@ export default function IDCardPreview({
     </div>
   )
 }
+
+export default memo(IDCardPreview)

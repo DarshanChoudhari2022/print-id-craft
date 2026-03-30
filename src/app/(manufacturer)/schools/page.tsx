@@ -25,6 +25,9 @@ export default function SchoolsPage() {
   const [newAddress, setNewAddress] = useState("")
   const [newLogo, setNewLogo] = useState<File | null>(null)
   const [creating, setCreating] = useState(false)
+  // Class creation during school setup
+  const [classNames, setClassNames] = useState<string[]>([])
+  const [newClassInput, setNewClassInput] = useState("")
 
   const fetchSchools = async () => {
     try {
@@ -47,19 +50,17 @@ export default function SchoolsPage() {
       let logoUrl = ""
       // Upload logo if provided
       if (newLogo) {
-        const { createClient } = await import("@supabase/supabase-js")
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-        )
-        const ext = newLogo.name.split('.').pop() || 'png'
-        const fileName = `logos/${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`
-        const { error: uploadErr } = await supabase.storage
-          .from("student-photos")
-          .upload(fileName, newLogo, { contentType: newLogo.type, upsert: true })
-        if (!uploadErr) {
-          const { data: urlData } = supabase.storage.from("student-photos").getPublicUrl(fileName)
-          logoUrl = urlData.publicUrl
+        try {
+          const fd = new FormData()
+          fd.append("file", newLogo)
+          fd.append("folder", "logos")
+          const uploadRes = await fetch("/api/upload", { method: "POST", body: fd })
+          const uploadData = await uploadRes.json()
+          if (uploadRes.ok && uploadData.success) {
+            logoUrl = uploadData.url
+          }
+        } catch (uploadErr) {
+          console.error("Logo upload failed:", uploadErr)
         }
       }
 
@@ -75,13 +76,33 @@ export default function SchoolsPage() {
       })
       const data = await res.json()
       if (data.success) {
-        toast.success("School created successfully!")
+        const schoolId = data.data.id
+
+        // Auto-create classes if provided
+        if (classNames.length > 0) {
+          for (const className of classNames) {
+            try {
+              await fetch(`/api/schools/${schoolId}/classes`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: className }),
+              })
+            } catch (err) {
+              console.error(`Failed to create class ${className}:`, err)
+            }
+          }
+        }
+
+        toast.success("School created! Now upload the ID card template.")
         setShowAdd(false)
         setNewName("")
         setNewEmail("")
         setNewAddress("")
         setNewLogo(null)
-        fetchSchools()
+        setClassNames([])
+        setNewClassInput("")
+        // Redirect to school's template tab immediately
+        router.push(`/schools/${schoolId}`)
       } else {
         toast.error(data.error?.message || "Failed to create school")
       }
@@ -240,6 +261,51 @@ export default function SchoolsPage() {
                     </label>
                   )}
                 </div>
+              </div>
+
+              {/* Classes */}
+              <div className="form-group">
+                <label>Classes (you can add more later)</label>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                  <input
+                    placeholder="e.g. 1st A, 2nd B, 3rd..."
+                    value={newClassInput}
+                    onChange={e => setNewClassInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        const name = newClassInput.trim()
+                        if (name && !classNames.includes(name)) {
+                          setClassNames(prev => [...prev, name])
+                          setNewClassInput('')
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const name = newClassInput.trim()
+                      if (name && !classNames.includes(name)) {
+                        setClassNames(prev => [...prev, name])
+                        setNewClassInput('')
+                      }
+                    }}
+                    style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    + Add
+                  </button>
+                </div>
+                {classNames.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {classNames.map((cn, i) => (
+                      <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 12, color: '#2563eb', fontWeight: 600 }}>
+                        {cn}
+                        <button type="button" onClick={() => setClassNames(prev => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1 }}>✕</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
                 <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => setShowAdd(false)}>Cancel</button>

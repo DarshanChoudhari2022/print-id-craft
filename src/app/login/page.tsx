@@ -1,36 +1,37 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, Suspense } from "react"
 import { signIn } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 
 type RoleOption = "MANUFACTURER" | "TEACHER"
 
-const roles = [
-  {
-    id: "MANUFACTURER" as RoleOption,
-    label: "Manufacturer Admin",
-    description: "Manage schools, templates & print batches",
-    color: "#3b82f6",
-    bgColor: "#eff6ff",
-  },
-  {
-    id: "TEACHER" as RoleOption,
-    label: "School Teacher",
-    description: "Track student submissions & approvals",
-    color: "#22c55e",
-    bgColor: "#f0fdf4",
-  },
-]
-
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
-  const [selectedRole, setSelectedRole] = useState<RoleOption>("MANUFACTURER")
+  const searchParams = useSearchParams()
+  const isAdminMode = searchParams.get("mode") === "admin"
+  const [selectedRole, setSelectedRole] = useState<RoleOption>(isAdminMode ? "MANUFACTURER" : "TEACHER")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [showAdminToggle, setShowAdminToggle] = useState(isAdminMode)
+  const logoClickCount = useRef(0)
+  const logoClickTimer = useRef<NodeJS.Timeout | null>(null)
+
+  // Hidden admin access: triple-click logo to reveal manufacturer login
+  const handleLogoClick = () => {
+    logoClickCount.current++
+    if (logoClickTimer.current) clearTimeout(logoClickTimer.current)
+    logoClickTimer.current = setTimeout(() => { logoClickCount.current = 0 }, 600)
+    if (logoClickCount.current >= 3) {
+      setShowAdminToggle(true)
+      setSelectedRole("MANUFACTURER")
+      logoClickCount.current = 0
+      toast.info("Admin mode enabled")
+    }
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -51,6 +52,7 @@ export default function LoginPage() {
       }
 
       toast.success("Login successful! Redirecting...")
+      // The middleware will redirect based on actual role from session
       if (selectedRole === "MANUFACTURER") {
         router.push("/dashboard")
       } else {
@@ -65,11 +67,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="login-container">
+    <div className="login-container fade-in">
       {/* Left Panel - Dark Branding */}
-      <div className="login-left">
+      <div className="login-left" style={{ animationDelay: '0.1s' }}>
         <div className="login-left-content">
-          <div className="login-logo">
+          <div className="login-logo" onClick={handleLogoClick} style={{ cursor: 'pointer' }}>
             <div className="login-logo-icon">P</div>
             <span className="login-logo-text">Print ID Craft</span>
           </div>
@@ -109,8 +111,8 @@ export default function LoginPage() {
           </div>
 
           <p className="login-tagline">
-            Multi-School ID Card Management & Print Portal<br />
-            <span>for manufacturers</span>
+            School ID Card Management Portal<br />
+            <span>Secure • Simple • Smart</span>
           </p>
         </div>
       </div>
@@ -119,37 +121,46 @@ export default function LoginPage() {
       <div className="login-right">
         <div className="login-form-wrapper">
           <h1 className="login-heading">Welcome back</h1>
-          <p className="login-subheading">Select your role and sign in to continue</p>
+          <p className="login-subheading">
+            {showAdminToggle ? "Admin login — Manage schools & printing" : "Sign in to manage your school's ID cards"}
+          </p>
 
-          {/* Role Cards */}
-          <div className="role-list">
-            {roles.map((role) => (
+          {/* Manufacturer toggle - hidden by default, shown via triple-click or ?mode=admin */}
+          {showAdminToggle && (
+            <div style={{ 
+              display: 'flex', gap: 8, marginBottom: 20, padding: 4, 
+              background: '#f1f5f9', borderRadius: 10 
+            }}>
               <button
-                key={role.id}
                 type="button"
-                className={`role-card ${selectedRole === role.id ? "role-card-active" : ""}`}
-                onClick={() => setSelectedRole(role.id)}
+                onClick={() => setSelectedRole("TEACHER")}
+                style={{
+                  flex: 1, padding: '10px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                  fontSize: 13, fontWeight: 600,
+                  background: selectedRole === "TEACHER" ? 'white' : 'transparent',
+                  color: selectedRole === "TEACHER" ? '#22c55e' : '#94a3b8',
+                  boxShadow: selectedRole === "TEACHER" ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  transition: 'all 0.15s',
+                }}
               >
-                <div className="role-card-left">
-                  <div className="role-icon" style={{ backgroundColor: role.bgColor, color: role.color }}>
-                    {role.id === "MANUFACTURER" && (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></svg>
-                    )}
-                    {role.id === "TEACHER" && (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 6 3 6 3s3 0 6-3v-5"/></svg>
-                    )}
-                  </div>
-                  <div>
-                    <div className="role-label">{role.label}</div>
-                    <div className="role-desc">{role.description}</div>
-                  </div>
-                </div>
-                <div className={`role-radio ${selectedRole === role.id ? "role-radio-active" : ""}`}>
-                  {selectedRole === role.id && <div className="role-radio-dot" />}
-                </div>
+                🏫 Teacher
               </button>
-            ))}
-          </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRole("MANUFACTURER")}
+                style={{
+                  flex: 1, padding: '10px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                  fontSize: 13, fontWeight: 600,
+                  background: selectedRole === "MANUFACTURER" ? 'white' : 'transparent',
+                  color: selectedRole === "MANUFACTURER" ? '#3b82f6' : '#94a3b8',
+                  boxShadow: selectedRole === "MANUFACTURER" ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  transition: 'all 0.15s',
+                }}
+              >
+                🏭 Manufacturer
+              </button>
+            </div>
+          )}
 
           {/* Login Form */}
           <form onSubmit={handleLogin} className="login-form">
@@ -161,7 +172,7 @@ export default function LoginPage() {
                 id="email"
                 type="email"
                 required
-                placeholder="admin@printidcraft.com"
+                placeholder={showAdminToggle && selectedRole === "MANUFACTURER" ? "admin@printidcraft.com" : "teacher@school.com"}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
@@ -193,13 +204,35 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div style={{ marginTop: 24, textAlign: 'center' }}>
-            <p style={{ fontSize: 12, color: '#94a3b8' }}>
-              Demo: admin@printidcraft.com / Admin@123
-            </p>
-          </div>
+          {/* Photo Guidelines hint for teachers */}
+          {!showAdminToggle && (
+            <div style={{ 
+              marginTop: 20, padding: '14px 16px', 
+              background: '#f0fdf4', borderRadius: 10, 
+              border: '1px solid #bbf7d0' 
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#15803d', marginBottom: 4 }}>📸 Photo Guidelines for Students</div>
+              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11, color: '#16a34a', lineHeight: 1.7 }}>
+                <li>Minimum 300 pixels width</li>
+                <li>Plain/solid background only</li>
+                <li>Passport-size format (3:4 ratio)</li>
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div className="login-spinner" style={{ width: 32, height: 32, borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6' }} />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   )
 }

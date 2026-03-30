@@ -4,7 +4,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 
-// Use service role key on server-side for signed URL generation
+// Use service role key on server-side for storage operations
 // Falls back to anon key if service key not available
 const serverKey = supabaseServiceKey || supabaseAnonKey
 
@@ -12,6 +12,53 @@ export const supabase = createClient(supabaseUrl, serverKey)
 
 // Client-side supabase for uploads from the browser
 export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
+
+// Track if we've warned about missing service key
+let warnedAboutServiceKey = false
+
+/**
+ * Ensure the storage bucket exists. Should be called once on app start
+ * or before first storage operation. Requires service role key.
+ */
+export async function ensureStorageBucket(
+  bucketName: string = "student-photos"
+): Promise<boolean> {
+  if (!supabaseServiceKey && !warnedAboutServiceKey) {
+    warnedAboutServiceKey = true
+    console.warn(
+      "⚠️  SUPABASE_SERVICE_ROLE_KEY is not set. Storage operations may fail.\n" +
+      "   Get it from: Supabase Dashboard → Settings → API → service_role key\n" +
+      "   Add to .env: SUPABASE_SERVICE_ROLE_KEY=your_key_here"
+    )
+  }
+
+  try {
+    const { data: buckets, error: listError } = await supabase.storage.listBuckets()
+    if (listError) {
+      console.error("Failed to list buckets:", listError.message)
+      return false
+    }
+
+    const exists = buckets?.some((b) => b.name === bucketName)
+    if (!exists) {
+      console.log(`Creating storage bucket: ${bucketName}`)
+      const { error: createError } = await supabase.storage.createBucket(bucketName, {
+        public: true,
+        fileSizeLimit: 10 * 1024 * 1024, // 10MB
+        allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+      })
+      if (createError) {
+        console.error(`Failed to create bucket ${bucketName}:`, createError.message)
+        return false
+      }
+      console.log(`✅ Storage bucket "${bucketName}" created successfully`)
+    }
+    return true
+  } catch (e: any) {
+    console.error("Bucket check failed:", e?.message)
+    return false
+  }
+}
 
 // Retry wrapper for storage operations
 export async function uploadWithRetry(
@@ -28,6 +75,15 @@ export async function uploadWithRetry(
       .upload(path, file, { ...options, upsert: options?.upsert ?? true })
     if (!error) return { data, error: null }
     lastError = error
+
+    // If bucket not found, try to create it
+    if (
+      error.message?.includes("Bucket not found") ||
+      error.message?.includes("bucket")
+    ) {
+      await ensureStorageBucket(bucket)
+    }
+
     // Exponential backoff
     if (attempt < maxRetries - 1) {
       await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 500))
@@ -59,14 +115,14 @@ export function getPublicUrl(bucket: string, path: string): string {
 
 // MIME type validation
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"]
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
 export function validateImageFile(file: { type: string; size: number }): { valid: boolean; error?: string } {
   if (!ALLOWED_MIME_TYPES.includes(file.type)) {
     return { valid: false, error: `Invalid file type. Allowed: JPEG, PNG, WebP. Got: ${file.type}` }
   }
   if (file.size > MAX_FILE_SIZE) {
-    return { valid: false, error: `File too large. Maximum: 5MB. Got: ${(file.size / 1024 / 1024).toFixed(1)}MB` }
+    return { valid: false, error: `File too large. Maximum: 10MB. Got: ${(file.size / 1024 / 1024).toFixed(1)}MB` }
   }
   return { valid: true }
 }

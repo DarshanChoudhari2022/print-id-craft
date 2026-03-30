@@ -12,7 +12,40 @@ const templateSchema = z.object({
   printDpi: z.number().int().positive().optional(),
   orientation: z.enum(["PORTRAIT", "LANDSCAPE"]).optional(),
   fieldConfig: z.any().optional(),
+  templateImageUrl: z.string().optional(),
+  fieldMappings: z.any().optional(),
 })
+
+/**
+ * Auto-generates fieldConfig from fieldMappings so the student form
+ * always matches exactly what the admin mapped on the JPG template.
+ *
+ * Each mapped field becomes a form field with the correct key, label,
+ * type, and required flag.
+ */
+function deriveFieldConfigFromMappings(fieldMappings: any[]): any[] {
+  if (!Array.isArray(fieldMappings) || fieldMappings.length === 0) return []
+
+  return fieldMappings
+    .filter((m) => m.type !== "photo") // photo is handled separately in form
+    .map((m) => {
+      // Determine form field type based on the key/label
+      let formType = "text"
+      if (m.fieldKey === "mob_father" || m.fieldKey === "mother_phone" || m.fieldKey?.includes("phone") || m.fieldKey?.includes("mob")) {
+        formType = "tel"
+      }
+      if (m.fieldKey === "class") {
+        formType = "text" // will be auto-filled from class name
+      }
+
+      return {
+        key: m.fieldKey,
+        label: m.label,
+        type: formType,
+        required: true,
+      }
+    })
+}
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -50,20 +83,32 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const body = await req.json()
     const validated = templateSchema.parse(body)
 
+    // AUTO-SYNC: When fieldMappings are saved, auto-generate fieldConfig
+    // This ensures the student form always matches the mapped JPG fields
+    let fieldConfig = validated.fieldConfig
+    if (validated.fieldMappings && Array.isArray(validated.fieldMappings) && validated.fieldMappings.length > 0) {
+      fieldConfig = deriveFieldConfigFromMappings(validated.fieldMappings)
+    }
+
+    const updateData: any = { ...validated }
+    if (fieldConfig) {
+      updateData.fieldConfig = fieldConfig
+    }
+
     const template = await prisma.template.upsert({
       where: { schoolId: params.id },
-      update: {
-        ...validated,
-      },
+      update: updateData,
       create: {
         schoolId: params.id,
         frontLayout: validated.frontLayout || [],
         backLayout: validated.backLayout || [],
-        fieldConfig: validated.fieldConfig || [],
+        fieldConfig: fieldConfig || [],
         cardWidthMm: validated.cardWidthMm || 85.6,
         cardHeightMm: validated.cardHeightMm || 54.0,
         printDpi: validated.printDpi || 300,
         orientation: validated.orientation || "PORTRAIT",
+        templateImageUrl: validated.templateImageUrl,
+        fieldMappings: validated.fieldMappings || [],
       },
     })
 

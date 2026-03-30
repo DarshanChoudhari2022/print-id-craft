@@ -26,19 +26,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const formData = await req.formData()
     const file = formData.get("file") as File | null
-    const classId = formData.get("classId") as string | null
+    const classId = formData.get("classId") as string | null // Optional now — if provided, use as fallback
 
     if (!file) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 })
-    }
-    if (!classId) {
-      return NextResponse.json({ error: "Class is required" }, { status: 400 })
-    }
-
-    // Verify class belongs to school
-    const targetClass = school.classes.find(c => c.id === classId)
-    if (!targetClass) {
-      return NextResponse.json({ error: "Class not found in this school" }, { status: 400 })
     }
 
     // Check file size (max 10MB)
@@ -77,7 +68,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const fieldConfig = (school.template?.fieldConfig || []) as Array<{ key: string; label: string; type: string; required: boolean }>
 
     // Build a label→key mapping for flexible column matching
-    // e.g. "Full Name" → "fullName", "Roll No." → "rollNo", etc.
     const labelToKey: Record<string, string> = {}
     for (const f of fieldConfig) {
       labelToKey[f.label.toLowerCase().trim()] = f.key
@@ -97,16 +87,40 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     labelToKey["blood group"] = "bloodGroup"
     labelToKey["father name"] = "fatherName"
     labelToKey["father's name"] = "fatherName"
+    labelToKey["father"] = "fatherName"
     labelToKey["mother name"] = "motherName"
     labelToKey["mother's name"] = "motherName"
+    labelToKey["mother"] = "motherName"
     labelToKey["phone"] = "phone"
     labelToKey["mobile"] = "phone"
     labelToKey["phone number"] = "phone"
     labelToKey["mobile number"] = "phone"
     labelToKey["contact"] = "phone"
     labelToKey["address"] = "address"
+
+    // Photo ID / Photo URL aliases
     labelToKey["photo url"] = "photoUrl"
-    labelToKey["photo"] = "photoUrl"
+    labelToKey["photo"] = "photoId"
+    labelToKey["photo id"] = "photoId"
+    labelToKey["photoid"] = "photoId"
+    labelToKey["photo_id"] = "photoId"
+
+    // Class / Section aliases
+    labelToKey["class"] = "class"
+    labelToKey["class-section"] = "classSection"
+    labelToKey["class section"] = "classSection"
+    labelToKey["class_section"] = "classSection"
+    labelToKey["section"] = "section"
+    labelToKey["branch"] = "branch"
+    labelToKey["division"] = "section"
+
+    // NO / Sr. No aliases
+    labelToKey["no"] = "srNo"
+    labelToKey["no."] = "srNo"
+    labelToKey["sr no"] = "srNo"
+    labelToKey["sr no."] = "srNo"
+    labelToKey["sr. no."] = "srNo"
+    labelToKey["s.no"] = "srNo"
 
     // Map Excel columns to our field keys
     const excelHeaders = rawRows.length > 0 ? Object.keys(rawRows[0]) : []
@@ -118,30 +132,98 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       }
     }
 
+    // Detect if we have a class-section column for auto-class creation
+    const classColumnHeader = excelHeaders.find(h => {
+      const n = h.toLowerCase().trim()
+      return n === "class-section" || n === "class section" || n === "class_section" || n === "class"
+    })
+
+    // Detect photo ID column
+    const photoIdHeader = excelHeaders.find(h => {
+      const n = h.toLowerCase().trim()
+      return n === "photo id" || n === "photoid" || n === "photo_id" || n === "photo"
+    })
+
+    // If we have class column, gather unique class names and auto-create them
+    const classNameToId: Record<string, string> = {}
+    // Populate existing classes
+    for (const c of school.classes) {
+      classNameToId[c.name.toLowerCase().trim()] = c.id
+    }
+
+    if (classColumnHeader) {
+      // Find all unique class names from the data
+      const uniqueClasses = new Set<string>()
+      for (const row of rawRows) {
+        const className = String(row[classColumnHeader] ?? "").trim()
+        if (className && !classNameToId[className.toLowerCase().trim()]) {
+          uniqueClasses.add(className)
+        }
+      }
+
+      // Auto-create missing classes
+      for (const className of uniqueClasses) {
+        try {
+          const newClass = await prisma.class.create({
+            data: {
+              name: className,
+              schoolId,
+              isActive: true,
+            },
+          })
+          classNameToId[className.toLowerCase().trim()] = newClass.id
+        } catch (err: any) {
+          console.error(`Failed to create class "${className}":`, err?.message)
+        }
+      }
+    }
+
+    // Fallback class: use classId from form, or the first class
+    let fallbackClassId = classId || school.classes[0]?.id || ""
+    if (classColumnHeader && Object.keys(classNameToId).length > 0 && !fallbackClassId) {
+      fallbackClassId = Object.values(classNameToId)[0]
+    }
+
+    if (!fallbackClassId && !classColumnHeader) {
+      return NextResponse.json({ error: "No class found. Create at least one class, or include a 'Class-Section' column in your Excel." }, { status: 400 })
+    }
+
     // Validate each row & build student data
-    const validRows: Array<{ formData: Record<string, string>; photoUrl: string; rowNum: number }> = []
+    const validRows: Array<{ formData: Record<string, string>; photoId: string; className: string; classId: string; rowNum: number }> = []
     const errors: Array<{ row: number; field: string; message: string }> = []
 
-    // Required fields check
+    // Required fields check — but relaxed: only fullName is truly hard-required
     const requiredFields = fieldConfig.filter(f => f.required && f.key !== "class")
 
     for (let i = 0; i < rawRows.length; i++) {
       const raw = rawRows[i]
       const rowNum = i + 2 // Excel row (1-indexed header + data)
       const studentFormData: Record<string, string> = {}
-      let photoUrl = ""
+      let photoId = ""
+      let rowClassName = ""
 
       // Map columns
       for (const [excelHeader, fieldKey] of Object.entries(columnMap)) {
         const val = String(raw[excelHeader] ?? "").trim()
         if (fieldKey === "photoUrl") {
-          photoUrl = val
+          // Skip — we handle photos separately
+        } else if (fieldKey === "photoId") {
+          photoId = val
+          studentFormData["photoId"] = val // also store in form data for later matching
+        } else if (fieldKey === "classSection") {
+          rowClassName = val
+          studentFormData["class"] = val
+        } else if (fieldKey === "class" && !rowClassName) {
+          rowClassName = val
+          studentFormData["class"] = val
+        } else if (fieldKey === "srNo" || fieldKey === "branch") {
+          studentFormData[fieldKey] = val
         } else {
           studentFormData[fieldKey] = val
         }
       }
 
-      // Also check unmapped columns — store them too (extra data)
+      // Also check unmapped columns — store them too (extra data like Branch, NO, etc.)
       for (const [header, value] of Object.entries(raw)) {
         if (!columnMap[header]) {
           const key = header.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "")
@@ -151,43 +233,75 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         }
       }
 
-      // Add class name
-      studentFormData["class"] = targetClass.name
-
-      // Validate required fields
-      let hasError = false
-      for (const rf of requiredFields) {
-        if (!studentFormData[rf.key] || studentFormData[rf.key].trim() === "") {
-          errors.push({ row: rowNum, field: rf.label, message: `${rf.label} is required` })
-          hasError = true
+      // Determine class for this row
+      let rowClassId = fallbackClassId
+      if (rowClassName) {
+        const mappedId = classNameToId[rowClassName.toLowerCase().trim()]
+        if (mappedId) {
+          rowClassId = mappedId
         }
+      }
+      if (!rowClassName && classColumnHeader) {
+        rowClassName = String(raw[classColumnHeader] ?? "").trim()
+        studentFormData["class"] = rowClassName
+        const mappedId = classNameToId[rowClassName.toLowerCase().trim()]
+        if (mappedId) rowClassId = mappedId
       }
 
       // Must have at least a name
       if (!studentFormData.fullName && !studentFormData["Full Name"]) {
-        errors.push({ row: rowNum, field: "Full Name", message: "Student name is required" })
-        hasError = true
+        // Try "Student Name" directly
+        const nameHeader = excelHeaders.find(h => h.toLowerCase().trim().includes("name") && !h.toLowerCase().includes("father") && !h.toLowerCase().includes("mother"))
+        if (nameHeader) {
+          studentFormData.fullName = String(raw[nameHeader] ?? "").trim()
+        }
       }
 
-      if (!hasError) {
-        validRows.push({ formData: studentFormData, photoUrl, rowNum })
+      if (!studentFormData.fullName && !studentFormData["Full Name"]) {
+        errors.push({ row: rowNum, field: "Full Name", message: "Student name is required" })
+        continue
       }
+
+      // Validate required fields (soft — log but don't skip)
+      for (const rf of requiredFields) {
+        if (rf.key === "fullName") continue // already checked
+        if (!studentFormData[rf.key] || studentFormData[rf.key].trim() === "") {
+          // Not fatal — still import, just note
+        }
+      }
+
+      validRows.push({
+        formData: studentFormData,
+        photoId,
+        className: rowClassName || "Default",
+        classId: rowClassId,
+        rowNum,
+      })
     }
 
     // If mode is "validate", return validation results without saving
     const mode = formData.get("mode") as string | null
     if (mode === "validate") {
+      // Gather auto-created class info
+      const autoClasses = classColumnHeader
+        ? [...new Set(validRows.map(r => r.className))].filter(Boolean)
+        : []
+
       return NextResponse.json({
         success: true,
         data: {
           totalRows: rawRows.length,
           validRows: validRows.length,
           errorRows: errors.length,
-          errors: errors.slice(0, 50), // limit to 50 error details
+          errors: errors.slice(0, 50),
+          autoClasses,
+          hasPhotoIdColumn: !!photoIdHeader,
+          hasClassColumn: !!classColumnHeader,
           preview: validRows.slice(0, 10).map(r => ({
             ...r.formData,
             _rowNum: r.rowNum,
-            _photoUrl: r.photoUrl,
+            _photoId: r.photoId,
+            _className: r.className,
           })),
           mappedColumns: Object.entries(columnMap).map(([excel, key]) => ({
             excelColumn: excel,
@@ -230,7 +344,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     // Bulk create students
-    const createdStudents: Array<{ id: string; serialNumber: string; name: string }> = []
+    const createdStudents: Array<{ id: string; serialNumber: string; name: string; className: string; photoId: string }> = []
     const importErrors: Array<{ row: number; error: string }> = []
 
     for (const row of validRows) {
@@ -241,10 +355,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         const student = await prisma.student.create({
           data: {
             schoolId,
-            classId,
+            classId: row.classId,
             serialNumber,
             formData: row.formData,
-            photoUrl: row.photoUrl || "",
+            photoUrl: "",
             status: "SUBMITTED",
           },
         })
@@ -253,6 +367,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           id: student.id,
           serialNumber,
           name: row.formData.fullName || row.formData["Full Name"] || "Unknown",
+          className: row.className,
+          photoId: row.photoId,
         })
 
         // Generate QR code in background (don't block)
@@ -269,10 +385,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
             const student = await prisma.student.create({
               data: {
                 schoolId,
-                classId,
+                classId: row.classId,
                 serialNumber: retrySerial,
                 formData: row.formData,
-                photoUrl: row.photoUrl || "",
+                photoUrl: "",
                 status: "SUBMITTED",
               },
             })
@@ -280,6 +396,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
               id: student.id,
               serialNumber: retrySerial,
               name: row.formData.fullName || "Unknown",
+              className: row.className,
+              photoId: row.photoId,
             })
             generateQR(student.id, schoolId, retrySerial).catch(() => {})
           } catch (retryErr: any) {
@@ -297,8 +415,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         imported: createdStudents.length,
         failed: importErrors.length,
         total: validRows.length,
-        students: createdStudents.slice(0, 20), // first 20 for display
+        students: createdStudents.slice(0, 50),
         errors: importErrors.slice(0, 20),
+        classesCreated: classColumnHeader ? [...new Set(validRows.map(r => r.className))].length : 0,
       },
     })
   } catch (error: any) {

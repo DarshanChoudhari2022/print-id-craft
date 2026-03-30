@@ -63,6 +63,8 @@ model Template {
   printDpi        Int         @default(300)
   orientation     Orientation @default(PORTRAIT)
   fieldConfig     Json        @default("[]")
+  templateImageUrl String?
+  fieldMappings   Json        @default("[]")
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 }

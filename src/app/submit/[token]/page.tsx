@@ -4,6 +4,9 @@ import { useParams } from "next/navigation"
 import ReactCrop, { type Crop } from "react-image-crop"
 import "react-image-crop/dist/ReactCrop.css"
 import SharedIDCardPreview from "@/components/IDCardPreview"
+import dynamic from "next/dynamic"
+
+const JpgCardPreview = dynamic(() => import("@/components/JpgCardPreview"), { ssr: false })
 
 type FieldConfig = { key: string; label: string; type: string; required: boolean }
 type TemplateElement = { 
@@ -23,6 +26,9 @@ type FormConfig = {
   cardWidthMm: number
   cardHeightMm: number
   orientation: "PORTRAIT" | "LANDSCAPE"
+  // JPG template fields
+  templateImageUrl: string | null
+  fieldMappings: any[]
 }
 
 // Helper components moved outside to keep SubmitPage clean
@@ -144,11 +150,25 @@ export default function SubmitPage() {
       setTimeout(() => setAlertMsg(""), 4000)
       return
     }
-    setPhotoFile(file)
-    const reader = new FileReader()
-    reader.onload = () => setPhotoPreview(reader.result as string)
-    reader.readAsDataURL(file)
-    setCrop({ unit: "%", width: 75, height: 100, x: 12.5, y: 0 })
+    // Validate minimum 300px dimension
+    const img = new Image()
+    img.onload = () => {
+      if (img.naturalWidth < 300 || img.naturalHeight < 300) {
+        setAlertMsg("Photo must be at least 300×300 pixels. Please upload a higher resolution image.")
+        setTimeout(() => setAlertMsg(""), 5000)
+        return
+      }
+      setPhotoFile(file)
+      const reader = new FileReader()
+      reader.onload = () => setPhotoPreview(reader.result as string)
+      reader.readAsDataURL(file)
+      setCrop({ unit: "%", width: 75, height: 100, x: 12.5, y: 0 })
+    }
+    img.onerror = () => {
+      setAlertMsg("Failed to read image. Please try another file.")
+      setTimeout(() => setAlertMsg(""), 4000)
+    }
+    img.src = URL.createObjectURL(file)
   }
 
   const generateCroppedPhoto = useCallback(async () => {
@@ -164,8 +184,8 @@ export default function SubmitPage() {
       height: (crop.height / 100) * img.height * scaleY,
     }
 
-    const TARGET_W = 600
-    const TARGET_H = 800
+    const TARGET_W = 300
+    const TARGET_H = 400
     canvas.width = TARGET_W
     canvas.height = TARGET_H
     const ctx = canvas.getContext("2d")!
@@ -203,23 +223,17 @@ export default function SubmitPage() {
           setUploadProgress(10)
           const blob = await fetch(croppedPhoto).then(r => r.blob())
           setUploadProgress(25)
-          const { createClient } = await import("@supabase/supabase-js")
-          const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-          )
+          const fd = new FormData()
+          fd.append("file", new File([blob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" }))
+          fd.append("folder", `students/${config.schoolId}`)
           setUploadProgress(30)
-          const fileName = `students/${config.schoolId}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}.jpg`
-          const { data: uploadData, error: uploadErr } = await supabase.storage
-            .from("student-photos")
-            .upload(fileName, blob, { contentType: "image/jpeg", upsert: true })
+          const uploadRes = await fetch("/api/upload", { method: "POST", body: fd })
+          const uploadData = await uploadRes.json()
           setUploadProgress(70)
-          if (uploadErr) {
-            console.error("Photo upload error:", uploadErr)
-          }
-          if (!uploadErr && uploadData) {
-            const { data: urlData } = supabase.storage.from("student-photos").getPublicUrl(fileName)
-            photoUrl = urlData.publicUrl
+          if (uploadRes.ok && uploadData.success) {
+            photoUrl = uploadData.url
+          } else {
+            console.error("Photo upload error:", uploadData.error)
           }
           setUploadProgress(80)
         } catch (photoErr) {
@@ -296,20 +310,22 @@ export default function SubmitPage() {
           {/* ID Card Preview */}
           {config && (
             <div style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 16, background: '#f1f5f9', padding: 4, borderRadius: 8 }}>
-                <button onClick={() => setCardSide("front")} style={{ flex: 1, padding: '8px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer', background: cardSide === "front" ? 'white' : 'transparent', color: cardSide === "front" ? '#3b82f6' : '#64748b', boxShadow: cardSide === "front" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>Front</button>
-                <button onClick={() => setCardSide("back")} style={{ flex: 1, padding: '8px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer', background: cardSide === "back" ? 'white' : 'transparent', color: cardSide === "back" ? '#3b82f6' : '#64748b', boxShadow: cardSide === "back" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>Back</button>
-              </div>
-              <SharedIDCardPreview
-                layout={cardSide === 'front' ? config.frontLayout || [] : config.backLayout || []}
-                widthMm={config.cardWidthMm || 85.6}
-                heightMm={config.cardHeightMm || 54}
-                formData={{ ...formData, class: config.className }}
-                studentPhoto={croppedPhoto}
-                schoolLogo={config.schoolLogo || undefined}
-                serialNumber={result?.serialNumber}
-                scale={3.5}
-              />
+              {config.templateImageUrl && config.fieldMappings?.length > 0 ? (
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <JpgCardPreview
+                    templateImageUrl={config.templateImageUrl}
+                    fieldMappings={config.fieldMappings}
+                    formData={{ ...formData, class: config.className }}
+                    studentPhoto={croppedPhoto}
+                    scale={1}
+                    watermark="Wise Melon"
+                  />
+                </div>
+              ) : (
+                <div style={{ background: '#f8fafc', borderRadius: 12, padding: 20, border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                  <p style={{ fontSize: 13, color: '#94a3b8' }}>Your ID card is being prepared.</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -321,38 +337,105 @@ export default function SubmitPage() {
 
   if (step === "review") return (
     <div className="submit-page">
-      <div className="submit-container">
-        <div style={{ padding: 24 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Review Card</h2>
-          <p style={{ fontSize: 14, color: '#64748b', marginBottom: 20 }}>This is how your identity card will look.</p>
+      <div className="submit-container" style={{ maxWidth: 720 }}>
+        {/* Header */}
+        <div style={{ padding: '28px 24px 0 24px' }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginBottom: 4, letterSpacing: '-0.01em' }}>Review ID Card</h2>
+          <p style={{ fontSize: 14, color: '#64748b', marginBottom: 0 }}>Please confirm your details before submitting.</p>
+        </div>
 
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, background: '#f1f5f9', padding: 4, borderRadius: 8 }}>
-              <button onClick={() => setCardSide("front")} style={{ flex: 1, padding: '8px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer', background: cardSide === "front" ? 'white' : 'transparent', color: cardSide === "front" ? '#3b82f6' : '#64748b', boxShadow: cardSide === "front" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>Front View</button>
-              <button onClick={() => setCardSide("back")} style={{ flex: 1, padding: '8px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer', background: cardSide === "back" ? 'white' : 'transparent', color: cardSide === "back" ? '#3b82f6' : '#64748b', boxShadow: cardSide === "back" ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>Back View</button>
+        <div style={{ padding: '20px 24px 24px' }}>
+          {/* Main content — side-by-side on desktop, stacked on mobile */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginBottom: 24 }}>
+            
+            {/* Card Preview */}
+            <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Card Preview</div>
+              <div style={{ background: '#f8fafc', borderRadius: 12, padding: 16, border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                {config?.templateImageUrl && config?.fieldMappings?.length > 0 ? (
+                  <JpgCardPreview
+                    templateImageUrl={config.templateImageUrl}
+                    fieldMappings={config.fieldMappings}
+                    formData={{ ...formData, class: config.className }}
+                    studentPhoto={croppedPhoto}
+                    scale={1}
+                    watermark="Wise Melon"
+                  />
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12, background: '#f1f5f9', padding: 3, borderRadius: 8, width: '100%' }}>
+                      <button onClick={() => setCardSide("front")} style={{ flex: 1, padding: '6px', fontSize: 11, fontWeight: 600, borderRadius: 5, border: 'none', cursor: 'pointer', background: cardSide === "front" ? 'white' : 'transparent', color: cardSide === "front" ? '#3b82f6' : '#94a3b8', boxShadow: cardSide === "front" ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>Front</button>
+                      <button onClick={() => setCardSide("back")} style={{ flex: 1, padding: '6px', fontSize: 11, fontWeight: 600, borderRadius: 5, border: 'none', cursor: 'pointer', background: cardSide === "back" ? 'white' : 'transparent', color: cardSide === "back" ? '#3b82f6' : '#94a3b8', boxShadow: cardSide === "back" ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>Back</button>
+                    </div>
+                    <IDCardPreview 
+                      layout={cardSide === 'front' ? config?.frontLayout || [] : config?.backLayout || []} 
+                      widthMm={config?.cardWidthMm || 85.6}
+                      heightMm={config?.cardHeightMm || 54}
+                      formData={formData}
+                      config={config}
+                      croppedPhoto={croppedPhoto}
+                    />
+                  </>
+                )}
+              </div>
+              <div style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: '#cbd5e1' }}>Powered by Print ID Craft</div>
             </div>
 
-            <IDCardPreview 
-              layout={cardSide === 'front' ? config?.frontLayout || [] : config?.backLayout || []} 
-              widthMm={config?.cardWidthMm || 85.6}
-              heightMm={config?.cardHeightMm || 54}
-              formData={formData}
-              config={config}
-              croppedPhoto={croppedPhoto}
-            />
-          </div>
-
-          <div style={{ background: '#f8fafc', borderRadius: 12, padding: 16, marginBottom: 24 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>Details Check</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {config?.fieldConfig.filter(f => f.key !== "class").map(field => (
-                formData[field.key] && (
-                  <div key={field.key}>
-                    <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>{field.label}</p>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{formData[field.key]}</p>
+            {/* Details Check Panel */}
+            <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Details Check</div>
+              <div style={{ background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                {/* Student Photo Thumbnail */}
+                {croppedPhoto && (
+                  <div style={{ padding: '16px 16px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <img src={croppedPhoto} alt="Photo" style={{ width: 48, height: 60, borderRadius: 6, objectFit: 'cover', border: '2px solid #e2e8f0' }} />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{formData.name || formData.fullName || '—'}</div>
+                      <div style={{ fontSize: 12, color: '#64748b' }}>{config?.className}</div>
+                    </div>
                   </div>
-                )
-              ))}
+                )}
+                
+                {/* Field Details */}
+                <div style={{ padding: 16 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                    {config?.fieldConfig.filter(f => f.key !== "class").map((field, idx) => (
+                      formData[field.key] && (
+                        <div 
+                          key={field.key} 
+                          style={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'baseline',
+                            padding: '10px 0', 
+                            borderBottom: idx < (config?.fieldConfig.filter(f => f.key !== "class").length || 0) - 1 ? '1px solid #e2e8f0' : 'none',
+                          }}
+                        >
+                          <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500, flexShrink: 0 }}>{field.label}</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', textAlign: 'right', marginLeft: 12, wordBreak: 'break-word' }}>{formData[field.key]}</span>
+                        </div>
+                      )
+                    ))}
+                    {/* Class (auto-filled) */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '10px 0' }}>
+                      <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>Class</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{config?.className}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Confirmation note */}
+              <div style={{ 
+                marginTop: 12, padding: '10px 14px', borderRadius: 8, 
+                background: '#eff6ff', border: '1px solid #bfdbfe', 
+                display: 'flex', alignItems: 'flex-start', gap: 8 
+              }}>
+                <span style={{ fontSize: 14, marginTop: 1, flexShrink: 0 }}>ℹ️</span>
+                <span style={{ fontSize: 12, color: '#1e40af', lineHeight: 1.5 }}>
+                  Please verify all details carefully. Once submitted, changes cannot be made without contacting the school.
+                </span>
+              </div>
             </div>
           </div>
 
@@ -371,15 +454,28 @@ export default function SubmitPage() {
 
           {/* Alert message */}
           {alertMsg && (
-            <div style={{ padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, color: '#ef4444', fontSize: 13, marginBottom: 16, animation: 'fadeIn 0.2s' }}>
+            <div style={{ padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, color: '#ef4444', fontSize: 13, marginBottom: 16 }}>
               ⚠️ {alertMsg}
             </div>
           )}
 
+          {/* Action Buttons */}
           <div style={{ display: 'flex', gap: 12 }}>
-            <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setStep("photo")}>← Back</button>
-            <button className="btn btn-primary" style={{ flex: 1 }} disabled={submitting} onClick={handleSubmit}>
-              {submitting ? "Submitting..." : "Submit Registration"}
+            <button 
+              className="btn btn-outline" 
+              style={{ flex: 1, padding: '14px', fontSize: 14, fontWeight: 600 }} 
+              onClick={() => setStep("photo")}
+              disabled={submitting}
+            >
+              ← Back
+            </button>
+            <button 
+              className="btn btn-primary" 
+              style={{ flex: 2, padding: '14px', fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em' }} 
+              disabled={submitting} 
+              onClick={handleSubmit}
+            >
+              {submitting ? "Submitting..." : "✓ Submit Registration"}
             </button>
           </div>
         </div>
@@ -472,8 +568,40 @@ export default function SubmitPage() {
           {step === "photo" && (
             <div>
               <p style={{ fontSize: 14, color: '#64748b', marginBottom: 16 }}>
-                Upload a passport-size photo. It will be cropped to 3:4 ratio.
+                Upload a passport-size photo with a <strong>plain / solid background</strong>.
               </p>
+
+              {/* Photo Guidelines Box */}
+              <div style={{ marginBottom: 20, padding: '14px 16px', background: '#eff6ff', borderRadius: 12, border: '1px solid #bfdbfe' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', marginBottom: 8 }}>📸 Photo Requirements</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 20px', fontSize: 12, color: '#2563eb', lineHeight: 1.8 }}>
+                  <div>✅ Minimum 300 pixels wide</div>
+                  <div>✅ Plain/solid background</div>
+                  <div>✅ Face clearly visible</div>
+                  <div>✅ 3:4 ratio (passport size)</div>
+                  <div>❌ No group photos</div>
+                  <div>❌ No filters or editing</div>
+                </div>
+                {/* Sample Photo Reference */}
+                <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <div style={{ 
+                    width: 48, height: 64, borderRadius: 6, border: '2px solid #3b82f6', 
+                    background: '#dbeafe', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    position: 'relative', overflow: 'hidden'
+                  }}>
+                    <svg viewBox="0 0 40 56" width="36" height="50" fill="none">
+                      <rect width="40" height="56" fill="#dbeafe" />
+                      <circle cx="20" cy="18" r="8" fill="#93c5fd" />
+                      <ellipse cx="20" cy="38" rx="14" ry="10" fill="#93c5fd" />
+                    </svg>
+                    <div style={{ position: 'absolute', bottom: 2, fontSize: 6, fontWeight: 700, color: '#3b82f6' }}>SAMPLE</div>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#3b82f6', lineHeight: 1.5 }}>
+                    <strong>Standard format:</strong> Head and shoulders, centered,<br/>
+                    looking straight at camera, plain background.
+                  </div>
+                </div>
+              </div>
 
               {!photoPreview ? (
                 <div

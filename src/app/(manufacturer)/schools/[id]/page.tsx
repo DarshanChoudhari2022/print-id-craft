@@ -1,9 +1,15 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense, lazy } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
-import IDCardPreview from "@/components/IDCardPreview"
+import dynamic from "next/dynamic"
+
+// Lazy-load heavy components — only loaded when their tab is active
+const IDCardPreview = dynamic(() => import("@/components/IDCardPreview"), { ssr: false })
+const JpgTemplateMapper = dynamic(() => import("@/components/JpgTemplateMapper"), { ssr: false })
+const JpgCardPreview = dynamic(() => import("@/components/JpgCardPreview"), { ssr: false })
+const BatchGenerator = dynamic(() => import("@/components/BatchGenerator"), { ssr: false })
 
 type ClassData = {
   id: string
@@ -51,7 +57,7 @@ export default function SchoolDetailPage() {
   const router = useRouter()
   const schoolId = params.id as string
 
-  const [tab, setTab] = useState<"overview"|"classes"|"students"|"template"|"batches"|"export">("overview")
+  const [tab, setTab] = useState<"overview"|"classes"|"students"|"template"|"generate"|"batches"|"export">("template")
   const [school, setSchool] = useState<SchoolDetail | null>(null)
   const [classes, setClasses] = useState<ClassData[]>([])
   const [students, setStudents] = useState<StudentData[]>([])
@@ -88,6 +94,20 @@ export default function SchoolDetailPage() {
   const [importPreview, setImportPreview] = useState<any>(null)
   const [importResult, setImportResult] = useState<any>(null)
   const [dragOver, setDragOver] = useState(false)
+
+  // Bulk photo upload
+  const [photoUploadOpen, setPhotoUploadOpen] = useState(false)
+  const [photoFiles, setPhotoFiles] = useState<File[]>([])
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const [photoResult, setPhotoResult] = useState<any>(null)
+  const [photoDragOver, setPhotoDragOver] = useState(false)
+  const [photoUploadProgress, setPhotoUploadProgress] = useState(0)
+  const [photoUploadStatus, setPhotoUploadStatus] = useState('')
+  // Manual matching for unmatched photos
+  const [unmatchedFileMap, setUnmatchedFileMap] = useState<Record<string, File>>({})
+  const [manualAssigning, setManualAssigning] = useState<string>('')
+  const [manualSearchQuery, setManualSearchQuery] = useState('')
+  const [allStudentsList, setAllStudentsList] = useState<any[]>([])
 
   const fetchSchool = async () => {
     try {
@@ -290,15 +310,15 @@ export default function SchoolDetailPage() {
 
   // Bulk import handlers
   const handleImportValidate = async () => {
-    if (!importFile || !importClassId) {
-      toast.error("Please select a class and upload a file.")
+    if (!importFile) {
+      toast.error("Please upload a file.")
       return
     }
     setImportUploading(true)
     try {
       const fd = new FormData()
       fd.append("file", importFile)
-      fd.append("classId", importClassId)
+      if (importClassId) fd.append("classId", importClassId)
       fd.append("mode", "validate")
       const res = await fetch(`/api/schools/${schoolId}/students/import`, { method: "POST", body: fd })
       const data = await res.json()
@@ -316,12 +336,12 @@ export default function SchoolDetailPage() {
   }
 
   const handleImportConfirm = async () => {
-    if (!importFile || !importClassId) return
+    if (!importFile) return
     setImportUploading(true)
     try {
       const fd = new FormData()
       fd.append("file", importFile)
-      fd.append("classId", importClassId)
+      if (importClassId) fd.append("classId", importClassId)
       fd.append("mode", "import")
       const res = await fetch(`/api/schools/${schoolId}/students/import`, { method: "POST", body: fd })
       const data = await res.json()
@@ -331,6 +351,7 @@ export default function SchoolDetailPage() {
         toast.success(`${data.data.imported} students imported!`)
         fetchStudents()
         fetchSchool()
+        fetchClasses()
       } else {
         toast.error(data.error || "Import failed")
       }
@@ -350,6 +371,159 @@ export default function SchoolDetailPage() {
     setImportResult(null)
   }
 
+  // Bulk photo upload handlers
+  const handleBulkPhotoUpload = async () => {
+    if (photoFiles.length === 0) {
+      toast.error("Please select photos to upload.")
+      return
+    }
+    setPhotoUploading(true)
+    setPhotoUploadProgress(0)
+    setPhotoUploadStatus('Preparing upload...')
+    
+    try {
+      // Upload in batches of 20 to avoid timeouts on large folders
+      const BATCH_SIZE = 20
+      const totalFiles = photoFiles.length
+      let allMatched: any[] = []
+      let allUnmatched: string[] = []
+      let allErrors: any[] = []
+
+      for (let i = 0; i < totalFiles; i += BATCH_SIZE) {
+        const batch = photoFiles.slice(i, i + BATCH_SIZE)
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1
+        const totalBatches = Math.ceil(totalFiles / BATCH_SIZE)
+        
+        setPhotoUploadStatus(`Uploading batch ${batchNum} of ${totalBatches} (${Math.min(i + BATCH_SIZE, totalFiles)}/${totalFiles} photos)...`)
+        setPhotoUploadProgress(Math.round((i / totalFiles) * 90))
+
+        const fd = new FormData()
+        for (const file of batch) {
+          fd.append("photos", file)
+        }
+
+        const res = await fetch(`/api/schools/${schoolId}/students/bulk-photos`, { method: "POST", body: fd })
+        const data = await res.json()
+        
+        if (data.success) {
+          if (data.data.matchedFiles) allMatched = [...allMatched, ...data.data.matchedFiles]
+          if (data.data.unmatchedFiles) allUnmatched = [...allUnmatched, ...data.data.unmatchedFiles]
+          if (data.data.errorFiles) allErrors = [...allErrors, ...data.data.errorFiles]
+        } else {
+          for (const file of batch) {
+            allErrors.push({ filename: file.name, error: data.error || 'Batch upload failed' })
+          }
+        }
+      }
+
+      setPhotoUploadProgress(100)
+      setPhotoUploadStatus('Complete!')
+
+      // Build a map of unmatched filenames → File objects for manual assignment
+      const fileMap: Record<string, File> = {}
+      for (const filename of allUnmatched) {
+        const file = photoFiles.find(f => f.name === filename)
+        if (file) fileMap[filename] = file
+      }
+      setUnmatchedFileMap(fileMap)
+
+      // Fetch all students list for manual matching dropdown
+      if (allUnmatched.length > 0) {
+        try {
+          const studRes = await fetch(`/api/schools/${schoolId}/students?limit=2000`)
+          const studData = await studRes.json()
+          if (studData.success) setAllStudentsList(studData.data)
+        } catch {}
+      }
+
+      const result = {
+        total: totalFiles,
+        matched: allMatched.length,
+        unmatched: allUnmatched.length,
+        errors: allErrors.length,
+        matchedFiles: allMatched.slice(0, 100),
+        unmatchedFiles: allUnmatched.slice(0, 50),
+        errorFiles: allErrors.slice(0, 20),
+      }
+      setPhotoResult(result)
+      toast.success(`${result.matched} of ${totalFiles} photos matched to students!`)
+      fetchStudents(studentPage)
+    } catch (err) {
+      toast.error("Bulk photo upload failed")
+    } finally {
+      setPhotoUploading(false)
+    }
+  }
+
+  // Handle folder selection via webkitdirectory
+  const handleFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(f => 
+      f.type.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(f.name)
+    )
+    if (files.length === 0) {
+      toast.error('No image files found in the selected folder.')
+      return
+    }
+    setPhotoFiles(files)
+    toast.success(`${files.length} photos found in folder!`)
+  }
+
+  const resetPhotoUpload = () => {
+    setPhotoUploadOpen(false)
+    setPhotoFiles([])
+    setPhotoResult(null)
+    setPhotoUploadProgress(0)
+    setPhotoUploadStatus('')
+    setUnmatchedFileMap({})
+    setManualAssigning('')
+    setManualSearchQuery('')
+    setAllStudentsList([])
+  }
+
+  // Manual photo assignment handler
+  const handleManualAssign = async (filename: string, studentId: string) => {
+    const file = unmatchedFileMap[filename]
+    if (!file || !studentId) return
+    
+    setManualAssigning(filename)
+    try {
+      const fd = new FormData()
+      fd.append("photo", file)
+      fd.append("studentId", studentId)
+      const res = await fetch(`/api/schools/${schoolId}/students/assign-photo`, { method: "POST", body: fd })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(`Photo "${filename}" assigned to ${data.data.studentName}!`)
+        // Move from unmatched to matched
+        setPhotoResult((prev: any) => ({
+          ...prev,
+          matched: prev.matched + 1,
+          unmatched: prev.unmatched - 1,
+          matchedFiles: [...(prev.matchedFiles || []), {
+            filename,
+            studentName: data.data.studentName,
+            serialNumber: data.data.serialNumber,
+            matchedBy: 'Manual',
+          }],
+          unmatchedFiles: (prev.unmatchedFiles || []).filter((f: string) => f !== filename),
+        }))
+        // Remove from unmatched file map
+        setUnmatchedFileMap(prev => {
+          const next = { ...prev }
+          delete next[filename]
+          return next
+        })
+        fetchStudents(studentPage)
+      } else {
+        toast.error(data.error || "Failed to assign photo")
+      }
+    } catch (err) {
+      toast.error("Failed to assign photo")
+    } finally {
+      setManualAssigning('')
+    }
+  }
+
   const handleExport = (format: "csv" | "excel") => {
     const params = new URLSearchParams()
     if (classFilter) params.set("classId", classFilter)
@@ -361,22 +535,16 @@ export default function SchoolDetailPage() {
   const handleLogoUpload = async (file: File) => {
     setUploadingLogo(true)
     try {
-      const { createClient } = await import("@supabase/supabase-js")
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-      )
-      const ext = file.name.split('.').pop() || 'png'
-      const fileName = `logos/${schoolId}-${Date.now()}.${ext}`
-      const { error: uploadErr } = await supabase.storage
-        .from("student-photos")
-        .upload(fileName, file, { contentType: file.type, upsert: true })
-      if (uploadErr) {
-        toast.error("Failed to upload logo")
+      const fd = new FormData()
+      fd.append("file", file)
+      fd.append("folder", `logos`)
+      const uploadRes = await fetch("/api/upload", { method: "POST", body: fd })
+      const uploadData = await uploadRes.json()
+      if (!uploadRes.ok || !uploadData.success) {
+        toast.error(uploadData.error || "Failed to upload logo")
         return
       }
-      const { data: urlData } = supabase.storage.from("student-photos").getPublicUrl(fileName)
-      const logoUrl = urlData.publicUrl
+      const logoUrl = uploadData.url
 
       // Update school record
       const res = await fetch(`/api/schools/${schoolId}`, {
@@ -431,7 +599,7 @@ export default function SchoolDetailPage() {
   )
   if (!school) return <div style={{ padding: 32 }}>School not found.</div>
 
-  const tabs = ["overview", "classes", "students", "template", "batches", "export"] as const
+  const tabs = ["overview", "classes", "students", "template", "generate", "batches", "export"] as const
 
   return (
     <>
@@ -464,19 +632,22 @@ export default function SchoolDetailPage() {
           </Link>
         </div>
 
-        <div className="school-tabs-scroll" style={{ display: 'flex', gap: 4, marginTop: 16, background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
-          {tabs.map(t => (
+        <div className="school-tabs-scroll" style={{ display: 'flex', borderBottom: '1px solid var(--gray-200)', marginBottom: 24, paddingBottom: 0 }}>
+          {["overview", "classes", "students", "batches"].map(t => (
             <button
               key={t}
-              onClick={() => setTab(t)}
-              style={{
-                padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
-                background: tab === t ? 'white' : 'transparent',
-                color: tab === t ? '#0f172a' : '#64748b',
-                boxShadow: tab === t ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                transition: 'all 0.15s',
-                textTransform: 'capitalize',
-                whiteSpace: 'nowrap',
+              onClick={() => setTab(t as any)}
+              className={`tab-item ${tab === t ? "active" : ""}`}
+              style={{ 
+                textTransform: 'capitalize', 
+                padding: '12px 0px', 
+                marginRight: 32, 
+                background: 'none', 
+                border: 'none',
+                fontSize: 14,
+                fontWeight: tab === t ? 700 : 500,
+                color: tab === t ? 'var(--blue-600)' : 'var(--gray-500)',
+                cursor: 'pointer'
               }}
             >
               {t}
@@ -488,23 +659,25 @@ export default function SchoolDetailPage() {
       <div className="page-body">
         {/* OVERVIEW TAB */}
         {tab === "overview" && (
-          <div>
+          <div className="fade-in">
             <div className="school-stats-mobile stat-grid">
-              <div className="stat-card">
+              <div className="stat-card glass-card premium-shadow">
                 <div className="stat-card-label">Total Classes</div>
-                <div className="stat-card-value">{school._count.classes}</div>
+                <div className="stat-card-value text-blue-600">{school._count.classes}</div>
               </div>
-              <div className="stat-card">
+              <div className="stat-card glass-card premium-shadow">
                 <div className="stat-card-label">Total Students</div>
-                <div className="stat-card-value">{school._count.students}</div>
+                <div className="stat-card-value text-blue-600">{school._count.students}</div>
               </div>
-              <div className="stat-card">
+              <div className="stat-card glass-card premium-shadow">
                 <div className="stat-card-label">Print Batches</div>
-                <div className="stat-card-value">{school._count.batches}</div>
+                <div className="stat-card-value text-blue-600">{school._count.batches}</div>
               </div>
-              <div className="stat-card">
-                <div className="stat-card-label">Template</div>
-                <div className="stat-card-value">{school.template ? "✓" : "—"}</div>
+              <div className="stat-card glass-card premium-shadow">
+                <div className="stat-card-label">Template Status</div>
+                <div className="stat-card-value" style={{ color: school.template ? 'var(--green-600)' : 'var(--gray-300)' }}>
+                  {school.template ? "Active" : "None"}
+                </div>
               </div>
             </div>
 
@@ -578,7 +751,7 @@ export default function SchoolDetailPage() {
 
         {/* CLASSES TAB */}
         {tab === "classes" && (
-          <div>
+          <div className="fade-in">
             <form onSubmit={handleAddClass} style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
               <div className="form-group" style={{ flex: 1, minWidth: 200 }}>
                 <input placeholder="New class name (e.g. Grade 10-A)" value={newClassName} onChange={e => setNewClassName(e.target.value)} required />
@@ -645,12 +818,16 @@ export default function SchoolDetailPage() {
         {/* STUDENTS TAB */}
         {tab === "students" && (
           <>
-          <div>
+          <div className="fade-in">
             {/* Action Bar */}
             <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
               <button className="btn btn-primary" onClick={() => setImportOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 20px' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
                 Bulk Import Excel
+              </button>
+              <button className="btn btn-outline" onClick={() => setPhotoUploadOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#8b5cf6', color: '#7c3aed' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                Bulk Upload Photos
               </button>
               <a href={`/api/schools/${schoolId}/students/import-template`} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', textDecoration: 'none', fontSize: 13 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
@@ -674,7 +851,16 @@ export default function SchoolDetailPage() {
               </select>
             </div>
 
-            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>{studentTotal} students found</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontSize: 13, color: '#64748b' }}>
+                {studentTotal} students found
+                {students.filter(s => !s.photoUrl).length > 0 && (
+                  <span style={{ marginLeft: 12, fontSize: 12, fontWeight: 600, color: '#ef4444', background: '#fef2f2', padding: '3px 10px', borderRadius: 6 }}>
+                    📷 {students.filter(s => !s.photoUrl).length} missing photos
+                  </span>
+                )}
+              </div>
+            </div>
 
             <div className="data-table-wrapper" style={{ overflowX: 'auto' }}>
               <table className="data-table">
@@ -683,8 +869,9 @@ export default function SchoolDetailPage() {
                     <th>Photo</th>
                     <th>Serial No.</th>
                     <th>Name</th>
+                    <th>Father No.</th>
+                    <th>Mother No.</th>
                     <th>Class</th>
-                    <th>Roll No.</th>
                     <th>Status</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
@@ -692,6 +879,14 @@ export default function SchoolDetailPage() {
                 <tbody>
                   {students.map(s => {
                     const fd = s.formData as any
+                    const studentName = fd.fullName || fd["Full Name"] || fd["Student Name"] || fd.Student_Name || fd.name || "—"
+                    const fatherNo = fd.fatherName || fd["Father"] || fd["Father Name"] || fd.father || fd.fatherPhone || fd.mob_father || fd["Mob.- Father -"] || "—"
+                    const motherNo = fd.motherName || fd["Mother"] || fd["Mother Name"] || fd.mother || fd.motherPhone || "—"
+                    const hasPhoto = !!s.photoUrl
+                    const missingFields = []
+                    if (!hasPhoto) missingFields.push("Photo")
+                    if (studentName === "—") missingFields.push("Name")
+
                     return (
                       <tr key={s.id}>
                         <td>
@@ -700,15 +895,17 @@ export default function SchoolDetailPage() {
                               <img src={s.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             </div>
                           ) : (
-                            <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f1f5f9', border: '2px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fef2f2', border: '2px dashed #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                              <div style={{ position: 'absolute', top: -2, right: -2, width: 10, height: 10, borderRadius: '50%', background: '#ef4444', border: '1.5px solid white' }} title="Photo missing" />
                             </div>
                           )}
                         </td>
                         <td style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: 13 }}>{s.serialNumber}</td>
-                        <td style={{ fontWeight: 500 }}>{fd.fullName || fd["Full Name"] || "—"}</td>
+                        <td style={{ fontWeight: 500 }}>{studentName}</td>
+                        <td style={{ fontSize: 12, color: '#64748b' }}>{fatherNo}</td>
+                        <td style={{ fontSize: 12, color: '#64748b' }}>{motherNo}</td>
                         <td>{s.class?.name || "—"}</td>
-                        <td>{fd.rollNo || fd["Roll No."] || "—"}</td>
                         <td>
                           <span className={`status-badge ${
                             s.status === 'APPROVED' ? 'status-approved' :
@@ -717,6 +914,7 @@ export default function SchoolDetailPage() {
                             s.status === 'SUBMITTED' ? 'status-submitted' :
                             'status-pending'
                           }`}>{s.status}</span>
+                          {missingFields.length > 0 && <div style={{ fontSize: 10, color: '#ef4444', marginTop: 3, fontWeight: 600 }}>⚠ {missingFields.join(', ')}</div>}
                           {s.flagNote && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>📌 {s.flagNote}</div>}
                         </td>
                         <td style={{ textAlign: 'right' }}>
@@ -734,7 +932,7 @@ export default function SchoolDetailPage() {
                     )
                   })}
                   {students.length === 0 && (
-                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No students found</td></tr>
+                    <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No students found</td></tr>
                   )}
                 </tbody>
               </table>
@@ -771,15 +969,6 @@ export default function SchoolDetailPage() {
                   {/* STEP 1: UPLOAD */}
                   {importStep === 'upload' && (
                     <div>
-                      {/* Class selector */}
-                      <div style={{ marginBottom: 20 }}>
-                        <label style={{ fontSize: 13, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 6 }}>Select Class *</label>
-                        <select value={importClassId} onChange={e => setImportClassId(e.target.value)} style={{ width: '100%', height: 44, padding: '0 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14 }}>
-                          <option value="">Choose a class...</option>
-                          {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c._count.students} students)</option>)}
-                        </select>
-                      </div>
-
                       {/* File upload zone */}
                       <div
                         onDragOver={e => { e.preventDefault(); setDragOver(true) }}
@@ -815,13 +1004,24 @@ export default function SchoolDetailPage() {
                         )}
                       </div>
 
+                      {/* Fallback class selector (optional) */}
+                      <div style={{ marginTop: 16, padding: 14, background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 6 }}>Fallback Class (optional)</label>
+                        <select value={importClassId} onChange={e => setImportClassId(e.target.value)} style={{ width: '100%', height: 40, padding: '0 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}>
+                          <option value="">Auto-detect from Excel column</option>
+                          {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c._count.students} students)</option>)}
+                        </select>
+                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>If your Excel has a "Class-Section" column, classes are created automatically. Otherwise select a fallback class here.</div>
+                      </div>
+
                       {/* Info box */}
                       <div style={{ marginTop: 16, padding: 14, background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe' }}>
-                        <div style={{ fontSize: 13, color: '#1e40af', fontWeight: 600, marginBottom: 4 }}>💡 Tips</div>
+                        <div style={{ fontSize: 13, color: '#1e40af', fontWeight: 600, marginBottom: 4 }}>💡 Smart Import</div>
                         <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: '#3b82f6', lineHeight: 1.8 }}>
-                          <li>Use the <strong>Download Template</strong> button to get a pre-formatted Excel with correct columns</li>
-                          <li>Column headers are matched automatically (e.g. &quot;Full Name&quot;, &quot;Name&quot;, &quot;Student Name&quot; all work)</li>
-                          <li>Required fields: Full Name, Roll No., Date of Birth, Father Name, Phone</li>
+                          <li><strong>Mixed classes supported!</strong> Include a "Class-Section" column — classes are auto-created</li>
+                          <li><strong>Photo ID column</strong> — if present, used to match bulk photos later</li>
+                          <li>Column headers matched automatically: "Student Name", "Father", "Mother", "Photo ID", etc.</li>
+                          <li>Only <strong>Student Name</strong> is required — all other fields are optional</li>
                           <li>Max 2000 students per import</li>
                         </ul>
                       </div>
@@ -832,7 +1032,7 @@ export default function SchoolDetailPage() {
                         <button
                           className="btn btn-primary"
                           onClick={handleImportValidate}
-                          disabled={!importFile || !importClassId || importUploading}
+                          disabled={!importFile || importUploading}
                           style={{ padding: '10px 24px' }}
                         >
                           {importUploading ? 'Validating...' : 'Validate & Preview →'}
@@ -946,6 +1146,9 @@ export default function SchoolDetailPage() {
                         <h3 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>
                           {importResult.imported} Students Imported!
                         </h3>
+                        {importResult.classesCreated > 0 && (
+                          <p style={{ fontSize: 14, color: '#3b82f6', marginBottom: 4 }}>📚 {importResult.classesCreated} classes auto-created</p>
+                        )}
                         {importResult.failed > 0 && (
                           <p style={{ fontSize: 14, color: '#dc2626' }}>{importResult.failed} rows failed</p>
                         )}
@@ -990,103 +1193,403 @@ export default function SchoolDetailPage() {
               </div>
             </div>
           )}
+
+          {/* BULK PHOTO UPLOAD MODAL */}
+          {photoUploadOpen && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }} onClick={() => { if (!photoUploading) resetPhotoUpload() }}>
+              <div style={{ background: 'white', borderRadius: 20, maxWidth: 700, width: '100%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
+                <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>📸 Bulk Upload Photos</h2>
+                    <p style={{ fontSize: 13, color: '#64748b' }}>
+                      {photoResult ? 'Upload results' : photoUploading ? 'Uploading photos...' : 'Upload a folder of student photos — auto-matched by Photo ID from Excel'}
+                    </p>
+                  </div>
+                  {!photoUploading && <button onClick={resetPhotoUpload} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#f1f5f9', cursor: 'pointer', fontSize: 16 }}>✕</button>}
+                </div>
+
+                <div style={{ padding: 24 }}>
+                  {/* UPLOADING STATE — Progress Bar */}
+                  {photoUploading && !photoResult && (
+                    <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                      <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>{photoUploadStatus}</h3>
+                      <div style={{ width: '100%', height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden', marginBottom: 12 }}>
+                        <div style={{
+                          width: `${photoUploadProgress}%`,
+                          height: '100%',
+                          background: 'linear-gradient(90deg, #8b5cf6, #3b82f6)',
+                          borderRadius: 4,
+                          transition: 'width 0.4s ease',
+                        }} />
+                      </div>
+                      <p style={{ fontSize: 13, color: '#64748b' }}>{photoUploadProgress}% — {photoFiles.length} photos being processed</p>
+                      <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>Please don't close this window. Large folders may take a few minutes.</p>
+                    </div>
+                  )}
+
+                  {/* UPLOAD FORM */}
+                  {!photoResult && !photoUploading && (
+                    <div>
+                      {/* Two upload options: Folder (primary) or Individual Files */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                        {/* SELECT FOLDER — Primary option */}
+                        <div
+                          onClick={() => document.getElementById('bulk-photo-folder-input')?.click()}
+                          style={{
+                            border: `2px dashed ${photoFiles.length > 0 ? '#22c55e' : '#8b5cf6'}`,
+                            borderRadius: 16, padding: 28, textAlign: 'center', cursor: 'pointer',
+                            background: photoFiles.length > 0 ? '#f0fdf4' : '#f5f3ff',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          <input
+                            id="bulk-photo-folder-input"
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            multiple
+                            {...({ webkitdirectory: 'true', directory: '' } as any)}
+                            style={{ display: 'none' }}
+                            onChange={handleFolderSelect}
+                          />
+                          {photoFiles.length > 0 ? (
+                            <>
+                              <div style={{ fontSize: 32, marginBottom: 6 }}>✅</div>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: '#16a34a', marginBottom: 4 }}>{photoFiles.length} photos ready</div>
+                              <div style={{ fontSize: 12, color: '#64748b' }}>Click to change folder</div>
+                            </>
+                          ) : (
+                            <>
+                              <div style={{ fontSize: 32, marginBottom: 6 }}>📁</div>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: '#5b21b6', marginBottom: 4 }}>Select Folder</div>
+                              <div style={{ fontSize: 12, color: '#7c3aed' }}>Pick the entire photos folder</div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* DROP/SELECT INDIVIDUAL FILES — Secondary option */}
+                        <div
+                          onDragOver={e => { e.preventDefault(); setPhotoDragOver(true) }}
+                          onDragLeave={() => setPhotoDragOver(false)}
+                          onDrop={e => {
+                            e.preventDefault()
+                            setPhotoDragOver(false)
+                            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
+                            if (files.length > 0) {
+                              setPhotoFiles(prev => [...prev, ...files])
+                              toast.success(`${files.length} photos added!`)
+                            }
+                          }}
+                          onClick={() => document.getElementById('bulk-photo-input')?.click()}
+                          style={{
+                            border: `2px dashed ${photoDragOver ? '#3b82f6' : '#e2e8f0'}`,
+                            borderRadius: 16, padding: 28, textAlign: 'center', cursor: 'pointer',
+                            background: photoDragOver ? '#eff6ff' : '#fafafa',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          <input
+                            id="bulk-photo-input"
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            multiple
+                            style={{ display: 'none' }}
+                            onChange={e => {
+                              const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'))
+                              if (files.length > 0) {
+                                setPhotoFiles(prev => [...prev, ...files])
+                                toast.success(`${files.length} photos added!`)
+                              }
+                            }}
+                          />
+                          <div style={{ fontSize: 32, marginBottom: 6 }}>📷</div>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: '#334155', marginBottom: 4 }}>Select Files</div>
+                          <div style={{ fontSize: 12, color: '#94a3b8' }}>Or drag & drop photos here</div>
+                        </div>
+                      </div>
+
+                      {/* File list preview */}
+                      {photoFiles.length > 0 && (
+                        <div style={{ marginTop: 8, maxHeight: 180, overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 12, padding: 12 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: '#334155' }}>📄 {photoFiles.length} Photos Selected — {(photoFiles.reduce((a, f) => a + f.size, 0) / (1024 * 1024)).toFixed(1)} MB total</span>
+                            <button onClick={() => setPhotoFiles([])} style={{ fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Clear All</button>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 4 }}>
+                            {photoFiles.slice(0, 30).map((f, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: '#f8fafc', borderRadius: 6, fontSize: 11 }}>
+                                <span style={{ color: '#3b82f6', fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name.replace(/\.[^.]+$/, '')}</span>
+                                <span style={{ color: '#cbd5e1', flexShrink: 0, fontSize: 10 }}>.{f.name.split('.').pop()}</span>
+                              </div>
+                            ))}
+                            {photoFiles.length > 30 && <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', padding: 4, gridColumn: '1/-1' }}>...and {photoFiles.length - 30} more</div>}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Photo ID matching guide */}
+                      <div style={{ marginTop: 16, padding: 14, background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe' }}>
+                        <div style={{ fontSize: 13, color: '#1e40af', fontWeight: 600, marginBottom: 6 }}>🔗 How Photo Matching Works</div>
+                        <div style={{ fontSize: 12, color: '#2563eb', lineHeight: 1.8 }}>
+                          Photos are matched to students automatically. The filename (without extension) is matched in this <strong>priority order</strong>:
+                        </div>
+                        <ol style={{ margin: '6px 0 0 0', paddingLeft: 20, fontSize: 12, color: '#3b82f6', lineHeight: 2 }}>
+                          <li><strong>Photo ID</strong> column from Excel — e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>BB25035.jpg</code> matches Photo ID <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>BB25035</code></li>
+                          <li><strong>Serial Number</strong> — e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>AARYAN-0078.jpg</code></li>
+                          <li><strong>Roll No.</strong> — e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>23.jpg</code></li>
+                          <li><strong>Full Name</strong> — e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>Aarav Sharma.png</code></li>
+                        </ol>
+                      </div>
+
+                      {/* Tip for Photo ID */}
+                      <div style={{ marginTop: 10, padding: 12, background: '#fefce8', borderRadius: 10, border: '1px solid #fde68a' }}>
+                        <div style={{ fontSize: 12, color: '#92400e' }}>
+                          💡 <strong>Tip:</strong> If your Excel has a &quot;<strong>Photo ID</strong>&quot; column (e.g. BB25035, DSC_8541), simply keep your photo filenames as-is — the system will match them automatically!
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'flex-end' }}>
+                        <button className="btn btn-outline" onClick={resetPhotoUpload}>Cancel</button>
+                        <button
+                          className="btn btn-primary"
+                          onClick={handleBulkPhotoUpload}
+                          disabled={photoFiles.length === 0 || photoUploading}
+                          style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' }}
+                        >
+                          {`Upload & Match ${photoFiles.length} Photos`}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* RESULTS */}
+                  {photoResult && !photoUploading && (
+                    <div>
+                      <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                        <div style={{ fontSize: 48, marginBottom: 8 }}>{photoResult.matched > 0 ? '🎉' : '⚠️'}</div>
+                        <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+                          {photoResult.matched} of {photoResult.total} Photos Matched!
+                        </h3>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+                        <div style={{ padding: 16, background: '#f0fdf4', borderRadius: 12, border: '1px solid #bbf7d0', textAlign: 'center' }}>
+                          <div style={{ fontSize: 28, fontWeight: 700, color: '#16a34a' }}>{photoResult.matched}</div>
+                          <div style={{ fontSize: 12, color: '#15803d' }}>Matched</div>
+                        </div>
+                        <div style={{ padding: 16, background: photoResult.unmatched > 0 ? '#fffbeb' : '#f8fafc', borderRadius: 12, border: `1px solid ${photoResult.unmatched > 0 ? '#fed7aa' : '#e2e8f0'}`, textAlign: 'center' }}>
+                          <div style={{ fontSize: 28, fontWeight: 700, color: photoResult.unmatched > 0 ? '#d97706' : '#64748b' }}>{photoResult.unmatched}</div>
+                          <div style={{ fontSize: 12, color: photoResult.unmatched > 0 ? '#b45309' : '#64748b' }}>No Match</div>
+                        </div>
+                        <div style={{ padding: 16, background: photoResult.errors > 0 ? '#fef2f2' : '#f8fafc', borderRadius: 12, border: `1px solid ${photoResult.errors > 0 ? '#fecaca' : '#e2e8f0'}`, textAlign: 'center' }}>
+                          <div style={{ fontSize: 28, fontWeight: 700, color: photoResult.errors > 0 ? '#dc2626' : '#64748b' }}>{photoResult.errors}</div>
+                          <div style={{ fontSize: 12, color: photoResult.errors > 0 ? '#b91c1c' : '#64748b' }}>Errors</div>
+                        </div>
+                      </div>
+
+                      {/* Matched details */}
+                      {photoResult.matchedFiles?.length > 0 && (
+                        <div style={{ marginBottom: 16 }}>
+                          <h4 style={{ fontSize: 13, fontWeight: 700, color: '#16a34a', marginBottom: 8 }}>✅ Matched Photos ({photoResult.matched})</h4>
+                          <div style={{ maxHeight: 180, overflow: 'auto', border: '1px solid #bbf7d0', borderRadius: 8 }}>
+                            <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                              <thead>
+                                <tr style={{ background: '#f0fdf4', position: 'sticky', top: 0 }}>
+                                  <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#15803d' }}>Photo File</th>
+                                  <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#15803d' }}>Student</th>
+                                  <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#15803d' }}>Serial No.</th>
+                                  <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#15803d' }}>Matched By</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {photoResult.matchedFiles.map((m: any, i: number) => (
+                                  <tr key={i} style={{ borderBottom: '1px solid #dcfce7' }}>
+                                    <td style={{ padding: '5px 10px', color: '#334155', fontFamily: 'monospace' }}>{m.filename}</td>
+                                    <td style={{ padding: '5px 10px', color: '#16a34a', fontWeight: 600 }}>{m.studentName}</td>
+                                    <td style={{ padding: '5px 10px', color: '#64748b', fontFamily: 'monospace' }}>{m.serialNumber}</td>
+                                    <td style={{ padding: '5px 10px' }}><span style={{ background: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600 }}>{m.matchedBy}</span></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Unmatched — Manual Matching UI */}
+                      {photoResult.unmatchedFiles?.length > 0 && (
+                        <div style={{ marginBottom: 16 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                            <h4 style={{ fontSize: 13, fontWeight: 700, color: '#d97706' }}>⚠️ Unmatched Photos ({photoResult.unmatchedFiles.length}) — Assign Manually</h4>
+                            <input
+                              type="text"
+                              placeholder="🔍 Search students..."
+                              value={manualSearchQuery}
+                              onChange={e => setManualSearchQuery(e.target.value)}
+                              style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, width: 180, outline: 'none' }}
+                            />
+                          </div>
+                          <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid #fed7aa', borderRadius: 10, background: '#fffbeb' }}>
+                            {photoResult.unmatchedFiles.map((filename: string, idx: number) => {
+                              const file = unmatchedFileMap[filename]
+                              const thumbUrl = file ? URL.createObjectURL(file) : ''
+                              const filteredStudents = manualSearchQuery
+                                ? allStudentsList.filter((s: any) => {
+                                    const fd = s.formData as Record<string, string>
+                                    const name = (fd?.fullName || fd?.["Full Name"] || fd?.["Student Name"] || fd?.name || '').toLowerCase()
+                                    const serial = s.serialNumber.toLowerCase()
+                                    const q = manualSearchQuery.toLowerCase()
+                                    return name.includes(q) || serial.includes(q)
+                                  })
+                                : allStudentsList.slice(0, 50)
+
+                              return (
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: idx < photoResult.unmatchedFiles.length - 1 ? '1px solid #fde68a' : 'none' }}>
+                                  {/* Photo thumbnail */}
+                                  {thumbUrl && (
+                                    <img
+                                      src={thumbUrl}
+                                      alt={filename}
+                                      style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', border: '1px solid #fbbf24', flexShrink: 0 }}
+                                    />
+                                  )}
+                                  {/* Filename */}
+                                  <div style={{ flex: '0 0 120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#92400e', fontFamily: 'monospace' }}>{filename.replace(/\.[^.]+$/, '')}</span>
+                                    <span style={{ fontSize: 10, color: '#b45309' }}>.{filename.split('.').pop()}</span>
+                                  </div>
+                                  {/* Student dropdown */}
+                                  <select
+                                    id={`assign-${idx}`}
+                                    style={{
+                                      flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0',
+                                      fontSize: 12, background: 'white', outline: 'none', minWidth: 0,
+                                    }}
+                                    defaultValue=""
+                                  >
+                                    <option value="">Select student...</option>
+                                    {filteredStudents.map((s: any) => {
+                                      const fd = s.formData as Record<string, string>
+                                      const name = fd?.fullName || fd?.["Full Name"] || fd?.["Student Name"] || fd?.name || 'Unknown'
+                                      return (
+                                        <option key={s.id} value={s.id}>{name} ({s.serialNumber})</option>
+                                      )
+                                    })}
+                                  </select>
+                                  {/* Assign button */}
+                                  <button
+                                    onClick={() => {
+                                      const select = document.getElementById(`assign-${idx}`) as HTMLSelectElement
+                                      if (select?.value) handleManualAssign(filename, select.value)
+                                      else toast.error('Please select a student first')
+                                    }}
+                                    disabled={manualAssigning === filename}
+                                    style={{
+                                      padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: 11, fontWeight: 600,
+                                      background: manualAssigning === filename ? '#94a3b8' : '#16a34a', color: 'white',
+                                      cursor: manualAssigning === filename ? 'wait' : 'pointer', flexShrink: 0,
+                                    }}
+                                  >
+                                    {manualAssigning === filename ? '...' : 'Assign'}
+                                  </button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Select a student from the dropdown and click "Assign" to manually match each photo.</p>
+                        </div>
+                      )}
+
+                      {/* Errors */}
+                      {photoResult.errorFiles?.length > 0 && (
+                        <div style={{ marginBottom: 16 }}>
+                          <h4 style={{ fontSize: 13, fontWeight: 700, color: '#dc2626', marginBottom: 8 }}>❌ Upload Errors</h4>
+                          <div style={{ maxHeight: 100, overflow: 'auto', padding: '8px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
+                            {photoResult.errorFiles.map((e: any, i: number) => (
+                              <div key={i} style={{ fontSize: 12, color: '#b91c1c', padding: '2px 0' }}>{e.filename}: {e.error}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+                        {photoResult.unmatched > 0 && (
+                          <button className="btn btn-outline" onClick={() => { setPhotoResult(null); setPhotoFiles([]); setPhotoUploadProgress(0) }} style={{ borderColor: '#8b5cf6', color: '#7c3aed' }}>Upload More Photos</button>
+                        )}
+                        <button className="btn btn-primary" onClick={resetPhotoUpload} style={{ padding: '10px 28px' }}>Done ✓</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           </>
         )}
 
         {/* TEMPLATE TAB */}
         {tab === "template" && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* Orientation Selector */}
+            {/* JPG Template Mapper — Main Feature */}
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Card Orientation</h3>
-              <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>Choose how the school wants their ID cards — Horizontal (like a credit card) or Vertical (like a passport photo). This also affects the template canvas dimensions.</p>
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                {/* Horizontal */}
-                <button
-                  onClick={() => handleOrientationChange('LANDSCAPE')}
-                  style={{
-                    flex: 1,
-                    minWidth: 200,
-                    padding: 20,
-                    border: `2px solid ${templateData?.orientation === 'LANDSCAPE' ? '#3b82f6' : '#e2e8f0'}`,
-                    borderRadius: 14,
-                    background: templateData?.orientation === 'LANDSCAPE' ? 'linear-gradient(135deg, #eff6ff, #dbeafe)' : 'white',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 12,
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  <div style={{ width: 100, height: 64, border: `2px solid ${templateData?.orientation === 'LANDSCAPE' ? '#3b82f6' : '#94a3b8'}`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'white' }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={templateData?.orientation === 'LANDSCAPE' ? '#3b82f6' : '#94a3b8'} strokeWidth="1.5"><rect width="20" height="14" x="2" y="5" rx="2"/><circle cx="12" cy="10" r="2"/><path d="M6 17h12"/></svg>
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: templateData?.orientation === 'LANDSCAPE' ? '#1e40af' : '#334155' }}>Horizontal (Landscape)</div>
-                  <div style={{ fontSize: 12, color: '#94a3b8' }}>85.6mm × 54.0mm — Like a credit card</div>
-                  {templateData?.orientation === 'LANDSCAPE' && <span style={{ padding: '3px 12px', background: '#3b82f6', color: 'white', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>Active</span>}
-                </button>
-                {/* Vertical */}
-                <button
-                  onClick={() => handleOrientationChange('PORTRAIT')}
-                  style={{
-                    flex: 1,
-                    minWidth: 200,
-                    padding: 20,
-                    border: `2px solid ${templateData?.orientation === 'PORTRAIT' ? '#3b82f6' : '#e2e8f0'}`,
-                    borderRadius: 14,
-                    background: templateData?.orientation === 'PORTRAIT' ? 'linear-gradient(135deg, #eff6ff, #dbeafe)' : 'white',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 12,
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  <div style={{ width: 64, height: 100, border: `2px solid ${templateData?.orientation === 'PORTRAIT' ? '#3b82f6' : '#94a3b8'}`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'white' }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={templateData?.orientation === 'PORTRAIT' ? '#3b82f6' : '#94a3b8'} strokeWidth="1.5"><rect width="14" height="20" x="5" y="2" rx="2"/><circle cx="12" cy="9" r="2"/><path d="M8 18h8"/></svg>
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: templateData?.orientation === 'PORTRAIT' ? '#1e40af' : '#334155' }}>Vertical (Portrait)</div>
-                  <div style={{ fontSize: 12, color: '#94a3b8' }}>54.0mm × 85.6mm — Like a passport</div>
-                  {templateData?.orientation === 'PORTRAIT' && <span style={{ padding: '3px 12px', background: '#3b82f6', color: 'white', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>Active</span>}
-                </button>
-              </div>
-            </div>
-
-            {/* Front & Back Connector Info */}
-            <div style={{ background: 'linear-gradient(135deg, #fefce8, #fef9c3)', borderRadius: 16, border: '1px solid #fde68a', padding: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                <div style={{ fontSize: 28, flexShrink: 0 }}>🔗</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🖼️</div>
                 <div>
-                  <h4 style={{ fontSize: 15, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>Front & Back Connector — Serial Number</h4>
-                  <p style={{ fontSize: 13, color: '#78350f', lineHeight: 1.6, marginBottom: 8 }}>
-                    Every ID card has a unique <strong>Serial Number</strong> printed in the bleed area (bottom-right corner) on <strong>BOTH</strong> the front and back pages. This serial number is the key that connects front and back during printing.
-                  </p>
-                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                    <div style={{ background: 'white', borderRadius: 10, padding: '12px 16px', border: '1px solid #fde68a', flex: 1, minWidth: 200 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#92400e', marginBottom: 4 }}>📄 FRONT PDF</div>
-                      <div style={{ fontSize: 12, color: '#78350f' }}>Page 1 = Student 1 front, Page 2 = Student 2 front, etc.</div>
-                      <div style={{ marginTop: 4, fontFamily: 'monospace', fontSize: 11, color: '#b45309' }}>Serial: HOLYC-0001 (in bleed area)</div>
-                    </div>
-                    <div style={{ background: 'white', borderRadius: 10, padding: '12px 16px', border: '1px solid #fde68a', flex: 1, minWidth: 200 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#92400e', marginBottom: 4 }}>📄 BACK PDF</div>
-                      <div style={{ fontSize: 12, color: '#78350f' }}>Page 1 = Student 1 back, Page 2 = Student 2 back, etc.</div>
-                      <div style={{ marginTop: 4, fontFamily: 'monospace', fontSize: 11, color: '#b45309' }}>Serial: HOLYC-0001 (in bleed area)</div>
-                    </div>
-                  </div>
-                  <p style={{ fontSize: 12, color: '#92400e', marginTop: 8 }}>
-                    ✅ <strong>Printing workflow:</strong> Print all Front pages first → Flip the stack → Print all Back pages. The serial number ensures each front matches its back.
-                  </p>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 2 }}>JPG Template Mapper</h3>
+                  <p style={{ fontSize: 13, color: '#94a3b8' }}>Upload the school's pre-designed ID card image and map student fields onto it</p>
                 </div>
               </div>
+
+              <JpgTemplateMapper
+                schoolId={schoolId}
+                templateImageUrl={templateData?.templateImageUrl || null}
+                fieldMappings={(templateData?.fieldMappings as any) || []}
+                fieldConfig={(templateData?.fieldConfig as any[]) || []}
+                onSave={async (templateImageUrl, fieldMappings) => {
+                  try {
+                    const res = await fetch(`/api/schools/${schoolId}/template`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ templateImageUrl, fieldMappings }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                      toast.success('Template saved successfully!')
+                      fetchTemplate()
+                    } else {
+                      toast.error('Failed to save template')
+                    }
+                  } catch (err) {
+                    toast.error('Failed to save template')
+                  }
+                }}
+                onUploadImage={async (file) => {
+                  const fd = new FormData()
+                  fd.append('file', file)
+                  fd.append('folder', `templates`)
+                  const res = await fetch('/api/upload', { method: 'POST', body: fd })
+                  const data = await res.json()
+                  if (!res.ok || !data.success) {
+                    throw new Error(data.error || data.detail || 'Upload failed')
+                  }
+                  return data.url
+                }}
+              />
+            </div>
+
+            {/* Divider */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0' }}>
+              <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>or use advanced designer</span>
+              <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
             </div>
 
             {/* Open Studio Button */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', justifyContent: 'center', padding: 40, background: 'white', borderRadius: 16, border: '1px solid #e2e8f0' }}>
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="21" y2="9"/></svg>
-              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>ID Card Template Studio</h3>
-              <p style={{ color: '#94a3b8', maxWidth: 380, textAlign: 'center', fontSize: 14 }}>Design your ID card front and back using a drag-and-drop canvas. Add student photos, dynamic text fields, QR codes, school logo, and more.</p>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>Advanced Template Studio</h3>
+              <p style={{ color: '#94a3b8', maxWidth: 380, textAlign: 'center', fontSize: 14 }}>For designing a card from scratch using drag-and-drop elements.</p>
               <Link href={`/schools/${schoolId}/template`} className="btn btn-primary" style={{ marginTop: 8, padding: '12px 28px', fontSize: 15 }}>
                 Open Template Studio →
               </Link>
@@ -1157,6 +1660,15 @@ export default function SchoolDetailPage() {
           </div>
         )}
 
+        {/* GENERATE ID CARDS TAB */}
+        {tab === "generate" && (
+          <BatchGenerator
+            schoolId={schoolId}
+            schoolName={school.name}
+            classes={classes}
+          />
+        )}
+
         {/* EXPORT TAB */}
         {tab === "export" && (
           <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 32 }}>
@@ -1190,38 +1702,108 @@ export default function SchoolDetailPage() {
       </div>
 
       {/* STUDENT DETAIL MODAL */}
-      {selectedStudent && (
+      {selectedStudent && (() => {
+        const editFd = { ...(selectedStudent.formData as Record<string, string>) }
+        const studentName = editFd.fullName || editFd["Full Name"] || editFd["Student Name"] || editFd.Student_Name || editFd.name || ""
+        const fatherVal = editFd.fatherName || editFd["Father"] || editFd["Father Name"] || editFd.father || ""
+        const motherVal = editFd.motherName || editFd["Mother"] || editFd["Mother Name"] || editFd.mother || ""
+
+        // Determine critical missing fields
+        const missingItems: string[] = []
+        if (!selectedStudent.photoUrl) missingItems.push("Photo")
+        if (!studentName) missingItems.push("Student Name")
+
+        return (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }} onClick={() => setSelectedStudent(null)}>
-          <div style={{ background: 'white', borderRadius: 20, maxWidth: 900, width: '100%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: 'white', borderRadius: 20, maxWidth: 960, width: '100%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>Student Detail</h2>
+                <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>Student Detail — Edit</h2>
                 <p style={{ fontSize: 13, color: '#64748b' }}>{selectedStudent.serialNumber} · {selectedStudent.class?.name}</p>
               </div>
-              <button onClick={() => setSelectedStudent(null)} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#f1f5f9', cursor: 'pointer', fontSize: 16 }}>✕</button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {missingItems.length > 0 && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#dc2626', background: '#fef2f2', padding: '4px 10px', borderRadius: 6, border: '1px solid #fecaca' }}>
+                    ⚠ Missing: {missingItems.join(', ')}
+                  </span>
+                )}
+                <button onClick={() => setSelectedStudent(null)} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#f1f5f9', cursor: 'pointer', fontSize: 16 }}>✕</button>
+              </div>
             </div>
 
             <div style={{ padding: 24 }}>
-              {/* Student Info */}
+              {/* Student Info — Editable */}
               <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '20px', marginBottom: 28 }}>
-                {/* Photo */}
-                <div style={{ width: 100, height: 130, borderRadius: 12, overflow: 'hidden', border: '2px solid #e2e8f0', background: '#f8fafc' }}>
-                  {selectedStudent.photoUrl ? (
-                    <img src={selectedStudent.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    </div>
-                  )}
+                {/* Photo — clickable to upload */}
+                <div style={{ position: 'relative' }}>
+                  <div
+                    style={{ width: 100, height: 130, borderRadius: 12, overflow: 'hidden', border: selectedStudent.photoUrl ? '2px solid #e2e8f0' : '2px dashed #fca5a5', background: selectedStudent.photoUrl ? '#f8fafc' : '#fef2f2', cursor: 'pointer' }}
+                    onClick={() => {
+                      const input = document.createElement('input')
+                      input.type = 'file'
+                      input.accept = 'image/*'
+                      input.onchange = async (e: any) => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        const fd = new FormData()
+                        fd.append("photo", file)
+                        fd.append("studentId", selectedStudent.id)
+                        try {
+                          const res = await fetch(`/api/schools/${schoolId}/students/assign-photo`, { method: "POST", body: fd })
+                          const data = await res.json()
+                          if (data.success) {
+                            toast.success("Photo updated!")
+                            setSelectedStudent({ ...selectedStudent, photoUrl: data.data.photoUrl })
+                            fetchStudents(studentPage)
+                          } else {
+                            toast.error(data.error || "Upload failed")
+                          }
+                        } catch { toast.error("Upload failed") }
+                      }
+                      input.click()
+                    }}
+                  >
+                    {selectedStudent.photoUrl ? (
+                      <img src={selectedStudent.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 4, color: '#ef4444' }}>
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        <span style={{ fontSize: 9, fontWeight: 600 }}>Click to add</span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)', fontSize: 9, color: '#64748b', background: 'white', padding: '1px 6px', borderRadius: 4, border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
+                    📷 Click to change
+                  </div>
                 </div>
 
-                {/* Details */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px' }}>
+                {/* Editable Fields */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
                   {Object.entries(selectedStudent.formData as Record<string, string>).map(([key, value]) => (
                     <div key={key}>
-                      <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'capitalize' }}>{key.replace(/([A-Z])/g, ' $1')}</div>
-                      <div style={{ fontSize: 14, fontWeight: 500, color: '#0f172a' }}>{String(value) || '—'}</div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'capitalize', marginBottom: 2 }}>{key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ')}</div>
+                      <input
+                        type="text"
+                        defaultValue={String(value || '')}
+                        onBlur={(e) => {
+                          if (e.target.value !== String(value || '')) {
+                            const updatedFormData = { ...(selectedStudent.formData as Record<string, string>), [key]: e.target.value }
+                            setSelectedStudent({ ...selectedStudent, formData: updatedFormData })
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '5px 8px',
+                          border: `1px solid ${!value ? '#fca5a5' : '#e2e8f0'}`,
+                          borderRadius: 6,
+                          fontSize: 13,
+                          fontWeight: 500,
+                          color: '#0f172a',
+                          background: !value ? '#fffbeb' : 'white',
+                          outline: 'none',
+                        }}
+                      />
                     </div>
                   ))}
                   <div>
@@ -1242,8 +1824,24 @@ export default function SchoolDetailPage() {
                 </div>
               )}
 
-              {/* ID Card Preview */}
-              {templateData && (
+              {/* JPG Template Preview */}
+              {templateData?.templateImageUrl && templateData?.fieldMappings && (templateData.fieldMappings as any[]).length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>ID Card Preview (JPG Template)</h3>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <JpgCardPreview
+                      templateImageUrl={templateData.templateImageUrl}
+                      fieldMappings={templateData.fieldMappings as any[]}
+                      formData={selectedStudent.formData as Record<string, string>}
+                      studentPhoto={selectedStudent.photoUrl}
+                      scale={1}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* ID Card Preview (Canvas-based, fallback) */}
+              {templateData && !templateData.templateImageUrl && (
                 <div>
                   <h3 style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>ID Card Preview</h3>
                   <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -1276,19 +1874,46 @@ export default function SchoolDetailPage() {
               )}
 
               {/* Actions */}
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24, borderTop: '1px solid #e2e8f0', paddingTop: 20 }}>
-                <button className="btn btn-outline" style={{ fontSize: 13, borderColor: '#22c55e', color: '#16a34a' }} onClick={() => { handleStatusUpdate(selectedStudent.id, "APPROVED"); setSelectedStudent(null) }}>✓ Approve</button>
-                {selectedStudent.status === "FLAGGED" ? (
-                  <button className="btn btn-outline" style={{ fontSize: 13, borderColor: '#3b82f6', color: '#2563eb' }} onClick={() => { handleUnflag(selectedStudent.id); setSelectedStudent(null) }}>Unflag</button>
-                ) : (
-                  <button className="btn btn-outline" style={{ fontSize: 13, borderColor: '#ef4444', color: '#dc2626' }} onClick={() => { handleFlag(selectedStudent.id); setSelectedStudent(null) }}>🚩 Flag</button>
-                )}
-                <button className="btn btn-primary" onClick={() => setSelectedStudent(null)} style={{ fontSize: 13 }}>Close</button>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 24, borderTop: '1px solid #e2e8f0', paddingTop: 20, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-outline" style={{ fontSize: 13, borderColor: '#22c55e', color: '#16a34a' }} onClick={() => { handleStatusUpdate(selectedStudent.id, "APPROVED"); setSelectedStudent(null) }}>✓ Approve</button>
+                  {selectedStudent.status === "FLAGGED" ? (
+                    <button className="btn btn-outline" style={{ fontSize: 13, borderColor: '#3b82f6', color: '#2563eb' }} onClick={() => { handleUnflag(selectedStudent.id); setSelectedStudent(null) }}>Unflag</button>
+                  ) : (
+                    <button className="btn btn-outline" style={{ fontSize: 13, borderColor: '#ef4444', color: '#dc2626' }} onClick={() => { handleFlag(selectedStudent.id); setSelectedStudent(null) }}>🚩 Flag</button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className="btn btn-primary"
+                    style={{ fontSize: 13, background: '#8b5cf6', padding: '8px 20px' }}
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/schools/${schoolId}/students/${selectedStudent.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ formData: selectedStudent.formData }),
+                        })
+                        const data = await res.json()
+                        if (data.success) {
+                          toast.success("Student data saved!")
+                          fetchStudents(studentPage)
+                        } else {
+                          toast.error(data.error || "Save failed")
+                        }
+                      } catch { toast.error("Save failed") }
+                    }}
+                  >
+                    💾 Save Changes
+                  </button>
+                  <button className="btn btn-outline" onClick={() => setSelectedStudent(null)} style={{ fontSize: 13 }}>Close</button>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
     </>
   )
 }

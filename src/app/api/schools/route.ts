@@ -62,17 +62,7 @@ export async function POST(req: Request) {
         schoolId: school.id,
         frontLayout: [],
         backLayout: [],
-        fieldConfig: [
-          { key: "fullName", label: "Full Name", type: "text", required: true },
-          { key: "class", label: "Class", type: "text", required: true },
-          { key: "rollNo", label: "Roll No.", type: "text", required: true },
-          { key: "dob", label: "Date of Birth", type: "date", required: true },
-          { key: "bloodGroup", label: "Blood Group", type: "select", required: false },
-          { key: "fatherName", label: "Father Name", type: "text", required: true },
-          { key: "motherName", label: "Mother Name", type: "text", required: false },
-          { key: "phone", label: "Phone", type: "tel", required: true },
-          { key: "address", label: "Address", type: "textarea", required: false },
-        ],
+        fieldConfig: [], // Auto-generated when admin maps fields on JPG template
       },
     })
 
