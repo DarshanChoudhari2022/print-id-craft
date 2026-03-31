@@ -6,6 +6,8 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true, 
   },
+  // Performance: enable React strict mode (catches bugs early)
+  reactStrictMode: true,
   // Performance: compress responses
   compress: true,
   // Security: power-hide
@@ -21,9 +23,17 @@ const nextConfig = {
     formats: ['image/avif', 'image/webp'],
     minimumCacheTTL: 86400,
   },
-  // Performance: optimize builds
+  // Performance: optimize builds — tree-shake large packages
   experimental: {
-    optimizePackageImports: ['lucide-react', 'recharts', 'framer-motion', '@react-pdf/renderer'],
+    optimizePackageImports: [
+      'lucide-react',
+      'recharts',
+      'framer-motion',
+      '@react-pdf/renderer',
+      'sonner',
+      '@supabase/supabase-js',
+      'zod',
+    ],
   },
   // Security-relevant headers (augments middleware headers)
   async headers() {

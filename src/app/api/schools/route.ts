@@ -30,7 +30,10 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     })
 
-    return NextResponse.json({ success: true, data: schools })
+    const response = NextResponse.json({ success: true, data: schools })
+    // Cache for 5s, serve stale for 30s while revalidating
+    response.headers.set("Cache-Control", "private, s-maxage=5, stale-while-revalidate=30")
+    return response
   } catch (error) {
     console.error("GET /api/schools error:", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })

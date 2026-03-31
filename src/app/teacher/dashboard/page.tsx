@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useSession, signOut } from "next-auth/react"
 import IDCardPreview from "@/components/IDCardPreview"
 
@@ -90,11 +90,13 @@ export default function TeacherDashboard() {
 
   const getSchoolId = () => session?.user?.schoolId || ""
 
-  const filtered = data?.students?.filter(s => {
-    if (classFilter && s.class?.name !== classFilter) return false
-    if (statusFilter && s.status !== statusFilter) return false
-    return true
-  }) || []
+  const filtered = useMemo(() => {
+    return data?.students?.filter(s => {
+      if (classFilter && s.class?.name !== classFilter) return false
+      if (statusFilter && s.status !== statusFilter) return false
+      return true
+    }) || []
+  }, [data?.students, classFilter, statusFilter])
 
   if (loading) return (
     <div className="teacher-page">

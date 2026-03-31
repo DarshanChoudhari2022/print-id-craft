@@ -32,7 +32,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       return NextResponse.json({ error: "School not found" }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, data: school })
+    const response = NextResponse.json({ success: true, data: school })
+    response.headers.set("Cache-Control", "private, s-maxage=5, stale-while-revalidate=30")
+    return response
   } catch (error) {
     console.error(`GET /api/schools/${params.id} error:`, error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })

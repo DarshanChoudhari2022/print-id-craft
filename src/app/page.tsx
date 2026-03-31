@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, memo } from 'react';
 import { 
   motion, 
   useScroll, 
@@ -71,11 +71,17 @@ export default function LandingPage() {
 
   return (
     <>
-      {/* Google Fonts — in head via next/head or global CSS; inline style avoids hydration */}
+      {/* Fonts loaded via preload + stylesheet (non-render-blocking) */}
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600&display=swap"
+        // @ts-ignore
+        media="print"
+        onLoad={(e: any) => { e.currentTarget.media = 'all'; }}
+      />
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600&display=swap');
-        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
-        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; display: inline-block; line-height: 1; }
         .hero-card-border { border: 1px solid #E0E8F0; }
         .gradient-primary { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
         ::selection { background: rgba(59, 130, 246, 0.3); color: #1e40af; }
@@ -83,6 +89,17 @@ export default function LandingPage() {
         ::-webkit-scrollbar-track { background: #fbf9f8; }
         ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 999px; }
         ::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
+        /* CSS animations for SVG elements — runs on compositor thread */
+        @keyframes bubbleFloat { 0%,100% { transform: translateY(-15px); opacity: 0.2; } 50% { transform: translateY(15px); opacity: 0.5; } }
+        @keyframes subFloat { 0%,100% { transform: translateY(-6px); } 50% { transform: translateY(6px); } }
+        @keyframes propSpin { to { transform: rotate(360deg); } }
+        @keyframes fishSwim1 { 0%,100% { transform: translateX(-20px); } 50% { transform: translateX(20px); } }
+        @keyframes fishSwim2 { 0%,100% { transform: translateX(15px); } 50% { transform: translateX(-15px); } }
+        .svg-bubble { animation: bubbleFloat 3.5s ease-in-out infinite; }
+        .svg-submarine { animation: subFloat 4.5s ease-in-out infinite; }
+        .svg-propeller { animation: propSpin 2.5s linear infinite; transform-origin: 112px 240px; }
+        .svg-fish1 { animation: fishSwim1 6s ease-in-out infinite; }
+        .svg-fish2 { animation: fishSwim2 5s ease-in-out infinite 1s; }
         @media (max-width: 768px) {
           .landing-nav-links { display: none !important; }
           .landing-mobile-toggle { display: flex !important; }
@@ -277,19 +294,19 @@ export default function LandingPage() {
                 <h3 className="font-bold mb-5" style={{ color: '#181837', fontSize: '15px' }}>What we look for</h3>
                 <div className="flex gap-4">
                   {[
-                    { icon: 'verified', tip: 'Verified' },
-                    { icon: 'shield', tip: 'Secure' },
-                    { icon: 'hub', tip: 'Connected' }
+                    { tip: 'Verified', svg: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> },
+                    { tip: 'Secure', svg: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> },
+                    { tip: 'Connected', svg: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 16.24a6 6 0 0 1 0-8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14"/></svg> }
                   ].map((item) => (
                     <motion.div 
-                      key={item.icon}
+                      key={item.tip}
                       className="w-10 h-10 rounded-lg flex items-center justify-center"
                       style={{ backgroundColor: '#eff6ff', color: '#3b82f6' }}
                       title={item.tip}
                       whileHover={{ scale: 1.15, backgroundColor: '#dbeafe' }}
                       transition={{ type: 'spring', stiffness: 400 }}
                     >
-                      <span className="material-symbols-outlined">{item.icon}</span>
+                      {item.svg}
                     </motion.div>
                   ))}
                 </div>
@@ -299,15 +316,17 @@ export default function LandingPage() {
               <motion.div variants={fadeUp} className="bg-white hero-card-border rounded-2xl p-8 transition-all duration-300 hover:shadow-md hover:translate-y-[-2px]" whileHover={{ scale: 1.02 }}>
                 <h3 className="font-bold mb-5" style={{ color: '#181837', fontSize: '15px' }}>How we structure our deals</h3>
                 <div className="flex gap-4">
-                  {['account_balance_wallet', 'handshake'].map((icon) => (
+                  {[
+                    <svg key="wallet" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>,
+                    <svg key="handshake" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round"><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88"/><path d="m7.5 10.5 2 2"/><path d="m10.5 7.5-6 6"/><path d="m16 8-1.5-1.5"/></svg>
+                  ].map((svg) => (
                     <motion.span 
-                      key={icon} 
-                      className="material-symbols-outlined" 
-                      style={{ color: '#3b82f6' }}
+                      key={svg.key} 
+                      style={{ color: '#3b82f6', display: 'inline-flex' }}
                       whileHover={{ scale: 1.2 }}
                       transition={{ type: 'spring', stiffness: 400 }}
                     >
-                      {icon}
+                      {svg}
                     </motion.span>
                   ))}
                 </div>
@@ -404,10 +423,10 @@ export default function LandingPage() {
                       style={{ color: '#ba1a1a', fontSize: '14px' }}
                       initial={{ opacity: 0, x: -15 }}
                       whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true }}
+                      viewport={{ once: true, margin: "-30px" }}
                       transition={{ delay: 0.15 * i, duration: 0.5 }}
                     >
-                      <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>help</span>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
                       {q}
                     </motion.li>
                   ))}
@@ -446,121 +465,85 @@ export default function LandingPage() {
 
                   <rect x="0" y="0" width="500" height="500" fill="url(#waterGrad)" rx="12"/>
 
-                  {/* Bubbles */}
+                  {/* Bubbles — pure CSS animations, no React re-renders */}
                   {[
-                    { cx: 100, cy: 130, r: 6 },
-                    { cx: 140, cy: 200, r: 4 },
-                    { cx: 370, cy: 110, r: 7 },
-                    { cx: 320, cy: 280, r: 5 },
-                    { cx: 200, cy: 90, r: 8 },
-                    { cx: 420, cy: 220, r: 5 },
-                    { cx: 80, cy: 300, r: 3 },
-                    { cx: 440, cy: 160, r: 4 },
+                    { cx: 100, cy: 130, r: 6, delay: '0s', dur: '3.5s' },
+                    { cx: 140, cy: 200, r: 4, delay: '0.3s', dur: '3.9s' },
+                    { cx: 370, cy: 110, r: 7, delay: '0.6s', dur: '4.3s' },
+                    { cx: 320, cy: 280, r: 5, delay: '0.9s', dur: '4.7s' },
+                    { cx: 200, cy: 90, r: 8, delay: '1.2s', dur: '5.1s' },
+                    { cx: 420, cy: 220, r: 5, delay: '1.5s', dur: '5.5s' },
                   ].map((b, i) => (
-                    <motion.circle 
+                    <circle 
                       key={i} cx={b.cx} cy={b.cy} r={b.r} 
                       fill="rgba(59, 130, 246, 0.25)"
                       stroke="rgba(59, 130, 246, 0.4)"
                       strokeWidth="0.5"
-                      animate={{ y: [-15, 15], opacity: [0.2, 0.5, 0.2] }}
-                      transition={{ duration: 3.5 + i * 0.4, repeat: Infinity, repeatType: "reverse", delay: i * 0.3 }}
+                      className="svg-bubble"
+                      style={{ animationDuration: b.dur, animationDelay: b.delay }}
                     />
                   ))}
 
-                  {/* Coral / Sea plants - Pink */}
-                  <motion.path d="M60 480 Q70 400 65 360 Q55 310 78 260 Q85 240 70 210" stroke="#ff9ec3" strokeWidth="4" fill="none" strokeLinecap="round"
-                    initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} viewport={{ once: true }} transition={{ duration: 2 }} />
-                  <motion.path d="M85 480 Q95 420 100 380 Q105 330 88 290" stroke="#E91E8C" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.6"
-                    initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} viewport={{ once: true }} transition={{ duration: 2, delay: 0.3 }} />
-                  <motion.ellipse cx="70" cy="210" rx="12" ry="20" fill="#ff9ec3" opacity="0.4" initial={{ scale: 0 }} whileInView={{ scale: 1 }} viewport={{ once: true }} transition={{ delay: 1.5 }} />
-                  <motion.ellipse cx="85" cy="230" rx="10" ry="16" fill="#E91E8C" opacity="0.3" initial={{ scale: 0 }} whileInView={{ scale: 1 }} viewport={{ once: true }} transition={{ delay: 1.7 }} />
+                  {/* Coral / Sea plants — static paths (no continuous animation) */}
+                  <path d="M60 480 Q70 400 65 360 Q55 310 78 260 Q85 240 70 210" stroke="#ff9ec3" strokeWidth="4" fill="none" strokeLinecap="round" />
+                  <path d="M85 480 Q95 420 100 380 Q105 330 88 290" stroke="#E91E8C" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.6" />
+                  <ellipse cx="70" cy="210" rx="12" ry="20" fill="#ff9ec3" opacity="0.4" />
+                  <ellipse cx="85" cy="230" rx="10" ry="16" fill="#E91E8C" opacity="0.3" />
 
-                  <motion.path d="M410 480 Q400 420 415 370 Q430 320 405 270" stroke="#ff9ec3" strokeWidth="4" fill="none" strokeLinecap="round"
-                    initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} viewport={{ once: true }} transition={{ duration: 2, delay: 0.2 }} />
-                  <motion.path d="M435 480 Q440 430 430 380 Q420 330 440 290" stroke="#E91E8C" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.5"
-                    initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} viewport={{ once: true }} transition={{ duration: 2, delay: 0.5 }} />
-                  <motion.ellipse cx="405" cy="270" rx="14" ry="22" fill="#ff9ec3" opacity="0.35" initial={{ scale: 0 }} whileInView={{ scale: 1 }} viewport={{ once: true }} transition={{ delay: 1.6 }} />
+                  <path d="M410 480 Q400 420 415 370 Q430 320 405 270" stroke="#ff9ec3" strokeWidth="4" fill="none" strokeLinecap="round" />
+                  <path d="M435 480 Q440 430 430 380 Q420 330 440 290" stroke="#E91E8C" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.5" />
+                  <ellipse cx="405" cy="270" rx="14" ry="22" fill="#ff9ec3" opacity="0.35" />
 
-                  <motion.path d="M230 480 Q235 430 225 390 Q215 350 240 310" stroke="#60a5fa" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.5"
-                    initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} viewport={{ once: true }} transition={{ duration: 1.8, delay: 0.4 }} />
-                  <motion.path d="M260 480 Q255 440 270 400" stroke="#2563eb" strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.3"
-                    initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} viewport={{ once: true }} transition={{ duration: 1.5, delay: 0.6 }} />
+                  <path d="M230 480 Q235 430 225 390 Q215 350 240 310" stroke="#60a5fa" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.5" />
+                  <path d="M260 480 Q255 440 270 400" stroke="#2563eb" strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.3" />
 
-                  {/* Submarine */}
-                  <motion.g
-                    initial={{ x: -60, opacity: 0 }}
-                    whileInView={{ x: 0, opacity: 1 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 1.4, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
-                  >
-                    <motion.g
-                      animate={{ y: [-6, 6] }}
-                      transition={{ duration: 4.5, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
-                    >
-                      <ellipse cx="250" cy="240" rx="120" ry="48" fill="url(#tealGrad)" opacity="0.9" />
-                      <ellipse cx="250" cy="228" rx="100" ry="20" fill="rgba(255,255,255,0.15)" />
-                      <circle cx="300" cy="232" r="18" fill="#f5f3f3" opacity="0.9" />
-                      <circle cx="300" cy="232" r="14" fill="rgba(59, 130, 246, 0.15)" />
-                      <circle cx="300" cy="228" r="5" fill="rgba(59, 130, 246, 0.5)" />
-                      <circle cx="260" cy="232" r="12" fill="#f5f3f3" opacity="0.8" />
-                      <circle cx="260" cy="232" r="9" fill="rgba(59, 130, 246, 0.12)" />
-                      <circle cx="260" cy="229" r="3" fill="rgba(59, 130, 246, 0.4)" />
-                      <rect x="245" y="180" width="7" height="35" rx="3.5" fill="#2563eb" opacity="0.8" />
-                      <rect x="240" y="173" width="17" height="10" rx="5" fill="#2563eb" opacity="0.7" />
-                      <polygon points="130,216 105,195 105,285 130,264" fill="url(#pinkGrad)" opacity="0.75" />
-                      
-                      <motion.g
-                        animate={{ rotate: [0, 360] }}
-                        transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
-                        style={{ transformOrigin: "112px 240px" }}
-                      >
-                        <ellipse cx="112" cy="226" rx="4" ry="16" fill="#E91E8C" opacity="0.55" />
-                        <ellipse cx="112" cy="254" rx="4" ry="16" fill="#E91E8C" opacity="0.55" />
-                        <ellipse cx="98" cy="240" rx="16" ry="4" fill="#E91E8C" opacity="0.55" />
-                        <ellipse cx="126" cy="240" rx="16" ry="4" fill="#E91E8C" opacity="0.55" />
-                      </motion.g>
+                  {/* Submarine — CSS animation only */}
+                  <g className="svg-submarine">
+                    <ellipse cx="250" cy="240" rx="120" ry="48" fill="url(#tealGrad)" opacity="0.9" />
+                    <ellipse cx="250" cy="228" rx="100" ry="20" fill="rgba(255,255,255,0.15)" />
+                    <circle cx="300" cy="232" r="18" fill="#f5f3f3" opacity="0.9" />
+                    <circle cx="300" cy="232" r="14" fill="rgba(59, 130, 246, 0.15)" />
+                    <circle cx="300" cy="228" r="5" fill="rgba(59, 130, 246, 0.5)" />
+                    <circle cx="260" cy="232" r="12" fill="#f5f3f3" opacity="0.8" />
+                    <circle cx="260" cy="232" r="9" fill="rgba(59, 130, 246, 0.12)" />
+                    <circle cx="260" cy="229" r="3" fill="rgba(59, 130, 246, 0.4)" />
+                    <rect x="245" y="180" width="7" height="35" rx="3.5" fill="#2563eb" opacity="0.8" />
+                    <rect x="240" y="173" width="17" height="10" rx="5" fill="#2563eb" opacity="0.7" />
+                    <polygon points="130,216 105,195 105,285 130,264" fill="url(#pinkGrad)" opacity="0.75" />
+                    
+                    <g className="svg-propeller">
+                      <ellipse cx="112" cy="226" rx="4" ry="16" fill="#E91E8C" opacity="0.55" />
+                      <ellipse cx="112" cy="254" rx="4" ry="16" fill="#E91E8C" opacity="0.55" />
+                      <ellipse cx="98" cy="240" rx="16" ry="4" fill="#E91E8C" opacity="0.55" />
+                      <ellipse cx="126" cy="240" rx="16" ry="4" fill="#E91E8C" opacity="0.55" />
+                    </g>
 
-                      <polygon points="370,232 460,200 460,280 370,248" fill="rgba(59, 130, 246, 0.06)" />
-                      <line x1="220" y1="192" x2="210" y2="170" stroke="#2563eb" strokeWidth="2" opacity="0.5" />
-                      <circle cx="210" cy="168" r="3" fill="#60a5fa" opacity="0.6" />
-                    </motion.g>
-                  </motion.g>
+                    <polygon points="370,232 460,200 460,280 370,248" fill="rgba(59, 130, 246, 0.06)" />
+                    <line x1="220" y1="192" x2="210" y2="170" stroke="#2563eb" strokeWidth="2" opacity="0.5" />
+                    <circle cx="210" cy="168" r="3" fill="#60a5fa" opacity="0.6" />
+                  </g>
 
-                  {/* Seabed */}
-                  <motion.path
+                  {/* Seabed — static */}
+                  <path
                     d="M0 440 Q60 420 120 435 Q180 450 240 425 Q300 400 360 435 Q420 455 500 430 L500 500 L0 500 Z"
                     fill="#e4e2e2" opacity="0.5"
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 0.5, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 1 }}
                   />
-                  <motion.path
+                  <path
                     d="M0 460 Q80 445 160 460 Q240 475 320 455 Q400 440 500 460 L500 500 L0 500 Z"
                     fill="#bbc9c9" opacity="0.3"
-                    initial={{ opacity: 0, y: 15 }}
-                    whileInView={{ opacity: 0.3, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 1, delay: 0.2 }}
                   />
 
-                  {/* Small fish */}
-                  <motion.g
-                    animate={{ x: [-20, 20] }}
-                    transition={{ duration: 6, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
-                  >
+                  {/* Small fish — CSS animations */}
+                  <g className="svg-fish1">
                     <ellipse cx="380" cy="340" rx="12" ry="6" fill="#ff9ec3" opacity="0.5" />
                     <polygon points="392,340 402,334 402,346" fill="#ff9ec3" opacity="0.4" />
                     <circle cx="374" cy="338" r="1.5" fill="#E91E8C" opacity="0.6" />
-                  </motion.g>
-                  <motion.g
-                    animate={{ x: [15, -15] }}
-                    transition={{ duration: 5, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 1 }}
-                  >
+                  </g>
+                  <g className="svg-fish2">
                     <ellipse cx="150" cy="370" rx="10" ry="5" fill="#60a5fa" opacity="0.4" />
                     <polygon points="140,370 130,365 130,375" fill="#60a5fa" opacity="0.3" />
                     <circle cx="155" cy="368" r="1.5" fill="#2563eb" opacity="0.5" />
-                  </motion.g>
+                  </g>
                 </svg>
                 <div 
                   className="absolute inset-0 transition-colors duration-500"
