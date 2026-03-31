@@ -9,17 +9,8 @@ export const prisma =
   new PrismaClient({
     log:
       process.env.NODE_ENV === "development"
-        ? ["warn", "error"]
-        : ["error"],
-    // Connection pool settings for production (50+ schools, 5000+ students)
-    datasourceUrl: process.env.DATABASE_URL,
+        ? ["query", "warn", "error"]
+        : ["warn", "error"],
   })
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
-
-// Graceful shutdown to prevent connection leaks
-if (typeof process !== "undefined") {
-  process.on("beforeExit", async () => {
-    await prisma.$disconnect()
-  })
-}
