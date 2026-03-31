@@ -69,68 +69,83 @@ export async function POST(req: Request, { params }: { params: { token: string }
       .replace(/[^A-Za-z]/g, "")
       .substring(0, 6)
       .toUpperCase()
-    
-    // Find last student to get max serial number numeric part
-    const lastStudent = await prisma.student.findFirst({
-      where: { schoolId: cls.school.id },
-      orderBy: { serialNumber: 'desc' },
-    })
 
-    let nextNum = 1
-    if (lastStudent) {
-      const match = lastStudent.serialNumber.match(/-(\d+)$/)
-      if (match) {
-        nextNum = parseInt(match[1]) + 1
-      } else {
-        // Fallback to count if format is weird
-        const count = await prisma.student.count({ where: { schoolId: cls.school.id } })
-        nextNum = count + 1
+    // Create student with retry for serial number collisions under high concurrency
+    let student: any = null
+    let retries = 3
+    while (retries > 0) {
+      try {
+        // Find last student to get max serial number numeric part
+        const lastStudent = await prisma.student.findFirst({
+          where: { schoolId: cls.school.id },
+          orderBy: { serialNumber: 'desc' },
+          select: { serialNumber: true },
+        })
+
+        let nextNum = 1
+        if (lastStudent) {
+          const match = lastStudent.serialNumber.match(/-(\d+)$/)
+          if (match) {
+            nextNum = parseInt(match[1]) + 1
+          } else {
+            const count = await prisma.student.count({ where: { schoolId: cls.school.id } })
+            nextNum = count + 1
+          }
+        }
+        const serialNumber = `${schoolCode}-${String(nextNum).padStart(4, "0")}`
+
+        student = await prisma.$transaction(async (tx) => {
+          const newStudent = await tx.student.create({
+            data: {
+              schoolId: cls.school.id,
+              classId: cls.id,
+              serialNumber,
+              formData: {
+                ...validated.formData,
+                class: cls.name,
+              },
+              photoUrl: validated.photoUrl || "",
+              status: "SUBMITTED",
+            },
+          })
+
+          // Generate QR code and upload (non-blocking for perf)
+          try {
+            const qrContent = JSON.stringify({
+              serial: serialNumber,
+              school: cls.school.id,
+              student: newStudent.id,
+            })
+            const qrBuffer = await QRCode.toBuffer(qrContent, { width: 300, margin: 2 })
+            const qrPath = `students/${cls.school.id}/qr/${newStudent.id}.png`
+            await uploadWithRetry("student-photos", qrPath, qrBuffer, {
+              contentType: "image/png",
+              upsert: true,
+            })
+            const qrUrl = getPublicUrl("student-photos", qrPath)
+
+            await tx.student.update({
+              where: { id: newStudent.id },
+              data: { qrCodeUrl: qrUrl },
+            })
+
+            return { ...newStudent, qrCodeUrl: qrUrl }
+          } catch (qrError) {
+            console.error("QR generation error:", qrError)
+            return newStudent
+          }
+        })
+
+        break // Success — exit retry loop
+      } catch (err: any) {
+        // If unique constraint violation on serialNumber, retry with new number
+        if (err?.code === "P2002" && retries > 1) {
+          retries--
+          continue
+        }
+        throw err
       }
     }
-    const serialNumber = `${schoolCode}-${String(nextNum).padStart(4, "0")}`
-
-    // Create student in transaction
-    const student = await prisma.$transaction(async (tx) => {
-      const newStudent = await tx.student.create({
-        data: {
-          schoolId: cls.school.id,
-          classId: cls.id,
-          serialNumber,
-          formData: {
-            ...validated.formData,
-            class: cls.name,
-          },
-          photoUrl: validated.photoUrl || "",
-          status: "SUBMITTED",
-        },
-      })
-
-      // Generate QR code and upload
-      try {
-        const qrContent = JSON.stringify({
-          serial: serialNumber,
-          school: cls.school.id,
-          student: newStudent.id,
-        })
-        const qrBuffer = await QRCode.toBuffer(qrContent, { width: 300, margin: 2 })
-        const qrPath = `students/${cls.school.id}/qr/${newStudent.id}.png`
-        await uploadWithRetry("student-photos", qrPath, qrBuffer, {
-          contentType: "image/png",
-          upsert: true,
-        })
-        const qrUrl = getPublicUrl("student-photos", qrPath)
-
-        await tx.student.update({
-          where: { id: newStudent.id },
-          data: { qrCodeUrl: qrUrl },
-        })
-
-        return { ...newStudent, qrCodeUrl: qrUrl }
-      } catch (qrError) {
-        console.error("QR generation error:", qrError)
-        return newStudent
-      }
-    })
 
     return NextResponse.json(
       {

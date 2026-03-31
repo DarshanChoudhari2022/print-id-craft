@@ -281,13 +281,13 @@ export default function TeacherDashboard() {
                   <tr key={s.id}>
                     <td>
                       {s.photoUrl ? (
-                        <img src={s.photoUrl} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', border: '2px solid #e2e8f0' }} />
+                        <img src={s.photoUrl} alt="" loading="lazy" decoding="async" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', border: '2px solid #e2e8f0' }} />
                       ) : (
                         <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f1f5f9', border: '2px dashed #cbd5e1' }} />
                       )}
                     </td>
                     <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{s.serialNumber}</td>
-                    <td style={{ fontWeight: 500 }}>{fd.fullName || "—"}</td>
+                    <td style={{ fontWeight: 500 }}>{fd.fullName || fd["Full Name"] || fd["Student Name"] || fd.Student_Name || fd.name || "—"}</td>
                     <td>{s.class?.name || "—"}</td>
                     <td>{fd.rollNo || "—"}</td>
                     <td>

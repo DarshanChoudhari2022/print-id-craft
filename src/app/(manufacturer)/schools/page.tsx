@@ -1,7 +1,6 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { toast } from "sonner"
 
 type School = {
@@ -15,40 +14,75 @@ type School = {
   createdAt: string
 }
 
+type GlobalStats = {
+  totalSchools: number
+  totalStudents: number
+  totalClasses: number
+  totalBatches: number
+}
+
 export default function SchoolsPage() {
   const router = useRouter()
   const [schools, setSchools] = useState<School[]>([])
+  const [stats, setStats] = useState<GlobalStats>({ totalSchools: 0, totalStudents: 0, totalClasses: 0, totalBatches: 0 })
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [searchInput, setSearchInput] = useState("")
+  const [searchQuery, setSearchQuery] = useState("")
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Add school modal state
   const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState("")
   const [newEmail, setNewEmail] = useState("")
   const [newAddress, setNewAddress] = useState("")
   const [newLogo, setNewLogo] = useState<File | null>(null)
   const [creating, setCreating] = useState(false)
-  // Class creation during school setup
   const [classNames, setClassNames] = useState<string[]>([])
   const [newClassInput, setNewClassInput] = useState("")
 
-  const fetchSchools = async () => {
+  const fetchSchools = useCallback(async (p = page, search = searchQuery) => {
     try {
-      const res = await fetch("/api/schools")
+      const params = new URLSearchParams({ page: String(p), limit: "50" })
+      if (search) params.set("search", search)
+      const res = await fetch(`/api/schools?${params}`)
       const data = await res.json()
-      if (data.success) setSchools(data.data)
+      if (data.success) {
+        setSchools(data.data)
+        if (data.stats) setStats(data.stats)
+        if (data.pagination) {
+          setTotalPages(data.pagination.totalPages)
+        }
+      }
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, searchQuery])
 
-  useEffect(() => { fetchSchools() }, [])
+  useEffect(() => { fetchSchools() }, [fetchSchools])
+
+  // Cleanup
+  useEffect(() => {
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }
+  }, [])
+
+  const handleSearch = (value: string) => {
+    setSearchInput(value)
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => {
+      setSearchQuery(value)
+      setPage(1)
+    }, 400)
+  }
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     setCreating(true)
     try {
       let logoUrl = ""
-      // Upload logo if provided
       if (newLogo) {
         try {
           const fd = new FormData()
@@ -56,14 +90,13 @@ export default function SchoolsPage() {
           fd.append("folder", "logos")
           const uploadRes = await fetch("/api/upload", { method: "POST", body: fd })
           const uploadData = await uploadRes.json()
-          if (uploadRes.ok && uploadData.success) {
-            logoUrl = uploadData.url
-          }
+          if (uploadRes.ok && uploadData.success) logoUrl = uploadData.url
         } catch (uploadErr) {
           console.error("Logo upload failed:", uploadErr)
         }
       }
 
+      // Single API call creates school + template + all classes atomically
       const res = await fetch("/api/schools", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -72,37 +105,16 @@ export default function SchoolsPage() {
           contactEmail: newEmail,
           address: newAddress,
           logoUrl: logoUrl || undefined,
+          classNames: classNames.length > 0 ? classNames : undefined,
         }),
       })
       const data = await res.json()
       if (data.success) {
-        const schoolId = data.data.id
-
-        // Auto-create classes if provided
-        if (classNames.length > 0) {
-          for (const className of classNames) {
-            try {
-              await fetch(`/api/schools/${schoolId}/classes`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: className }),
-              })
-            } catch (err) {
-              console.error(`Failed to create class ${className}:`, err)
-            }
-          }
-        }
-
         toast.success("School created! Now upload the ID card template.")
         setShowAdd(false)
-        setNewName("")
-        setNewEmail("")
-        setNewAddress("")
-        setNewLogo(null)
-        setClassNames([])
-        setNewClassInput("")
-        // Redirect to school's template tab immediately
-        router.push(`/schools/${schoolId}`)
+        setNewName(""); setNewEmail(""); setNewAddress("")
+        setNewLogo(null); setClassNames([]); setNewClassInput("")
+        router.push(`/schools/${data.data.id}`)
       } else {
         toast.error(data.error?.message || "Failed to create school")
       }
@@ -135,19 +147,19 @@ export default function SchoolsPage() {
         <div className="page-body">
           <div className="stat-grid">
             {[1, 2, 3].map(i => (
-              <div key={i} className="stat-card">
-                <div style={{ height: 14, width: 100, background: '#f1f5f9', borderRadius: 6, marginBottom: 12 }} />
-                <div style={{ height: 32, width: 60, background: '#f1f5f9', borderRadius: 6 }} />
+              <div key={i} className="stat-card skeleton-card">
+                <div className="skeleton-line" style={{ width: 100, height: 14, marginBottom: 12 }} />
+                <div className="skeleton-line" style={{ width: 60, height: 32 }} />
               </div>
             ))}
           </div>
-          <div className="card-grid">
+          <div className="card-grid" style={{ marginTop: 24 }}>
             {[1, 2, 3].map(i => (
               <div key={i} className="school-card" style={{ pointerEvents: 'none' }}>
                 <div className="school-card-banner" style={{ background: '#f1f5f9' }} />
                 <div className="school-card-body">
-                  <div style={{ height: 20, width: 150, background: '#f1f5f9', borderRadius: 6, marginBottom: 8 }} />
-                  <div style={{ height: 14, width: 100, background: '#f1f5f9', borderRadius: 6 }} />
+                  <div className="skeleton-line" style={{ height: 20, width: 150, marginBottom: 8 }} />
+                  <div className="skeleton-line" style={{ height: 14, width: 100 }} />
                 </div>
               </div>
             ))}
@@ -159,7 +171,7 @@ export default function SchoolsPage() {
 
   return (
     <>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1>Schools</h1>
           <p>Manage your registered educational institutions</p>
@@ -171,65 +183,93 @@ export default function SchoolsPage() {
       </div>
 
       <div className="page-body">
+        {/* Stats from DB aggregation — no client-side reduce */}
         <div className="stat-grid">
-          <div className="stat-card">
+          <div className="stat-card stat-card-animated">
             <div className="stat-card-label">Total Schools</div>
-            <div className="stat-card-value">{schools.length}</div>
+            <div className="stat-card-value">{stats.totalSchools.toLocaleString()}</div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card stat-card-animated" style={{ animationDelay: '80ms' }}>
             <div className="stat-card-label">Total Students</div>
-            <div className="stat-card-value">{schools.reduce((a, s) => a + (s._count?.students || 0), 0)}</div>
+            <div className="stat-card-value">{stats.totalStudents.toLocaleString()}</div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card stat-card-animated" style={{ animationDelay: '160ms' }}>
             <div className="stat-card-label">Total Classes</div>
-            <div className="stat-card-value">{schools.reduce((a, s) => a + (s._count?.classes || 0), 0)}</div>
+            <div className="stat-card-value">{stats.totalClasses.toLocaleString()}</div>
           </div>
+        </div>
+
+        {/* Search */}
+        <div style={{ margin: '20px 0', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <input
+            placeholder="Search schools by name, email, or address..."
+            value={searchInput}
+            onChange={e => handleSearch(e.target.value)}
+            style={{ height: 42, padding: '0 16px', border: '1.5px solid #e2e8f0', borderRadius: 12, fontSize: 14, flex: 1, maxWidth: 400 }}
+          />
+          {searchQuery && (
+            <button className="btn btn-outline" style={{ fontSize: 12 }} onClick={() => { setSearchInput(""); setSearchQuery(""); setPage(1) }}>
+              Clear
+            </button>
+          )}
+          <span style={{ fontSize: 13, color: '#64748b' }}>{schools.length} of {stats.totalSchools} schools</span>
         </div>
 
         {schools.length === 0 ? (
           <div className="empty-state" style={{ background: 'white', borderRadius: 16, border: '2px dashed #e2e8f0' }}>
             <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>
-            <h3>No schools registered</h3>
-            <p>Start by adding your first client institution.</p>
-            <button className="btn btn-primary" style={{ marginTop: 20 }} onClick={() => setShowAdd(true)}>Add First School</button>
+            <h3>{searchQuery ? "No schools match your search" : "No schools registered"}</h3>
+            <p>{searchQuery ? "Try a different search term." : "Start by adding your first client institution."}</p>
+            {!searchQuery && <button className="btn btn-primary" style={{ marginTop: 20 }} onClick={() => setShowAdd(true)}>Add First School</button>}
           </div>
         ) : (
-          <div className="card-grid">
-            {schools.map((school) => (
-              <div key={school.id} className="school-card" onClick={() => router.push(`/schools/${school.id}`)}>
-                <div className="school-card-banner" style={{ background: 'linear-gradient(135deg, #3b82f6, #1B4F8A)' }} />
-                <div className="school-card-body">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 10, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#3b82f6', flexShrink: 0 }}>
-                      {school.name.charAt(0)}
+          <>
+            <div className="card-grid">
+              {schools.map((school) => (
+                <div key={school.id} className="school-card" onClick={() => router.push(`/schools/${school.id}`)}>
+                  <div className="school-card-banner" style={{ background: `linear-gradient(135deg, ${['#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444'][Math.abs(school.name.charCodeAt(0)) % 5]}, ${['#1d4ed8', '#6d28d9', '#15803d', '#b45309', '#b91c1c'][Math.abs(school.name.charCodeAt(0)) % 5]})` }} />
+                  <div className="school-card-body">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#3b82f6', flexShrink: 0 }}>
+                        {school.name.charAt(0)}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="school-card-name">{school.name}</div>
+                        <div className="school-card-address">{school.address || school.contactEmail}</div>
+                      </div>
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="school-card-name">{school.name}</div>
-                      <div className="school-card-address">{school.address || school.contactEmail}</div>
+                    <div className="school-card-stats">
+                      <span className="school-card-stat"><strong>{school._count?.students || 0}</strong> students</span>
+                      <span className="school-card-stat"><strong>{school._count?.classes || 0}</strong> classes</span>
+                      {school.template && <span className="status-badge status-approved" style={{ fontSize: 11 }}>Template Ready</span>}
                     </div>
-                  </div>
-                  <div className="school-card-stats">
-                    <span className="school-card-stat"><strong>{school._count?.students || 0}</strong> students</span>
-                    <span className="school-card-stat"><strong>{school._count?.classes || 0}</strong> classes</span>
-                    {school.template && <span className="status-badge status-approved" style={{ fontSize: 11 }}>Template Ready</span>}
-                  </div>
-                  <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                    <button className="btn btn-outline" style={{ fontSize: 12, padding: '6px 12px', flex: 1 }} onClick={(e) => { e.stopPropagation(); router.push(`/schools/${school.id}`) }}>Manage</button>
-                    <button className="btn btn-danger" style={{ fontSize: 12, padding: '6px 10px' }} onClick={(e) => { e.stopPropagation(); handleDelete(school.id, school.name) }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                    </button>
+                    <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                      <button className="btn btn-outline" style={{ fontSize: 12, padding: '6px 12px', flex: 1 }} onClick={(e) => { e.stopPropagation(); router.push(`/schools/${school.id}`) }}>Manage</button>
+                      <button className="btn btn-danger" style={{ fontSize: 12, padding: '6px 10px' }} onClick={(e) => { e.stopPropagation(); handleDelete(school.id, school.name) }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 24, alignItems: 'center' }}>
+                <button className="btn btn-outline" disabled={page <= 1} onClick={() => setPage(p => p - 1)} style={{ fontSize: 13, padding: '8px 16px' }}>← Previous</button>
+                <span style={{ fontSize: 13, color: '#64748b', padding: '0 12px' }}>Page {page} of {totalPages}</span>
+                <button className="btn btn-outline" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} style={{ fontSize: 13, padding: '8px 16px' }}>Next →</button>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
 
       {/* Add School Modal */}
       {showAdd && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShowAdd(false)}>
-          <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 460, padding: 32 }} onClick={e => e.stopPropagation()}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 }} onClick={() => setShowAdd(false)}>
+          <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 460, padding: 32, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <h2 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Add New School</h2>
             <p style={{ fontSize: 14, color: '#94a3b8', marginBottom: 24 }}>Register a new institution to your portfolio.</p>
             <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -262,8 +302,6 @@ export default function SchoolsPage() {
                   )}
                 </div>
               </div>
-
-              {/* Classes */}
               <div className="form-group">
                 <label>Classes (you can add more later)</label>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
@@ -282,19 +320,7 @@ export default function SchoolsPage() {
                       }
                     }}
                   />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const name = newClassInput.trim()
-                      if (name && !classNames.includes(name)) {
-                        setClassNames(prev => [...prev, name])
-                        setNewClassInput('')
-                      }
-                    }}
-                    style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                  >
-                    + Add
-                  </button>
+                  <button type="button" onClick={() => { const name = newClassInput.trim(); if (name && !classNames.includes(name)) { setClassNames(prev => [...prev, name]); setNewClassInput('') } }} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Add</button>
                 </div>
                 {classNames.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

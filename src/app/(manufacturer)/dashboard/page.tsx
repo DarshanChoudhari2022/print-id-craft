@@ -19,18 +19,17 @@ export default function ManufacturerDashboard() {
   useEffect(() => {
     async function fetchDashboard() {
       try {
-        const res = await fetch("/api/schools")
+        const res = await fetch("/api/schools?limit=5")
         const json = await res.json()
         if (json.success) {
           const schools = json.data
-          const totalStudents = schools.reduce((a: number, s: any) => a + (s._count?.students || 0), 0)
-          const pendingBatches = schools.reduce((a: number, s: any) => a + (s._count?.batches || 0), 0)
-
+          // Use DB-aggregated stats from API (no client-side counting)
+          const s = json.stats || {}
           setData({
-            totalSchools: schools.length,
-            totalStudents,
-            pendingBatches,
-            studentsThisMonth: totalStudents,
+            totalSchools: s.totalSchools || schools.length,
+            totalStudents: s.totalStudents || 0,
+            pendingBatches: s.totalBatches || 0,
+            studentsThisMonth: s.totalStudents || 0,
             recentSchools: schools.slice(0, 5),
           })
         }

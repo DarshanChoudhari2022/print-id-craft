@@ -192,9 +192,16 @@ export default function JpgTemplateMapper({
     })
   }
 
+  const lastMoveTimeRef = useRef(0)
+
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
       if (!dragState || !containerRef.current) return
+      // Throttle to ~60fps for smooth but not excessive updates
+      const now = performance.now()
+      if (now - lastMoveTimeRef.current < 16) return
+      lastMoveTimeRef.current = now
+
       const rect = containerRef.current.getBoundingClientRect()
       const dx = ((e.clientX - dragState.startX) / rect.width) * 100
       const dy = ((e.clientY - dragState.startY) / rect.height) * 100

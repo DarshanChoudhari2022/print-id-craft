@@ -1,5 +1,5 @@
 "use client"
-import { useRef, useEffect, useState, useCallback } from "react"
+import { useRef, useEffect, useState, useCallback, memo } from "react"
 
 type FieldMapping = {
   id: string
@@ -193,8 +193,17 @@ export default function JpgCardPreview({
     }
   }, [templateImageUrl, fieldMappings, formData, studentPhoto, scale, watermark])
 
+  const renderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
-    render()
+    // Debounce canvas rendering to prevent lag on rapid form edits
+    if (renderTimerRef.current) clearTimeout(renderTimerRef.current)
+    renderTimerRef.current = setTimeout(() => {
+      render()
+    }, 50)
+    return () => {
+      if (renderTimerRef.current) clearTimeout(renderTimerRef.current)
+    }
   }, [render])
 
   return (

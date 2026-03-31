@@ -17,6 +17,9 @@ model User {
   school        School?   @relation(fields: [schoolId], references: [id])
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  @@index([schoolId])
+  @@index([role])
 }
 
 enum Role {
@@ -37,6 +40,9 @@ model School {
   batches       PrintBatch[]
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+
+  @@index([name])
+  @@index([createdAt])
 }
 
 model Class {
@@ -50,6 +56,9 @@ model Class {
   students      Student[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  @@index([schoolId])
+  @@index([schoolId, name])
 }
 
 model Template {
@@ -89,8 +98,12 @@ model Student {
   submittedAt   DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
+  // Compound indexes for high-load query patterns
+  @@index([schoolId, status])
+  @@index([schoolId, classId])
+  @@index([schoolId, classId, status])
+  @@index([schoolId, submittedAt(sort: Desc)])
   @@index([schoolId, serialNumber])
-  @@index([schoolId])
   @@index([classId])
   @@index([status])
 }
@@ -114,6 +127,9 @@ model PrintBatch {
   status          BatchStatus @default(PENDING)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
+
+  @@index([schoolId])
+  @@index([schoolId, status])
 }
 
 enum BatchStatus {

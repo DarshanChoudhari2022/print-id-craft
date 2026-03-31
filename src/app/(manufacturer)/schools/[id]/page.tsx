@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, Suspense, lazy } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -57,7 +57,7 @@ export default function SchoolDetailPage() {
   const router = useRouter()
   const schoolId = params.id as string
 
-  const [tab, setTab] = useState<"overview"|"classes"|"students"|"template"|"generate"|"batches"|"export">("template")
+  const [tab, setTab] = useState<"overview"|"classes"|"students"|"template"|"generate"|"batches"|"export">("overview")
   const [school, setSchool] = useState<SchoolDetail | null>(null)
   const [classes, setClasses] = useState<ClassData[]>([])
   const [students, setStudents] = useState<StudentData[]>([])
@@ -68,6 +68,9 @@ export default function SchoolDetailPage() {
   const [statusFilter, setStatusFilter] = useState("")
   const [classFilter, setClassFilter] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
+  const [searchInput, setSearchInput] = useState("")
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [tabLoading, setTabLoading] = useState(false)
 
   // Add class
   const [newClassName, setNewClassName] = useState("")
@@ -162,9 +165,20 @@ export default function SchoolDetailPage() {
   }, [schoolId])
 
   useEffect(() => {
-    if (tab === "students") fetchStudents()
-    if (tab === "batches") fetchBatches()
+    if (tab === "students") {
+      setTabLoading(true)
+      fetchStudents().finally(() => setTabLoading(false))
+    }
+    if (tab === "batches") {
+      setTabLoading(true)
+      fetchBatches().finally(() => setTabLoading(false))
+    }
   }, [tab, statusFilter, classFilter, searchQuery])
+
+  // Cleanup debounce timer
+  useEffect(() => {
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }
+  }, [])
 
   const getExpiryBadge = (expiresAt: string | null) => {
     if (!expiresAt) return null
@@ -633,7 +647,7 @@ export default function SchoolDetailPage() {
         </div>
 
         <div className="school-tabs-scroll" style={{ display: 'flex', borderBottom: '1px solid var(--gray-200)', marginBottom: 24, paddingBottom: 0 }}>
-          {["overview", "classes", "students", "batches"].map(t => (
+          {["overview", "classes", "students", "template", "generate", "batches", "export"].map(t => (
             <button
               key={t}
               onClick={() => setTab(t as any)}
@@ -836,7 +850,7 @@ export default function SchoolDetailPage() {
             </div>
 
             <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-              <input placeholder="Search by name or serial..." value={searchQuery} onChange={e => { setSearchQuery(e.target.value) }} style={{ height: 40, padding: '0 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, flex: 1, minWidth: 200 }} />
+              <input placeholder="Search by name or serial..." value={searchInput} onChange={e => { const v = e.target.value; setSearchInput(v); if (searchTimerRef.current) clearTimeout(searchTimerRef.current); searchTimerRef.current = setTimeout(() => { setSearchQuery(v); setStudentPage(1); }, 400); }} style={{ height: 40, padding: '0 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, flex: 1, minWidth: 200 }} />
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ height: 40, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}>
                 <option value="">All Status</option>
                 <option value="SUBMITTED">Submitted</option>
@@ -854,15 +868,16 @@ export default function SchoolDetailPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ fontSize: 13, color: '#64748b' }}>
                 {studentTotal} students found
-                {students.filter(s => !s.photoUrl).length > 0 && (
+                {(() => { const missing = students.filter(s => !s.photoUrl).length; return missing > 0 ? (
                   <span style={{ marginLeft: 12, fontSize: 12, fontWeight: 600, color: '#ef4444', background: '#fef2f2', padding: '3px 10px', borderRadius: 6 }}>
-                    📷 {students.filter(s => !s.photoUrl).length} missing photos
+                    📷 {missing} missing photos
                   </span>
-                )}
+                ) : null; })()}
               </div>
             </div>
 
-            <div className="data-table-wrapper" style={{ overflowX: 'auto' }}>
+            <div className="data-table-wrapper" style={{ overflowX: 'auto', position: 'relative', opacity: tabLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
+              {tabLoading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, background: 'rgba(255,255,255,0.6)', borderRadius: 14 }}><div className="login-spinner" style={{ width: 28, height: 28, borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6' }} /></div>}
               <table className="data-table">
                 <thead>
                   <tr>
@@ -892,7 +907,7 @@ export default function SchoolDetailPage() {
                         <td>
                           {s.photoUrl ? (
                             <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', border: '2px solid #e2e8f0' }}>
-                              <img src={s.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <img src={s.photoUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             </div>
                           ) : (
                             <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fef2f2', border: '2px dashed #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>

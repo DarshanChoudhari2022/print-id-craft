@@ -11,12 +11,27 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const batches = await prisma.printBatch.findMany({
-      where: { schoolId: params.id },
-      orderBy: { createdAt: "desc" },
-    })
+    const url = new URL(req.url)
+    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"))
+    const limit = Math.min(50, parseInt(url.searchParams.get("limit") || "20"))
 
-    return NextResponse.json({ success: true, data: batches })
+    const [batches, total] = await Promise.all([
+      prisma.printBatch.findMany({
+        where: { schoolId: params.id },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.printBatch.count({ where: { schoolId: params.id } }),
+    ])
+
+    const response = NextResponse.json({
+      success: true,
+      data: batches,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    })
+    response.headers.set("Cache-Control", "private, max-age=3, stale-while-revalidate=10")
+    return response
   } catch (error) {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }

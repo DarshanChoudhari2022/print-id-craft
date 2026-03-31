@@ -11,28 +11,69 @@ const schoolSchema = z.object({
   contactEmail: z.string().email("Invalid contact email"),
   address: z.string().optional(),
   logoUrl: z.string().optional(),
+  classNames: z.array(z.string()).optional(), // Batch class creation
 })
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user?.role !== "MANUFACTURER") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const schools = await prisma.school.findMany({
-      include: {
-        _count: {
-          select: { classes: true, students: true, batches: true }
-        },
-        template: { select: { id: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    })
+    const url = new URL(req.url)
+    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"))
+    const limit = Math.min(100, parseInt(url.searchParams.get("limit") || "50"))
+    const search = url.searchParams.get("search")?.trim()
 
-    const response = NextResponse.json({ success: true, data: schools })
-    // Cache for 5s, serve stale for 30s while revalidating
-    response.headers.set("Cache-Control", "private, s-maxage=5, stale-while-revalidate=30")
+    const where: any = {}
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { contactEmail: { contains: search, mode: "insensitive" } },
+        { address: { contains: search, mode: "insensitive" } },
+      ]
+    }
+
+    const [schools, total, globalStats] = await Promise.all([
+      prisma.school.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          contactEmail: true,
+          address: true,
+          logoUrl: true,
+          createdAt: true,
+          _count: { select: { classes: true, students: true, batches: true } },
+          template: { select: { id: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.school.count({ where }),
+      // DB-level aggregation for global stats (no client-side reduce)
+      Promise.all([
+        prisma.school.count(),
+        prisma.student.count(),
+        prisma.class.count(),
+        prisma.printBatch.count(),
+      ]),
+    ])
+
+    const response = NextResponse.json({
+      success: true,
+      data: schools,
+      stats: {
+        totalSchools: globalStats[0],
+        totalStudents: globalStats[1],
+        totalClasses: globalStats[2],
+        totalBatches: globalStats[3],
+      },
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    })
+    response.headers.set("Cache-Control", "private, max-age=5, stale-while-revalidate=15")
     return response
   } catch (error) {
     console.error("GET /api/schools error:", error)
@@ -50,26 +91,43 @@ export async function POST(req: Request) {
     const body = await req.json()
     const validated = schoolSchema.parse(body)
 
-    const school = await prisma.school.create({
-      data: {
-        name: validated.name,
-        contactEmail: validated.contactEmail,
-        address: validated.address || null,
-        logoUrl: validated.logoUrl || null,
-      },
+    // Use transaction for atomicity: school + template + classes in one DB round-trip
+    const result = await prisma.$transaction(async (tx) => {
+      const school = await tx.school.create({
+        data: {
+          name: validated.name,
+          contactEmail: validated.contactEmail,
+          address: validated.address || null,
+          logoUrl: validated.logoUrl || null,
+        },
+      })
+
+      // Create empty template
+      await tx.template.create({
+        data: {
+          schoolId: school.id,
+          frontLayout: [],
+          backLayout: [],
+          fieldConfig: [],
+        },
+      })
+
+      // Batch create classes if provided (replaces N sequential API calls)
+      if (validated.classNames && validated.classNames.length > 0) {
+        await tx.class.createMany({
+          data: validated.classNames
+            .filter((name) => name.trim())
+            .map((name) => ({
+              name: name.trim(),
+              schoolId: school.id,
+            })),
+        })
+      }
+
+      return school
     })
 
-    // Create empty template for this school
-    await prisma.template.create({
-      data: {
-        schoolId: school.id,
-        frontLayout: [],
-        backLayout: [],
-        fieldConfig: [], // Auto-generated when admin maps fields on JPG template
-      },
-    })
-
-    return NextResponse.json({ success: true, data: school }, { status: 201 })
+    return NextResponse.json({ success: true, data: result }, { status: 201 })
   } catch (error) {
     console.error("POST /api/schools error:", error)
     if (error instanceof z.ZodError) {

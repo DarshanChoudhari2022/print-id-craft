@@ -46,6 +46,35 @@ input, select, textarea { font-family: inherit; }
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* GPU ACCELERATION & PERFORMANCE */
+.page-body > div { 
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
+}
+
+/* Smooth GPU-accelerated modals */
+.data-table-wrapper {
+  will-change: opacity;
+  contain: layout style;
+}
+
+/* Optimize table rendering for large lists */
+.data-table tbody {
+  contain: layout style paint;
+}
+
+/* Optimize fixed overlays */
+[style*="position: fixed"] {
+  will-change: opacity;
+  backface-visibility: hidden;
+}
+
+/* Prevent layout thrash on tab switches */
+.fade-in {
+  will-change: opacity, transform;
+  backface-visibility: hidden;
+}
+
 .glass-card {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(12px);
