@@ -31,7 +31,14 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Incorrect password")
         }
 
+        // Strict role validation — block cross-portal login
         if (credentials.expectedRole && user.role !== credentials.expectedRole) {
+          if (credentials.expectedRole === "TEACHER" && user.role === "MANUFACTURER") {
+            throw new Error("This is the Teacher Login portal. Manufacturer accounts cannot login here.")
+          }
+          if (credentials.expectedRole === "MANUFACTURER" && user.role === "TEACHER") {
+            throw new Error("This is the Manufacturer portal. Teacher accounts cannot login here.")
+          }
           throw new Error("Invalid login portal for this account type")
         }
 

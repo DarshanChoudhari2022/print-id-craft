@@ -123,7 +123,7 @@ export async function GET(req: NextRequest) {
       pagination: { page, limit, total: totalCount, pages: Math.ceil(totalCount / limit) },
     })
 
-    response.headers.set("Cache-Control", "private, s-maxage=10, stale-while-revalidate=30")
+    response.headers.set("Cache-Control", "no-store, no-cache, max-age=0, must-revalidate")
     return response
   } catch (error) {
     console.error("Teacher dashboard error:", error)

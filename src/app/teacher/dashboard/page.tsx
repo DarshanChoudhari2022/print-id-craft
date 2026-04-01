@@ -88,7 +88,10 @@ export default function TeacherDashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch("/api/teacher/dashboard")
+      const res = await fetch(`/api/teacher/dashboard?_t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" }
+      })
       const json = await res.json()
       if (json.success) setData(json.data)
     } catch (err) {

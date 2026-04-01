@@ -113,8 +113,13 @@ function LoginForm() {
             </>
           ) : (
             <>
-              <h1 className="login-heading">Welcome back</h1>
-              <p className="login-subheading">Sign in to manage your school's ID cards</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #22c55e, #16a34a)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+                <h1 className="login-heading" style={{ marginBottom: 0 }}>Teacher Login</h1>
+              </div>
+              <p className="login-subheading">Sign in to manage your school&apos;s ID cards</p>
             </>
           )}
 
@@ -157,21 +162,35 @@ function LoginForm() {
             </button>
           </form>
 
-          {/* Photo Guidelines for teachers */}
+          {/* Contact manufacturer link for teachers */}
           {!isAdminMode && (
-            <div style={{ 
-              marginTop: 20, padding: '14px 16px', 
-              background: '#f0fdf4', borderRadius: 10, 
-              border: '1px solid #bbf7d0' 
-            }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#15803d', marginBottom: 4 }}>📸 Photo Guidelines for Students</div>
-              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11, color: '#16a34a', lineHeight: 1.7 }}>
-                <li>Minimum 300 pixels width</li>
-                <li>Plain/solid background only</li>
-                <li>Passport-size format (3:4 ratio)</li>
-                <li>Front-facing photo required</li>
-              </ul>
-            </div>
+            <>
+              <div style={{
+                marginTop: 20, padding: '14px 16px',
+                background: '#fffbeb', borderRadius: 10,
+                border: '1px solid #fde68a',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#92400e', marginBottom: 4 }}>🔑 Don&apos;t have login details?</div>
+                <p style={{ margin: 0, fontSize: 12, color: '#a16207', lineHeight: 1.6 }}>
+                  Please contact your <strong>manufacturer / ID card provider</strong> to get your login credentials.
+                </p>
+              </div>
+
+              <div style={{ 
+                marginTop: 12, padding: '14px 16px', 
+                background: '#f0fdf4', borderRadius: 10, 
+                border: '1px solid #bbf7d0' 
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#15803d', marginBottom: 4 }}>📸 Photo Guidelines for Students</div>
+                <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11, color: '#16a34a', lineHeight: 1.7 }}>
+                  <li>Minimum 300 pixels width</li>
+                  <li>Plain/solid background only</li>
+                  <li>Passport-size format (3:4 ratio)</li>
+                  <li>Front-facing photo required</li>
+                </ul>
+              </div>
+            </>
           )}
         </div>
       </div>
