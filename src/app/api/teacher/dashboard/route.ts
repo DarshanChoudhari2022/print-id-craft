@@ -12,13 +12,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const schoolId = session.user.schoolId
-    if (!schoolId) {
-      return NextResponse.json({ error: "No school assigned" }, { status: 400 })
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { isMainTeacher: true, classId: true, schoolId: true }
+    })
+
+    if (!currentUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    const isMainTeacher = session.user.isMainTeacher
-    const assignedClassId = session.user.classId
+    const schoolId = currentUser.schoolId
+    if (!schoolId) {
+        return NextResponse.json({ error: "No school assigned to this teacher yet." }, { status: 400 })
+    }
+
+    const isMainTeacher = !!currentUser.isMainTeacher
+    const assignedClassId = currentUser.classId
 
     // Parse pagination params
     const url = new URL(req.url)
@@ -27,7 +36,7 @@ export async function GET(req: NextRequest) {
     const skip = (page - 1) * limit
 
     // Build student filter — class teacher sees only their class
-    const studentWhere: any = { schoolId }
+    const studentWhere: any = { schoolId: schoolId as string }
     if (!isMainTeacher && assignedClassId) {
       studentWhere.classId = assignedClassId
     }
@@ -35,16 +44,16 @@ export async function GET(req: NextRequest) {
     // Run all queries in parallel — use DB-level aggregation for stats
     const [school, classes, students, totalCount, statusCounts] = await Promise.all([
       prisma.school.findUnique({
-        where: { id: schoolId },
+        where: { id: schoolId as string },
         select: { name: true, logoUrl: true },
       }),
       // Main teacher sees all classes; class teacher sees only their class
       prisma.class.findMany({
         where: isMainTeacher
-          ? { schoolId }
+          ? { schoolId: schoolId as string }
           : assignedClassId
-            ? { id: assignedClassId }
-            : { schoolId },
+            ? { id: assignedClassId as string }
+            : { schoolId: schoolId as string },
         include: {
           _count: { select: { students: true } },
           teachers: {
