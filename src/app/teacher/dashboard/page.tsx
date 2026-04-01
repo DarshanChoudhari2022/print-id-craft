@@ -662,7 +662,9 @@ export default function TeacherDashboard() {
                             <span className="status-badge status-pending">Unassigned</span>
                           )}
                         </td>
-                        <td style={{ fontSize: 12, color: '#94a3b8' }}>{new Date(t.createdAt).toLocaleDateString()}</td>
+                        <td style={{ fontSize: 12, color: '#94a3b8' }} suppressHydrationWarning>
+                          {mounted ? new Date(t.createdAt).toLocaleDateString() : t.createdAt.split('T')[0]}
+                        </td>
                         <td style={{ textAlign: 'right' }}>
                           <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 10px', color: '#ef4444', borderColor: '#ef4444' }} onClick={() => handleDeleteSubTeacher(t.id, t.name)}>
                             Remove

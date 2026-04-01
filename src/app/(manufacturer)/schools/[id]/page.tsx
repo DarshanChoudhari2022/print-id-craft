@@ -186,17 +186,17 @@ export default function SchoolDetailPage() {
   }, [])
 
   const getExpiryBadge = (expiresAt: string | null) => {
-    if (!expiresAt) return null
+    if (!expiresAt || !mounted) return null
     const exp = new Date(expiresAt)
     const now = new Date()
     const diffMs = exp.getTime() - now.getTime()
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
     if (diffMs < 0) {
-      return <span className="status-badge status-flagged" style={{ fontSize: 10 }}>Expired</span>
+      return <span className="status-badge status-flagged" style={{ fontSize: 10 }} suppressHydrationWarning>Expired</span>
     } else if (diffDays <= 3) {
-      return <span className="status-badge status-review" style={{ fontSize: 10 }}>Expires in {diffDays}d</span>
+      return <span className="status-badge status-review" style={{ fontSize: 10 }} suppressHydrationWarning>Expires in {diffDays}d</span>
     } else {
-      return <span style={{ fontSize: 11, color: '#94a3b8' }}>Expires in {diffDays}d</span>
+      return <span style={{ fontSize: 11, color: '#94a3b8' }} suppressHydrationWarning>Expires in {diffDays}d</span>
     }
   }
 
@@ -1757,7 +1757,9 @@ export default function SchoolDetailPage() {
                           'status-pending'
                         }`}>{b.status}</span>
                       </td>
-                      <td style={{ fontSize: 13, color: '#64748b' }}>{new Date(b.createdAt).toLocaleDateString()}</td>
+                      <td style={{ fontSize: 13, color: '#64748b' }} suppressHydrationWarning>
+                        {mounted ? new Date(b.createdAt).toLocaleDateString() : b.createdAt.split('T')[0]}
+                      </td>
                       <td style={{ textAlign: 'right' }}>
                         {b.status === "READY" || b.status === "DOWNLOADED" ? (
                           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
@@ -1938,7 +1940,9 @@ export default function SchoolDetailPage() {
                   </div>
                   <div>
                     <div style={{ fontSize: 11, color: '#94a3b8' }}>Submitted At</div>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: '#0f172a' }}>{new Date(selectedStudent.submittedAt).toLocaleString()}</div>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: '#0f172a' }} suppressHydrationWarning>
+                      {mounted ? new Date(selectedStudent.submittedAt).toLocaleString() : selectedStudent.submittedAt}
+                    </div>
                   </div>
                 </div>
               </div>
