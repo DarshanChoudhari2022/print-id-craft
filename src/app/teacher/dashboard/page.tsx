@@ -250,6 +250,23 @@ export default function TeacherDashboard() {
     setSavingEdit(false)
   }
 
+  const handleDeleteStudent = async (sid: string) => {
+    if (!confirm("Are you sure you want to delete this student? This action cannot be undone.")) return
+    try {
+      const res = await fetch(`/api/schools/${getSchoolId()}/students/${sid}`, {
+        method: "DELETE",
+      })
+      if (res.ok) {
+        toast.success("Student deleted successfully")
+        fetchData()
+      } else {
+        toast.error("Failed to delete student")
+      }
+    } catch (err) {
+      toast.error("An error occurred")
+    }
+  }
+
   const handleAddClass = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newClassName.trim()) return
@@ -588,6 +605,7 @@ export default function TeacherDashboard() {
                               setCommentStudentId(s.id)
                               setCommentText(s.teacherComment || "")
                             }}>💬</button>
+                            <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', color: '#dc2626', borderColor: '#fca5a5' }} onClick={() => handleDeleteStudent(s.id)} title="Delete">🗑️</button>
                           </div>
                         </td>
                       </tr>

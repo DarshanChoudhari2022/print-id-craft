@@ -40,8 +40,10 @@ export default withAuth(
       // Each route handler validates schoolId from session, so data isolation is enforced there.
       const teacherAllowed =
         /\/api\/schools\/[^/]+\/template/.test(path) ||
+        /\/api\/schools\/[^/]+\/students\/[^/]+$/.test(path) ||
         /\/api\/schools\/[^/]+\/students\/[^/]+\/(flag|status)/.test(path) ||
-        /\/api\/schools\/[^/]+\/export\//.test(path)
+        /\/api\/schools\/[^/]+\/export\//.test(path) ||
+        /\/api\/schools\/[^/]+\/classes/.test(path)
       
       if (token?.role !== "MANUFACTURER" && !(token?.role === "TEACHER" && teacherAllowed)) {
         return addSecurityHeaders(NextResponse.json({ error: "Forbidden" }, { status: 403 }))
@@ -54,14 +56,20 @@ export default withAuth(
       }
     }
 
-    // Login redirect if already authenticated
+    // Login redirect if already authenticated — only redirect to dashboard
+    // if the user is visiting the correct portal for their role
     if (path === "/login" && token) {
-      if (token.role === "MANUFACTURER") {
+      const mode = req.nextUrl.searchParams.get("mode")
+      const isAdminPortal = mode === "admin"
+
+      if (token.role === "MANUFACTURER" && isAdminPortal) {
         return addSecurityHeaders(NextResponse.redirect(new URL("/dashboard", req.url)))
       }
-      if (token.role === "TEACHER") {
+      if (token.role === "TEACHER" && !isAdminPortal) {
         return addSecurityHeaders(NextResponse.redirect(new URL("/teacher/dashboard", req.url)))
       }
+      // If role doesn't match the portal (e.g., manufacturer on teacher login),
+      // don't redirect — let the login page handle it
     }
 
     // Add security headers to all responses

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, Suspense } from "react"
-import { signIn } from "next-auth/react"
+import { signIn, signOut, getSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 
@@ -29,7 +29,26 @@ function LoginForm() {
       })
 
       if (res?.error) {
-        toast.error(res.error || "Login failed")
+        // Show appropriate error message based on portal type
+        if (isAdminMode) {
+          toast.error("Invalid credentials. Only manufacturer accounts can login here.")
+        } else {
+          toast.error("Invalid credentials. Only teacher accounts can login here.")
+        }
+        setLoading(false)
+        return
+      }
+
+      // Post-login role verification — double-check that the session role matches
+      const session = await getSession()
+      if (session?.user?.role && session.user.role !== role) {
+        // Role mismatch — force sign out immediately
+        await signOut({ redirect: false })
+        if (role === "TEACHER") {
+          toast.error("This is the Teacher Login portal. Manufacturer accounts cannot login here.")
+        } else {
+          toast.error("This is the Manufacturer portal. Teacher accounts cannot login here.")
+        }
         setLoading(false)
         return
       }

@@ -89,3 +89,40 @@ export async function PATCH(
     return NextResponse.json({ error: error?.message || "Update failed" }, { status: 500 })
   }
 }
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: { id: string; sid: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const role = session.user?.role
+    if (role !== "MANUFACTURER" && role !== "TEACHER") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Check teacher access to this student
+    if (role === "TEACHER" && !session.user.isMainTeacher && session.user.classId) {
+      const student = await prisma.student.findFirst({
+        where: { id: params.sid, schoolId: params.id },
+        select: { classId: true },
+      })
+      if (!student || student.classId !== session.user.classId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+      }
+    }
+
+    await prisma.student.delete({
+      where: { id: params.sid, schoolId: params.id },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("Delete student error:", error)
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+  }
+}

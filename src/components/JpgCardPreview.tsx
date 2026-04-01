@@ -211,9 +211,9 @@ export default function JpgCardPreview({
       <canvas
         ref={canvasRef}
         style={{
-          width: dimensions.width / (scale > 1 ? scale : 1),
-          height: dimensions.height / (scale > 1 ? scale : 1),
-          maxWidth: "100%",
+          width: "100%",
+          height: "auto",
+          maxWidth: Math.round(dimensions.width / (scale > 1 ? scale : 1)),
           borderRadius: 12,
           boxShadow: "0 10px 40px rgba(0,0,0,0.12)",
         }}

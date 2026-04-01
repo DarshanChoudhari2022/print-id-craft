@@ -124,6 +124,10 @@ export default function SubmitPage() {
       .then(data => {
         if (data.success) {
           setConfig(data.data)
+          // Auto-populate class in formData so template preview always has it
+          if (data.data.className) {
+            setFormData(prev => ({ ...prev, class: data.data.className }))
+          }
           setStep("form")
         } else {
           setErrorMsg(data.error || "Invalid link")
@@ -317,7 +321,7 @@ export default function SubmitPage() {
                   <JpgCardPreview
                     templateImageUrl={config.templateImageUrl}
                     fieldMappings={config.fieldMappings}
-                    formData={{ ...formData, class: config.className }}
+                    formData={formData}
                     studentPhoto={croppedPhoto}
                     scale={1}
                     watermark="Wise Melon"
@@ -358,7 +362,7 @@ export default function SubmitPage() {
                   <JpgCardPreview
                     templateImageUrl={config.templateImageUrl}
                     fieldMappings={config.fieldMappings}
-                    formData={{ ...formData, class: config.className }}
+                    formData={formData}
                     studentPhoto={croppedPhoto}
                     scale={1}
                     watermark="Wise Melon"
@@ -525,6 +529,20 @@ export default function SubmitPage() {
           {step === "form" && (
             <form onSubmit={handleFormSubmit}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Auto-filled Class field - read only */}
+                {config?.className && (
+                  <div className="form-group">
+                    <label>Class</label>
+                    <input
+                      type="text"
+                      value={config.className}
+                      readOnly
+                      disabled
+                      style={{ background: '#f1f5f9', color: '#475569', fontWeight: 600, cursor: 'not-allowed', border: '1px solid #e2e8f0' }}
+                    />
+                    <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>Auto-assigned based on your form link</span>
+                  </div>
+                )}
                 {config?.fieldConfig.filter(f => f.key !== "class").map(field => (
                   <div key={field.key} className="form-group">
                     <label>
