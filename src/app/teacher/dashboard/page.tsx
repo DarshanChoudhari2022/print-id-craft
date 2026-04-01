@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { useSession, signOut } from "next-auth/react"
 import IDCardPreview from "@/components/IDCardPreview"
+import JpgCardPreview from "@/components/JpgCardPreview"
 import dynamic from "next/dynamic"
 import { toast } from "sonner"
 
@@ -67,6 +68,9 @@ export default function TeacherDashboard() {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
   const [addingTeacher, setAddingTeacher] = useState(false)
+
+  // Show password once after sub-teacher creation
+  const [lastCreatedTeacher, setLastCreatedTeacher] = useState<{ name: string; email: string; password: string } | null>(null)
 
   // Teacher comment for student
   const [commentStudentId, setCommentStudentId] = useState<string | null>(null)
@@ -185,26 +189,30 @@ export default function TeacherDashboard() {
     e.preventDefault()
     setAddingTeacher(true)
     try {
+      const plainPw = newTeacherPassword
       const res = await fetch("/api/teacher/sub-teachers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newTeacherName,
           email: newTeacherEmail,
-          password: newTeacherPassword,
+          password: plainPw,
           classId: newTeacherClassId,
         }),
       })
       const json = await res.json()
       if (json.success) {
+        // Show password once so the main teacher can share it
+        setLastCreatedTeacher({ name: newTeacherName, email: newTeacherEmail, password: plainPw })
         setNewTeacherName("")
         setNewTeacherEmail("")
         setNewTeacherPassword("")
         setNewTeacherClassId("")
         setShowAddTeacher(false)
         fetchSubTeachers()
+        toast.success(`Sub-teacher "${newTeacherName}" created successfully!`)
       } else {
-        alert(json.error || "Failed to add teacher")
+        toast.error(json.error || "Failed to add teacher")
       }
     } catch (err) { console.error(err) }
     setAddingTeacher(false)
@@ -599,6 +607,38 @@ export default function TeacherDashboard() {
               </button>
             </div>
 
+            {/* Created Teacher Credentials Banner */}
+            {lastCreatedTeacher && (
+              <div style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', borderRadius: 12, padding: 20, marginBottom: 20, border: '1px solid #86efac', position: 'relative' }}>
+                <button onClick={() => setLastCreatedTeacher(null)} style={{ position: 'absolute', top: 8, right: 12, background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#64748b' }}>✕</button>
+                <h4 style={{ fontSize: 14, fontWeight: 700, color: '#15803d', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>✅ Sub-Teacher Created Successfully!</h4>
+                <p style={{ fontSize: 12, color: '#16a34a', marginBottom: 12 }}>Share these credentials with the teacher. The password will not be shown again.</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ background: 'white', borderRadius: 8, padding: 12, border: '1px solid #bbf7d0' }}>
+                    <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Name</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{lastCreatedTeacher.name}</div>
+                  </div>
+                  <div style={{ background: 'white', borderRadius: 8, padding: 12, border: '1px solid #bbf7d0' }}>
+                    <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Login Email</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', wordBreak: 'break-all' }}>{lastCreatedTeacher.email}</div>
+                  </div>
+                  <div style={{ background: 'white', borderRadius: 8, padding: 12, border: '1px solid #bbf7d0' }}>
+                    <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Password</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#dc2626', fontFamily: 'monospace', letterSpacing: 1 }}>{lastCreatedTeacher.password}</div>
+                  </div>
+                  <div style={{ background: 'white', borderRadius: 8, padding: 12, border: '1px solid #bbf7d0' }}>
+                    <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Login URL</div>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: '#3b82f6' }}>{mounted ? `${window.location.origin}/login` : '/login'}</div>
+                  </div>
+                </div>
+                <button className="btn btn-outline" style={{ marginTop: 12, fontSize: 12, padding: '6px 16px', color: '#16a34a', borderColor: '#16a34a' }} onClick={() => {
+                  const text = `Sub-Teacher Login Credentials\n\nName: ${lastCreatedTeacher.name}\nEmail: ${lastCreatedTeacher.email}\nPassword: ${lastCreatedTeacher.password}\nLogin URL: ${window.location.origin}/login`
+                  navigator.clipboard.writeText(text)
+                  toast.success('Credentials copied to clipboard!')
+                }}>📋 Copy All Credentials</button>
+              </div>
+            )}
+
             {/* Add Teacher Form */}
             {showAddTeacher && (
               <form onSubmit={handleAddSubTeacher} style={{ background: '#f8fafc', borderRadius: 12, padding: 20, marginBottom: 24, border: '1px solid #e2e8f0' }}>
@@ -782,30 +822,61 @@ export default function TeacherDashboard() {
                   <div>
                     <h3 style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>ID Card Preview</h3>
                     <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6, textAlign: 'center' }}>FRONT</div>
-                        <IDCardPreview
-                          layout={templateData.frontLayout || []}
-                          widthMm={templateData.cardWidthMm || 85.6}
-                          heightMm={templateData.cardHeightMm || 54.0}
-                          formData={selectedStudent.formData as Record<string, string>}
-                          studentPhoto={selectedStudent.photoUrl}
-                          serialNumber={selectedStudent.serialNumber}
-                          scale={3.2}
-                        />
-                      </div>
-                      {templateData.hasBackSide && (
-                        <div>
-                          <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6, textAlign: 'center' }}>BACK</div>
-                          <IDCardPreview
-                            layout={templateData.backLayout || []}
-                            widthMm={templateData.cardWidthMm || 85.6}
-                            heightMm={templateData.cardHeightMm || 54.0}
-                            formData={selectedStudent.formData as Record<string, string>}
-                            serialNumber={selectedStudent.serialNumber}
-                            scale={3.2}
-                          />
-                        </div>
+                      {templateData.templateImageUrl ? (
+                        <>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6, textAlign: 'center' }}>FRONT SIDE</div>
+                            <JpgCardPreview
+                              templateImageUrl={templateData.templateImageUrl}
+                              fieldMappings={templateData.fieldMappings || []}
+                              formData={selectedStudent.formData as Record<string, string>}
+                              studentPhoto={selectedStudent.photoUrl}
+                              scale={0.5}
+                              watermark="PREVIEW ONLY"
+                            />
+                          </div>
+                          {templateData.hasBackSide && templateData.backTemplateImageUrl && (
+                            <div>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6, textAlign: 'center' }}>BACK SIDE</div>
+                              <JpgCardPreview
+                                templateImageUrl={templateData.backTemplateImageUrl}
+                                fieldMappings={templateData.backFieldMappings || []}
+                                formData={selectedStudent.formData as Record<string, string>}
+                                studentPhoto={selectedStudent.photoUrl}
+                                scale={0.5}
+                                watermark="PREVIEW ONLY"
+                              />
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6, textAlign: 'center' }}>FRONT</div>
+                            <IDCardPreview
+                              layout={templateData.frontLayout || []}
+                              widthMm={templateData.cardWidthMm || 85.6}
+                              heightMm={templateData.cardHeightMm || 54.0}
+                              formData={selectedStudent.formData as Record<string, string>}
+                              studentPhoto={selectedStudent.photoUrl}
+                              serialNumber={selectedStudent.serialNumber}
+                              scale={3.2}
+                            />
+                          </div>
+                          {templateData.hasBackSide && (
+                            <div>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6, textAlign: 'center' }}>BACK</div>
+                              <IDCardPreview
+                                layout={templateData.backLayout || []}
+                                widthMm={templateData.cardWidthMm || 85.6}
+                                heightMm={templateData.cardHeightMm || 54.0}
+                                formData={selectedStudent.formData as Record<string, string>}
+                                serialNumber={selectedStudent.serialNumber}
+                                scale={3.2}
+                              />
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>

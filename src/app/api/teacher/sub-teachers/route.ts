@@ -109,7 +109,7 @@ export async function POST(req: Request) {
       },
     })
 
-    return NextResponse.json({ success: true, data: teacher }, { status: 201 })
+    return NextResponse.json({ success: true, data: { ...teacher, plainPassword: validated.password } }, { status: 201 })
   } catch (error) {
     console.error("POST /api/teacher/sub-teachers error:", error)
     if (error instanceof z.ZodError) {

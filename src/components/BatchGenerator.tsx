@@ -15,6 +15,7 @@ type FieldMapping = {
   fontColor: string
   fontWeight: "normal" | "bold"
   fontFamily: string
+  textAlign?: "left" | "center" | "right"
 }
 
 type StudentRenderData = {
@@ -158,18 +159,20 @@ async function renderIdCard(
         }
 
         ctx.fillStyle = field.fontColor || "#0f172a"
-        ctx.textAlign = "left"
+        const align = field.textAlign || "left"
+        ctx.textAlign = align
         ctx.textBaseline = "middle"
         ctx.save()
         ctx.beginPath()
         ctx.rect(fx, fy, fw, fh)
         ctx.clip()
-        ctx.fillText(value, fx + padding, fy + fh / 2)
+        const textX = align === "center" ? fx + fw / 2 : align === "right" ? fx + fw - padding : fx + padding
+        ctx.fillText(value, textX, fy + fh / 2)
         ctx.restore()
       }
     }
   }
-  return canvas.toDataURL("image/jpeg", 0.9)
+  return canvas.toDataURL("image/jpeg", 0.95)
 }
 
 async function downloadAsZip(
@@ -180,15 +183,19 @@ async function downloadAsZip(
   const zip = new JSZip()
   for (const card of cards) {
     const base64 = card.dataUrl.split(",")[1]
-    zip.file(card.name, base64, { base64: true })
+    if (base64) {
+      zip.file(card.name, base64, { base64: true })
+    }
   }
-  const blob = await zip.generateAsync({ type: "blob" })
+  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } })
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
   a.href = url
   a.download = zipName
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 5000)
 }
 
 export default function BatchGenerator({ schoolId, schoolName, classes }: BatchGeneratorProps) {
@@ -196,7 +203,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
   const [statusFilter, setStatusFilter] = useState("APPROVED")
   const [generating, setGenerating] = useState(false)
   const [progress, setProgress] = useState({ current: 0, total: 0, status: "" })
-  const [previewCards, setPreviewCards] = useState<{ serialNumber: string; dataUrl: string }[]>([])
+  const [previewCards, setPreviewCards] = useState<{ serialNumber: string; frontDataUrl: string; backDataUrl?: string }[]>([])
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true)
@@ -216,22 +223,45 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         return
       }
 
-      const { templateImageUrl, fieldMappings, students, totalCount } = data.data
-      setProgress({ current: 0, total: totalCount, status: "Rendering..." })
+      const { templateImageUrl, fieldMappings, backTemplateImageUrl, backFieldMappings, hasBackSide, students, totalCount } = data.data
+      
+      if (!templateImageUrl) {
+        toast.error("No template image configured. Please upload a template first.")
+        setGenerating(false)
+        return
+      }
 
-      const renderedCards: any[] = []
-      const CHUNK_SIZE = 4 // Parallel rendering
+      setProgress({ current: 0, total: totalCount, status: "Rendering front side..." })
+
+      // Pre-load template images
+      await getCachedImage(templateImageUrl)
+      if (hasBackSide && backTemplateImageUrl) {
+        await getCachedImage(backTemplateImageUrl)
+      }
+
+      const renderedCards: { name: string; dataUrl: string; id: string; serialNumber: string; frontDataUrl: string; backDataUrl?: string }[] = []
+      const CHUNK_SIZE = 4
 
       for (let i = 0; i < students.length; i += CHUNK_SIZE) {
         const chunk = students.slice(i, i + CHUNK_SIZE)
-        const promises = chunk.map(async (student: any, idx: number) => {
+        const promises = chunk.map(async (student: any) => {
           try {
-            const dataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, 1)
+            // Render front
+            const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, 1)
+            
+            // Render back (if applicable)
+            let backDataUrl: string | undefined
+            if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
+              backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, 1)
+            }
+
             return {
-              name: `${student.serialNumber}.jpg`,
-              serialNumber: student.serialNumber,
-              dataUrl,
+              name: `${student.serialNumber}_front.jpg`,
+              dataUrl: frontDataUrl,
               id: student.id,
+              serialNumber: student.serialNumber,
+              frontDataUrl,
+              backDataUrl,
             }
           } catch (err) {
             console.error(`Error rendering ${student.serialNumber}`, err)
@@ -253,12 +283,28 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         await new Promise(r => setTimeout(r, 0))
       }
 
-      setPreviewCards(renderedCards.slice(0, 8))
+      // Show preview (first 8)
+      setPreviewCards(renderedCards.slice(0, 8).map(c => ({
+        serialNumber: c.serialNumber,
+        frontDataUrl: c.frontDataUrl,
+        backDataUrl: c.backDataUrl,
+      })))
 
-      setProgress({ current: totalCount, total: totalCount, status: "Zipping files..." })
+      // Build zip with both front and back
+      setProgress({ current: totalCount, total: totalCount, status: "Creating ZIP file..." })
+      
+      const zipCards: { name: string; dataUrl: string }[] = []
+      for (const card of renderedCards) {
+        zipCards.push({ name: `${card.serialNumber}_front.jpg`, dataUrl: card.frontDataUrl })
+        if (card.backDataUrl) {
+          zipCards.push({ name: `${card.serialNumber}_back.jpg`, dataUrl: card.backDataUrl })
+        }
+      }
+
       const className = classes.find((c) => c.id === selectedClassId)?.name || "All"
-      await downloadAsZip(renderedCards, `${schoolName}-${className}.zip`)
+      await downloadAsZip(zipCards, `${schoolName}-${className}-IDCards.zip`)
 
+      // Mark as printed
       const studentIds = renderedCards.map((c) => c.id)
       await fetch(`/api/schools/${schoolId}/generate`, {
         method: "POST",
@@ -266,11 +312,11 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         body: JSON.stringify({ studentIds }),
       })
 
-      setProgress({ current: totalCount, total: totalCount, status: "Done!" })
-      toast.success(`${renderedCards.length} cards exported!`)
+      setProgress({ current: totalCount, total: totalCount, status: "Done! ✅" })
+      toast.success(`${renderedCards.length} ID cards exported! (${zipCards.length} images in ZIP)`)
     } catch (err: any) {
       console.error(err)
-      toast.error("Generation failed")
+      toast.error("Generation failed: " + (err?.message || "Unknown error"))
     } finally {
       setGenerating(false)
     }
@@ -304,10 +350,10 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           </div>
           <div>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", marginBottom: 2 }}>
-              Generate ID Cards
+              Generate & Download ID Cards
             </h3>
             <p style={{ fontSize: 13, color: "#94a3b8" }}>
-              Render student data onto the JPG template and download as ZIP
+              Render print-quality ID cards and download as ZIP (manufacturer only)
             </p>
           </div>
         </div>
@@ -391,7 +437,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
               Generating...
             </>
           ) : (
-            <>🖨️ Generate & Download ID Cards</>
+            <>🖨️ Generate & Download ID Cards (ZIP)</>
           )}
         </button>
       </div>
@@ -434,7 +480,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
               style={{
                 height: "100%",
                 borderRadius: 4,
-                background: progress.status === "Done!"
+                background: progress.status.includes("Done")
                   ? "linear-gradient(90deg, #22c55e, #16a34a)"
                   : "linear-gradient(90deg, #3b82f6, #2563eb)",
                 width: progress.total > 0
@@ -469,9 +515,10 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           >
             {previewCards.map((card) => (
               <div key={card.serialNumber}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textAlign: "center" }}>FRONT</div>
                 <img
-                  src={card.dataUrl}
-                  alt={`ID Card ${card.serialNumber}`}
+                  src={card.frontDataUrl}
+                  alt={`ID Card Front ${card.serialNumber}`}
                   style={{
                     width: "100%",
                     borderRadius: 8,
@@ -479,6 +526,21 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                     boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
                   }}
                 />
+                {card.backDataUrl && (
+                  <>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, marginTop: 8, textAlign: "center" }}>BACK</div>
+                    <img
+                      src={card.backDataUrl}
+                      alt={`ID Card Back ${card.serialNumber}`}
+                      style={{
+                        width: "100%",
+                        borderRadius: 8,
+                        border: "1px solid #e2e8f0",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                      }}
+                    />
+                  </>
+                )}
                 <div
                   style={{
                     textAlign: "center",

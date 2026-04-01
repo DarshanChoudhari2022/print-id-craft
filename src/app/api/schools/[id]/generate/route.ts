@@ -89,6 +89,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       data: {
         templateImageUrl: template.templateImageUrl,
         fieldMappings: fieldMappings,
+        backTemplateImageUrl: template.backTemplateImageUrl || null,
+        backFieldMappings: (template.backFieldMappings as any[]) || [],
+        hasBackSide: template.hasBackSide || false,
         students: renderData,
         totalCount: renderData.length,
       },

@@ -13,7 +13,10 @@ const templateSchema = z.object({
   orientation: z.enum(["PORTRAIT", "LANDSCAPE"]).optional(),
   fieldConfig: z.any().optional(),
   templateImageUrl: z.string().optional(),
+  backTemplateImageUrl: z.string().optional().nullable(),
   fieldMappings: z.any().optional(),
+  backFieldMappings: z.any().optional(),
+  hasBackSide: z.boolean().optional(),
 })
 
 /**

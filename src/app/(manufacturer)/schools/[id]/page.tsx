@@ -1954,18 +1954,34 @@ export default function SchoolDetailPage() {
                 </div>
               )}
 
-              {/* JPG Template Preview */}
               {templateData?.templateImageUrl && templateData?.fieldMappings && (templateData.fieldMappings as any[]).length > 0 && (
                 <div style={{ marginBottom: 24 }}>
                   <h3 style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>ID Card Preview (JPG Template)</h3>
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <JpgCardPreview
-                      templateImageUrl={templateData.templateImageUrl}
-                      fieldMappings={templateData.fieldMappings as any[]}
-                      formData={selectedStudent.formData as Record<string, string>}
-                      studentPhoto={selectedStudent.photoUrl}
-                      scale={1}
-                    />
+                  <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6, textAlign: 'center' }}>FRONT SIDE</div>
+                      <JpgCardPreview
+                        templateImageUrl={templateData.templateImageUrl}
+                        fieldMappings={templateData.fieldMappings as any[]}
+                        formData={selectedStudent.formData as Record<string, string>}
+                        studentPhoto={selectedStudent.photoUrl}
+                        scale={1}
+                        watermark="PREVIEW"
+                      />
+                    </div>
+                    {templateData.hasBackSide && templateData.backTemplateImageUrl && (
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6, textAlign: 'center' }}>BACK SIDE</div>
+                        <JpgCardPreview
+                          templateImageUrl={templateData.backTemplateImageUrl}
+                          fieldMappings={templateData.backFieldMappings as any[] || []}
+                          formData={selectedStudent.formData as Record<string, string>}
+                          studentPhoto={selectedStudent.photoUrl}
+                          scale={1}
+                          watermark="PREVIEW"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

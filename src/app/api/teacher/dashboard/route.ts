@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Run all queries in parallel — use DB-level aggregation for stats
-    const [school, classes, students, totalCount, statusCounts] = await Promise.all([
+    const [school, classes, students, totalCount, statusCounts, template] = await Promise.all([
       prisma.school.findUnique({
         where: { id: schoolId as string },
         select: { name: true, logoUrl: true },
@@ -89,6 +89,10 @@ export async function GET(req: NextRequest) {
         where: studentWhere,
         _count: { status: true },
       }),
+      // Include template meta for card preview in modal
+      prisma.template.findUnique({
+        where: { schoolId: schoolId as string }
+      })
     ])
 
     // Build stats from groupBy result
@@ -112,6 +116,7 @@ export async function GET(req: NextRequest) {
         classes,
         students,
         stats,
+        template,
         isMainTeacher,
         assignedClassId,
       },
