@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { signOut } from "next-auth/react"
 import Link from "next/link"
 
 type DashboardData = {
@@ -24,16 +25,21 @@ export default function ManufacturerDashboard() {
           cache: "no-store",
           headers: { "Cache-Control": "no-cache" }
         })
+        // If unauthorized, redirect to login
+        if (res.status === 401) {
+          signOut({ callbackUrl: "/login?mode=admin" })
+          return
+        }
         const json = await res.json()
         if (json.success) {
           const schools = json.data
           // Use DB-aggregated stats from API (no client-side counting)
           const s = json.stats || {}
           setData({
-            totalSchools: s.totalSchools || schools.length,
-            totalStudents: s.totalStudents || 0,
-            pendingBatches: s.totalBatches || 0,
-            studentsThisMonth: s.totalStudents || 0,
+            totalSchools: s.totalSchools ?? schools.length,
+            totalStudents: s.totalStudents ?? 0,
+            pendingBatches: s.totalBatches ?? 0,
+            studentsThisMonth: s.totalStudents ?? 0,
             recentSchools: schools.slice(0, 5),
           })
         }

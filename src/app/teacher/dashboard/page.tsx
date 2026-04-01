@@ -92,6 +92,11 @@ export default function TeacherDashboard() {
         cache: "no-store",
         headers: { "Cache-Control": "no-cache" }
       })
+      // If unauthorized (expired session), redirect to login
+      if (res.status === 401) {
+        signOut({ callbackUrl: "/login" })
+        return
+      }
       const json = await res.json()
       if (json.success) setData(json.data)
     } catch (err) {
