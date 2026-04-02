@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { uploadWithRetry, getPublicUrl, ensureStorageBucket } from "@/lib/supabase"
 
+export const maxDuration = 60; // Vercel function timeout config
+
 const BUCKET = "student-photos"
 const MAX_FILES = 500
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB per photo

@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { prisma, batchExecute } from "@/lib/prisma"
 import { uploadWithRetry, getPublicUrl } from "@/lib/supabase"
 import * as XLSX from "xlsx"
 import QRCode from "qrcode"
+import { randomUUID } from "crypto"
+
+export const maxDuration = 60; // Vercel function timeout config
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -60,8 +63,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: "No data rows found in the spreadsheet." }, { status: 400 })
     }
 
-    if (rawRows.length > 2000) {
-      return NextResponse.json({ error: "Maximum 2000 students per import. Your file has " + rawRows.length + " rows." }, { status: 400 })
+    if (rawRows.length > 5000) {
+      return NextResponse.json({ error: "Maximum 5000 students per import. Your file has " + rawRows.length + " rows." }, { status: 400 })
     }
 
     // Field config from template
@@ -343,70 +346,70 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       }
     }
 
-    // Bulk create students
+    // Bulk prepare students
+    const studentsToCreate = validRows.map((row) => {
+      const serialNumber = `${schoolCode}-${String(nextNum).padStart(4, "0")}`
+      nextNum++
+      return {
+        id: randomUUID(),
+        schoolId,
+        classId: row.classId,
+        serialNumber,
+        formData: row.formData,
+        photoUrl: "",
+        status: "SUBMITTED" as any,
+        _row: row,
+      }
+    })
+
     const createdStudents: Array<{ id: string; serialNumber: string; name: string; className: string; photoId: string }> = []
     const importErrors: Array<{ row: number; error: string }> = []
 
-    for (const row of validRows) {
-      const serialNumber = `${schoolCode}-${String(nextNum).padStart(4, "0")}`
-      nextNum++
-
+    // Batch create students (createMany in chunks of 500)
+    const CHUNK_SIZE = 500;
+    for (let i = 0; i < studentsToCreate.length; i += CHUNK_SIZE) {
+      const chunk = studentsToCreate.slice(i, i + CHUNK_SIZE);
       try {
-        const student = await prisma.student.create({
-          data: {
-            schoolId,
-            classId: row.classId,
-            serialNumber,
-            formData: row.formData,
-            photoUrl: "",
-            status: "SUBMITTED",
-          },
-        })
+        await prisma.student.createMany({
+          data: chunk.map((s) => {
+            const { _row, ...data } = s;
+            return data;
+          }),
+          skipDuplicates: true,
+        });
 
-        createdStudents.push({
-          id: student.id,
-          serialNumber,
-          name: row.formData.fullName || row.formData["Full Name"] || "Unknown",
-          className: row.className,
-          photoId: row.photoId,
-        })
-
-        // Generate QR code in background (don't block)
-        generateQR(student.id, schoolId, serialNumber).catch(err => {
-          console.error(`QR generation failed for ${serialNumber}:`, err)
-        })
+        // Add to created list
+        chunk.forEach((s) => {
+          createdStudents.push({
+            id: s.id,
+            serialNumber: s.serialNumber,
+            name: s._row.formData.fullName || s._row.formData["Full Name"] || "Unknown",
+            className: s._row.className,
+            photoId: s._row.photoId,
+          });
+        });
       } catch (err: any) {
-        // Unique constraint violation on serialNumber — increment and retry
-        if (err?.code === "P2002") {
-          nextNum++
-          try {
-            const retrySerial = `${schoolCode}-${String(nextNum).padStart(4, "0")}`
-            nextNum++
-            const student = await prisma.student.create({
-              data: {
-                schoolId,
-                classId: row.classId,
-                serialNumber: retrySerial,
-                formData: row.formData,
-                photoUrl: "",
-                status: "SUBMITTED",
-              },
-            })
-            createdStudents.push({
-              id: student.id,
-              serialNumber: retrySerial,
-              name: row.formData.fullName || "Unknown",
-              className: row.className,
-              photoId: row.photoId,
-            })
-            generateQR(student.id, schoolId, retrySerial).catch(() => {})
-          } catch (retryErr: any) {
-            importErrors.push({ row: row.rowNum, error: retryErr?.message || "Failed to create student" })
-          }
-        } else {
-          importErrors.push({ row: row.rowNum, error: err?.message || "Failed to create student" })
-        }
+        chunk.forEach((s) => {
+          importErrors.push({ row: s._row.rowNum, error: err?.message || "Batch insert failed" });
+        });
       }
+    }
+
+    // Batch QR generation (concurrency of 10 to avoid Supabase rate limits/socket exhaustion)
+    if (createdStudents.length > 0) {
+      // run in background without awaiting, but batched internally
+      const qrsToGenerate = createdStudents.map(s => ({
+        id: s.id, serialNumber: s.serialNumber
+      }))
+      
+      const generateAllQrs = async () => {
+        await batchExecute(
+          qrsToGenerate,
+          (s) => generateQR(s.id, schoolId, s.serialNumber),
+          10
+        )
+      }
+      generateAllQrs().catch(console.error)
     }
 
     return NextResponse.json({

@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import * as XLSX from "xlsx"
 
+export const maxDuration = 60; // Vercel function timeout config
+
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions)
@@ -27,17 +29,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     if (classId) where.classId = classId
     if (status) where.status = status
 
-    const [students, school] = await Promise.all([
-      prisma.student.findMany({
-        where,
-        include: { class: { select: { name: true } } },
-        orderBy: { serialNumber: "asc" },
-      }),
-      prisma.school.findUnique({
-        where: { id: params.id },
-        select: { name: true },
-      }),
-    ])
+    const school = await prisma.school.findUnique({
+      where: { id: params.id },
+      select: { name: true },
+    })
 
     // Build worksheet data
     const wsData: any[][] = [
@@ -47,23 +42,44 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       ["Serial Number", "Full Name", "Class", "Roll No.", "Date of Birth", "Blood Group", "Father Name", "Mother Name", "Phone", "Address", "Status", "Submitted At"],
     ]
 
-    students.forEach((s) => {
-      const fd = s.formData as any
-      wsData.push([
-        s.serialNumber,
-        fd.fullName || "",
-        s.class?.name || "",
-        fd.rollNo || "",
-        fd.dob || "",
-        fd.bloodGroup || "",
-        fd.fatherName || "",
-        fd.motherName || "",
-        fd.phone || "",
-        fd.address || "",
-        s.status,
-        s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : "",
-      ])
-    })
+    let cursor: string | undefined = undefined;
+    let hasMore = true;
+
+    while (hasMore) {
+      const students: any[] = await prisma.student.findMany({
+        where,
+        include: { class: { select: { name: true } } },
+        orderBy: { id: "asc" },
+        take: 500,
+        skip: cursor ? 1 : 0,
+        ...(cursor ? { cursor: { id: cursor } } : {}),
+      });
+
+      if (students.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      students.forEach((s) => {
+        const fd = s.formData as any
+        wsData.push([
+          s.serialNumber,
+          fd.fullName || "",
+          s.class?.name || "",
+          fd.rollNo || "",
+          fd.dob || "",
+          fd.bloodGroup || "",
+          fd.fatherName || "",
+          fd.motherName || "",
+          fd.phone || "",
+          fd.address || "",
+          s.status,
+          s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : "",
+        ])
+      })
+
+      cursor = students[students.length - 1].id;
+    }
 
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet(wsData)

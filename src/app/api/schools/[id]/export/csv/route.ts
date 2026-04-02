@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
+export const maxDuration = 60; // Vercel function timeout config
+
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions)
@@ -26,40 +28,61 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     if (classId) where.classId = classId
     if (status) where.status = status
 
-    const students = await prisma.student.findMany({
-      where,
-      include: { class: { select: { name: true } } },
-      orderBy: { serialNumber: "asc" },
-    })
-
     const school = await prisma.school.findUnique({
       where: { id: params.id },
       select: { name: true },
     })
 
-    // Build CSV
-    const headers = "Serial Number,Full Name,Class,Roll No.,Date of Birth,Blood Group,Father Name,Mother Name,Phone,Address,Status,Submitted At"
-    const rows = students.map((s) => {
-      const fd = s.formData as any
-      return [
-        s.serialNumber,
-        fd.fullName || "",
-        s.class?.name || "",
-        fd.rollNo || "",
-        fd.dob || "",
-        fd.bloodGroup || "",
-        fd.fatherName || "",
-        fd.motherName || "",
-        fd.phone || "",
-        fd.address || "",
-        s.status,
-        s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : "",
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")
-    })
+    const stream = new ReadableStream({
+      async start(controller) {
+        const headers = "Serial Number,Full Name,Class,Roll No.,Date of Birth,Blood Group,Father Name,Mother Name,Phone,Address,Status,Submitted At";
+        controller.enqueue(new TextEncoder().encode(headers + "\n"));
 
-    const csv = [headers, ...rows].join("\n")
+        let lastId: string | undefined = undefined;
+        let hasMore = true;
 
-    return new NextResponse(csv, {
+        while (hasMore) {
+          const students = await prisma.student.findMany({
+            where,
+            include: { class: { select: { name: true } } },
+            orderBy: { id: "asc" },
+            take: 500,
+            skip: lastId ? 1 : 0,
+            ...(lastId ? { cursor: { id: lastId } } : {}),
+          });
+
+          if (students.length === 0) {
+            hasMore = false;
+            break;
+          }
+
+          const rows = students.map((s) => {
+            const fd = s.formData as any;
+            return [
+              s.serialNumber,
+              fd.fullName || "",
+              s.class?.name || "",
+              fd.rollNo || "",
+              fd.dob || "",
+              fd.bloodGroup || "",
+              fd.fatherName || "",
+              fd.motherName || "",
+              fd.phone || "",
+              fd.address || "",
+              s.status,
+              s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : "",
+            ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(",");
+          }).join("\n");
+
+          controller.enqueue(new TextEncoder().encode(rows + "\n"));
+          lastId = students[students.length - 1].id;
+        }
+
+        controller.close();
+      }
+    });
+
+    return new NextResponse(stream, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="${school?.name || "students"}-export.csv"`,

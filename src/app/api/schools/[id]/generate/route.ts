@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
+export const maxDuration = 60; // Vercel function timeout config
+
 /**
  * GET /api/schools/[id]/generate?classId=xxx
  * 

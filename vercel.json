@@ -1,6 +1,12 @@
 {
   "buildCommand": "npm run build",
   "installCommand": "npm install --legacy-peer-deps",
+  "functions": {
+    "src/app/api/**/*": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  },
   "headers": [
     {
       "source": "/submit/(.*)",
