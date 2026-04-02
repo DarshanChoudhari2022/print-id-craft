@@ -1,0 +1,181 @@
+﻿
+> print-id-craft@0.1.0 build
+> next build
+
+node.exe :  ΓÜá Disabling 
+SWC Minifer will not be an 
+option in the next major 
+version. Please report any 
+issues you may be 
+experiencing to https://git
+hub.com/vercel/next.js/issu
+es
+At line:1 char:1
++ & "C:\Program 
+Files\nodejs/node.exe" "C:\
+Users\choud\AppData\Roaming
+\ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: ( ΓÜ  
+  á Disabling .../next.j   
+ s/issues:String) [], R    
+emoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+  Γû▓ Next.js 14.2.35
+  - Environments: .env
+
+   Creating an optimized production build ...
+ Γ£ô Compiled successfully
+   Skipping validation of types
+   Skipping linting
+   Collecting page data ...
+   Generating static pages (0/14) ...
+DB export error: n 
+[Error]: Dynamic server 
+usage: Route 
+/api/admin/export-db 
+couldn't be rendered 
+statically because it used 
+`headers`. See more info 
+here: https://nextjs.org/do
+cs/messages/dynamic-server-
+error
+    at d (C:\Users\choud\De
+sktop\print-id-craft\print-
+id-craft\.next\server\chunk
+s\8948.js:1:37427)
+    at d (C:\Users\choud\De
+sktop\print-id-craft\print-
+id-craft\.next\server\chunk
+s\7208.js:1:170248)
+    at a (C:\Users\choud\De
+sktop\print-id-craft\print-
+id-craft\.next\server\chunk
+s\7208.js:1:159881)
+    at d (C:\Users\choud\De
+sktop\print-id-craft\print-
+id-craft\.next\server\app\a
+pi\admin\export-db\route.js
+:1:1254)
+    at C:\Users\choud\Deskt
+op\print-id-craft\print-id-
+craft\node_modules\next\dis
+t\compiled\next-server\app-
+route.runtime.prod.js:6:384
+17
+    at C:\Users\choud\Deskt
+op\print-id-craft\print-id-
+craft\node_modules\next\dis
+t\server\lib\trace\tracer.j
+s:140:36
+    at 
+NoopContextManager.with (C:
+\Users\choud\Desktop\print-
+id-craft\print-id-craft\nod
+e_modules\next\dist\compile
+d\@opentelemetry\api\index.
+js:1:7062)
+    at ContextAPI.with (C:\
+Users\choud\Desktop\print-i
+d-craft\print-id-craft\node
+_modules\next\dist\compiled
+\@opentelemetry\api\index.j
+s:1:518)
+    at 
+NoopTracer.startActiveSpan 
+(C:\Users\choud\Desktop\pri
+nt-id-craft\print-id-craft\
+node_modules\next\dist\comp
+iled\@opentelemetry\api\ind
+ex.js:1:18093)
+    at ProxyTracer.startAct
+iveSpan (C:\Users\choud\Des
+ktop\print-id-craft\print-i
+d-craft\node_modules\next\d
+ist\compiled\@opentelemetry
+\api\index.js:1:18854) {
+  description: "Route 
+/api/admin/export-db 
+couldn't be rendered 
+statically because it used 
+`headers`. See more info 
+here: https://nextjs.org/do
+cs/messages/dynamic-server-
+error",
+  digest: 
+'DYNAMIC_SERVER_USAGE'
+}
+   Generating static pages (3/14) 
+   Generating static pages (6/14) 
+   Generating static pages (10/14) 
+ Γ£ô Generating static pages (14/14)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                            Size     First Load JS
+Γöî Γùï /                                                  55.2 kB         152 kB
+Γö£ Γùï /_not-found                                        159 B          88.5 kB
+Γö£ ╞Æ /api/admin/export-db                               0 B                0 B
+Γö£ ╞Æ /api/auth/[...nextauth]                            0 B                0 B
+Γö£ ╞Æ /api/force-logout                                  0 B                0 B
+Γö£ Γùï /api/health                                        0 B                0 B
+Γö£ ╞Æ /api/schools                                       0 B                0 B
+Γö£ ╞Æ /api/schools/[id]                                  0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/batches                          0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/batches/[bid]                    0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/batches/[bid]/download/back      0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/batches/[bid]/download/front     0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/batches/[bid]/download/manifest  0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/classes                          0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/classes/[cid]                    0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/export/csv                       0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/export/excel                     0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/fields                           0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/fields/reorder                   0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/generate                         0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/main-teacher                     0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/students                         0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/students/[sid]                   0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/students/[sid]/flag              0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/students/[sid]/status            0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/students/assign-photo            0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/students/bulk-photos             0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/students/import                  0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/students/import-template         0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/template                         0 B                0 B
+Γö£ ╞Æ /api/schools/[id]/templates                        0 B                0 B
+Γö£ ╞Æ /api/submit/[token]                                0 B                0 B
+Γö£ ╞Æ /api/submit/[token]/submit                         0 B                0 B
+Γö£ ╞Æ /api/teacher/dashboard                             0 B                0 B
+Γö£ ╞Æ /api/teacher/export/csv                            0 B                0 B
+Γö£ ╞Æ /api/teacher/export/excel                          0 B                0 B
+Γö£ ╞Æ /api/teacher/students                              0 B                0 B
+Γö£ ╞Æ /api/teacher/students/[id]/comment                 0 B                0 B
+Γö£ ╞Æ /api/teacher/students/[id]/edit                    0 B                0 B
+Γö£ ╞Æ /api/teacher/sub-teachers                          0 B                0 B
+Γö£ Γùï /api/test_db                                       0 B                0 B
+Γö£ ╞Æ /api/upload                                        0 B                0 B
+Γö£ Γùï /dashboard                                         2.65 kB         109 kB
+Γö£ Γùï /login                                             2.54 kB         110 kB
+Γö£ Γùï /schools                                           4.09 kB         102 kB
+Γö£ ╞Æ /schools/[id]                                      17.1 kB         124 kB
+Γö£ ╞Æ /schools/[id]/template                             5.18 kB         103 kB
+Γö£ ╞Æ /schools/[id]/verify                               2.64 kB         100 kB
+Γö£ ╞Æ /submit/[token]                                    13 kB           101 kB
+Γöö Γùï /teacher/dashboard                                 11.1 kB         119 kB
++ First Load JS shared by all                          88.3 kB
+  Γö£ chunks/117-d271601841179b35.js                     32 kB
+  Γö£ chunks/fd9d1056-b8c67a073707bac9.js                54 kB
+  Γöö other shared chunks (total)                        2.37 kB
+
+
+╞Æ Middleware                                           50.3 kB
+
+Γùï  (Static)   prerendered as static content
+╞Æ  (Dynamic)  server-rendered on demand
+

@@ -36,7 +36,7 @@ const nextConfig = {
       '@supabase/supabase-js',
       'zod',
     ],
-    serverComponentsExternalPackages: ['@imgly/background-removal', 'onnxruntime-web'],
+    serverComponentsExternalPackages: ['@imgly/background-removal'],
   },
   // Security-relevant headers (augments middleware headers)
   async headers() {
@@ -53,11 +53,30 @@ const nextConfig = {
           { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=()' },
         ],
       },
-      // Cache static assets aggressively
+      // Enable Cross-Origin Isolation for WASM SharedArrayBuffer (ONNX runtime)
+      // Only on submit pages where background removal is used
+      {
+        source: '/submit/:path*',
+        headers: [
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
+        ],
+      },
+      // Cache static assets aggressively & allow cross-origin loading under COEP
       {
         source: '/_next/static/(.*)',
         headers: [
           { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+          { key: 'Cross-Origin-Resource-Policy', value: 'cross-origin' },
+        ],
+      },
+      // Serve WASM files with correct MIME type & cross-origin support
+      {
+        source: '/(.*)\\.wasm',
+        headers: [
+          { key: 'Content-Type', value: 'application/wasm' },
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+          { key: 'Cross-Origin-Resource-Policy', value: 'cross-origin' },
         ],
       },
     ]
@@ -76,7 +95,7 @@ const nextConfig = {
       config.externals.push('onnxruntime-web')
       config.externals.push('onnxruntime-web/webgpu')
     } else {
-      // Client: resolve ONNX runtime modules that may not exist at build time
+      // Client: stub onnxruntime-web/webgpu (not available in browsers without WebGPU)
       config.resolve = config.resolve || {}
       config.resolve.fallback = {
         ...config.resolve.fallback,

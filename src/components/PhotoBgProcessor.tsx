@@ -126,6 +126,9 @@ export default function PhotoBgProcessor({ photoUrl, defaultBgColor, onProcessed
     setError("")
 
     try {
+      // Import the library — it bundles its own onnxruntime-web internally.
+      // Do NOT import onnxruntime-web directly as it causes version conflicts
+      // ("a_OrtGetInputOutputMetadata is not a function" error).
       const { removeBackground: removeBg } = await import("@imgly/background-removal")
 
       setProgress(15)
@@ -137,7 +140,14 @@ export default function PhotoBgProcessor({ photoUrl, defaultBgColor, onProcessed
       setProgress(25)
       setProgressMsg("Removing background (this may take 15-30s on first use)...")
 
+      // Let the library use its default asset path (unpkg CDN which correctly
+      // serves WASM files). Do NOT override publicPath with jsdelivr —
+      // it returns HTML 404 pages instead of WASM binary for some files.
       const resultBlob = await removeBg(blob, {
+        device: "cpu",
+        model: "isnet_quint8",
+        proxyToWorker: false,
+        fetchArgs: { cache: "force-cache" as RequestCache },
         progress: (key: string, current: number, total: number) => {
           const pct = Math.round((current / total) * 100)
           if (key.includes("fetch")) {

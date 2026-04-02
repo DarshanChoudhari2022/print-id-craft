@@ -1,0 +1,76 @@
+﻿
+> print-id-craft@0.1.0 build
+> next build
+
+node.exe :  ΓÜá 
+Disabling SWC Minifer 
+will not be an option 
+in the next major 
+version. Please report 
+any issues you may be 
+experiencing to https://
+github.com/vercel/next.j
+s/issues
+At line:1 char:1
++ & "C:\Program 
+Files\nodejs/node.exe" "
+C:\Users\choud\AppData\R
+oaming\ ...
++ ~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo      
+        : NotSpecified: 
+( ΓÜ    á Disabling 
+.../next.j    
+s/issues:String) [], R  
+  emoteException
+    + 
+FullyQualifiedErrorI    
+d : NativeCommandError
+ 
+  Γû▓ Next.js 14.2.35
+  - Environments: .env
+
+   Creating an optimized production build ...
+Failed to compile.
+
+./node_modules/@imgly/ba
+ckground-removal/dist/in
+dex.mjs
+Module not found: Can't 
+resolve 
+'onnxruntime-web/webgpu'
+
+https://nextjs.org/docs/
+messages/module-not-foun
+d
+
+Import trace for 
+requested module:
+./src/components/PhotoBg
+Processor.tsx
+./src/app/submit/[token]
+/page.tsx
+
+./node_modules/@imgly/ba
+ckground-removal/dist/in
+dex.mjs
+Module not found: Can't 
+resolve 
+'onnxruntime-web'
+
+https://nextjs.org/docs/
+messages/module-not-foun
+d
+
+Import trace for 
+requested module:
+./src/components/PhotoBg
+Processor.tsx
+./src/app/submit/[token]
+/page.tsx
+
+
+> Build failed because 
+of webpack errors
