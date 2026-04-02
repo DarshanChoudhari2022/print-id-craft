@@ -38,6 +38,7 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
   const [stream, setStream] = useState<MediaStream | null>(null)
   const [cameraPermission, setCameraPermission] = useState<CameraPermissionState>("checking")
   const [permissionRequested, setPermissionRequested] = useState(false)
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user")
 
   // ──────────────────────────────────────────────────────
   // Proactive Camera Permission Check & Request
@@ -138,9 +139,9 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
     try {
       let s: MediaStream
       try {
-        // Mobile: prefer front camera
+        // Use current facingMode (user = front, environment = back)
         s = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 960 } },
+          video: { facingMode, width: { ideal: 720 }, height: { ideal: 960 } },
           audio: false
         })
       } catch {
@@ -183,9 +184,11 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
     canvas.height = h
     const ctx = canvas.getContext("2d")
     if (ctx) {
-      // Mirror horizontally for selfie
-      ctx.translate(canvas.width, 0)
-      ctx.scale(-1, 1)
+      // Mirror horizontally only for front camera (selfie)
+      if (facingMode === "user") {
+        ctx.translate(canvas.width, 0)
+        ctx.scale(-1, 1)
+      }
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
       canvas.toBlob((blob) => {
@@ -195,6 +198,45 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
           handleFile(file)
         }
       }, "image/jpeg", 0.95)
+    }
+  }
+
+  const flipCamera = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const newMode = facingMode === "user" ? "environment" : "user"
+    setFacingMode(newMode)
+
+    // Stop current stream
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop())
+    }
+
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: newMode, width: { ideal: 720 }, height: { ideal: 960 } },
+        audio: false
+      })
+      setStream(s)
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = s
+          videoRef.current.play().catch(() => {})
+        }
+      }, 100)
+    } catch {
+      // If the requested facing mode isn't available, revert
+      setCameraError("This device may not have a second camera. Using the available camera.")
+      setFacingMode(facingMode)
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        setStream(s)
+        setTimeout(() => {
+          if (videoRef.current) {
+            videoRef.current.srcObject = s
+            videoRef.current.play().catch(() => {})
+          }
+        }, 100)
+      } catch { /* ignore */ }
     }
   }
 
@@ -747,7 +789,9 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
     setResult(verificationResult)
     setVerifying(false)
 
-    if (verificationResult.valid) {
+    // Auto-accept: if valid OR if only warnings (canOverride=true, no critical fails)
+    // This removes the need for students to click "Use Anyway"
+    if (verificationResult.valid || verificationResult.canOverride) {
       onPhotoAccepted(adjustedFile, previewUrl)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -883,7 +927,6 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
           ref={fileInputRef}
           type="file"
           accept="image/jpeg,image/png,image/webp"
-          capture="user"
           style={{ display: 'none' }}
           onChange={e => {
             const file = e.target.files?.[0]
@@ -997,22 +1040,9 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
                     )}
                   </div>
 
-                  {/* Action Buttons */}
-                  {!result.valid && (
+                  {/* Action Buttons — only show Re-upload for critical failures */}
+                  {!result.valid && !result.canOverride && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                      {result.canOverride && (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleForceAccept() }}
-                          style={{
-                            fontSize: 11, padding: '6px 12px', background: '#f59e0b',
-                            color: 'white', border: 'none', borderRadius: 6,
-                            cursor: 'pointer', fontWeight: 600
-                          }}
-                        >
-                          Use Anyway
-                        </button>
-                      )}
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setPreview(""); setResult(null); lastAdjustedFileRef.current = null }}
@@ -1024,6 +1054,16 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
                       >
                         Re-upload
                       </button>
+                    </div>
+                  )}
+                  {/* Show auto-accepted message for warning-only photos */}
+                  {!result.valid && result.canOverride && (
+                    <div style={{
+                      marginTop: 10, padding: '6px 10px', borderRadius: 6,
+                      background: '#f0fdf4', border: '1px solid #bbf7d0',
+                      fontSize: 11, color: '#16a34a', fontWeight: 600
+                    }}>
+                      ✓ Photo accepted — minor warnings won&apos;t affect your ID card
                     </div>
                   )}
                 </div>
@@ -1042,7 +1082,7 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
               <video
                 ref={videoRef}
                 autoPlay playsInline muted
-                style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
               />
               {/* Face guide overlay */}
               <div style={{
@@ -1068,11 +1108,22 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
                 textShadow: '0 1px 4px rgba(0,0,0,0.5)'
               }}>Position face inside the oval • Look straight</div>
             </div>
-            <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <button
                 onClick={(e) => { e.stopPropagation(); stopCamera() }}
-                style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: '#f1f5f9', color: '#475569', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}
+                style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: '#f1f5f9', color: '#475569', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}
               >Cancel</button>
+              <button
+                onClick={flipCamera}
+                title={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+                style={{
+                  padding: '10px 14px', borderRadius: 10, border: 'none',
+                  background: '#e0e7ff', color: '#4f46e5',
+                  fontWeight: 700, cursor: 'pointer', fontSize: 16,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'transform 0.3s ease'
+                }}
+              >🔄</button>
               <button
                 onClick={takePhoto}
                 style={{

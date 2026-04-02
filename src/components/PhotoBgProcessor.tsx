@@ -143,9 +143,12 @@ export default function PhotoBgProcessor({ photoUrl, defaultBgColor, onProcessed
       // Let the library use its default asset path (unpkg CDN which correctly
       // serves WASM files). Do NOT override publicPath with jsdelivr —
       // it returns HTML 404 pages instead of WASM binary for some files.
+      // Use the full-precision model for better edge quality.
+      // isnet gives significantly better results around hair and fine edges
+      // compared to the quantized isnet_quint8 variant.
       const resultBlob = await removeBg(blob, {
         device: "cpu",
-        model: "isnet_quint8",
+        model: "isnet",
         proxyToWorker: false,
         fetchArgs: { cache: "force-cache" as RequestCache },
         progress: (key: string, current: number, total: number) => {
@@ -190,11 +193,74 @@ export default function PhotoBgProcessor({ photoUrl, defaultBgColor, onProcessed
     img.onload = () => {
       canvas.width = img.naturalWidth
       canvas.height = img.naturalHeight
-      ctx.fillStyle = bgColor
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      // Step 1: Draw the transparent image to read alpha channel
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.drawImage(img, 0, 0)
-      const resultUrl = canvas.toDataURL("image/jpeg", 0.92)
-      setProcessedUrl(resultUrl)
+
+      // Step 2: Refine edges — apply slight alpha feathering to reduce harsh cutout edges
+      // This smooths the semi-transparent boundary pixels for more natural compositing
+      try {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const data = imageData.data
+        const w = canvas.width
+        const h = canvas.height
+
+        // Create a copy of alpha channel for edge detection
+        const alphaOrig = new Uint8Array(w * h)
+        for (let i = 0; i < w * h; i++) {
+          alphaOrig[i] = data[i * 4 + 3]
+        }
+
+        // Apply 3x3 gaussian-style alpha smoothing on edge pixels only
+        // (pixels where alpha is between 10 and 245 — the boundary region)
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const idx = y * w + x
+            const a = alphaOrig[idx]
+            // Only smooth boundary pixels
+            if (a > 10 && a < 245) {
+              // Sample 3x3 neighborhood
+              const sum =
+                alphaOrig[(y - 1) * w + (x - 1)] +
+                alphaOrig[(y - 1) * w + x] * 2 +
+                alphaOrig[(y - 1) * w + (x + 1)] +
+                alphaOrig[y * w + (x - 1)] * 2 +
+                alphaOrig[y * w + x] * 4 +
+                alphaOrig[y * w + (x + 1)] * 2 +
+                alphaOrig[(y + 1) * w + (x - 1)] +
+                alphaOrig[(y + 1) * w + x] * 2 +
+                alphaOrig[(y + 1) * w + (x + 1)]
+              data[idx * 4 + 3] = Math.round(sum / 16)
+            }
+          }
+        }
+
+        ctx.putImageData(imageData, 0, 0)
+      } catch {
+        // If edge refinement fails, continue with original alpha
+      }
+
+      // Step 3: Composite — draw bg color behind, then the refined foreground on top
+      const finalCanvas = document.createElement("canvas")
+      finalCanvas.width = canvas.width
+      finalCanvas.height = canvas.height
+      const fCtx = finalCanvas.getContext("2d")
+      if (fCtx) {
+        fCtx.fillStyle = bgColor
+        fCtx.fillRect(0, 0, finalCanvas.width, finalCanvas.height)
+        fCtx.drawImage(canvas, 0, 0)
+        const resultUrl = finalCanvas.toDataURL("image/jpeg", 0.95)
+        setProcessedUrl(resultUrl)
+      } else {
+        // Fallback: simple composite without edge refinement
+        ctx.globalCompositeOperation = "destination-over"
+        ctx.fillStyle = bgColor
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.globalCompositeOperation = "source-over"
+        const resultUrl = canvas.toDataURL("image/jpeg", 0.95)
+        setProcessedUrl(resultUrl)
+      }
     }
     img.src = transparentUrl
   }, [])
