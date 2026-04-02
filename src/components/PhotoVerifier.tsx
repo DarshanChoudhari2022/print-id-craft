@@ -53,7 +53,15 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
   const startCamera = async (e: React.MouseEvent) => {
     e.stopPropagation()
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+      let s: MediaStream;
+      // Try facingMode for mobile devices first
+      try {
+        s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+      } catch (err) {
+        // Fallback for desktop setups that don't satisfy facing constraints
+        s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      }
+
       setStream(s)
       setCameraActive(true)
       setTimeout(() => {
@@ -63,7 +71,8 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
         }
       }, 50)
     } catch (err) {
-      alert("Could not access camera. Please check permissions.")
+      console.error("Camera error:", err)
+      alert("Could not access camera. Please check permissions or ensure a camera is connected.\n\nDetails: " + (err instanceof Error ? err.message : String(err)))
     }
   }
 
