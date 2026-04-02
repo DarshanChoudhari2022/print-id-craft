@@ -17,6 +17,7 @@ const templateSchema = z.object({
   fieldMappings: z.any().optional(),
   backFieldMappings: z.any().optional(),
   hasBackSide: z.boolean().optional(),
+  photoBgColor: z.string().optional(),
 })
 
 /**
@@ -117,6 +118,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         orientation: validated.orientation || "PORTRAIT",
         templateImageUrl: validated.templateImageUrl,
         fieldMappings: validated.fieldMappings || [],
+        photoBgColor: validated.photoBgColor || "#FFFFFF",
       },
     })
 

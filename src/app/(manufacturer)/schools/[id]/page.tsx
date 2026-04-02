@@ -1672,12 +1672,13 @@ export default function SchoolDetailPage() {
                 templateImageUrl={templateData?.templateImageUrl || null}
                 fieldMappings={(templateData?.fieldMappings as any) || []}
                 fieldConfig={(templateData?.fieldConfig as any[]) || []}
-                onSave={async (templateImageUrl, fieldMappings) => {
+                initialPhotoBgColor={(templateData as any)?.photoBgColor || "#FFFFFF"}
+                onSave={async (templateImageUrl, fieldMappings, photoBgColor) => {
                   try {
                     const res = await fetch(`/api/schools/${schoolId}/template`, {
                       method: 'PUT',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ templateImageUrl, fieldMappings }),
+                      body: JSON.stringify({ templateImageUrl, fieldMappings, photoBgColor }),
                     })
                     const data = await res.json()
                     if (data.success) {

@@ -8,6 +8,7 @@ import dynamic from "next/dynamic"
 import PhotoVerifier from "@/components/PhotoVerifier"
 
 const JpgCardPreview = dynamic(() => import("@/components/JpgCardPreview"), { ssr: false })
+const PhotoBgProcessor = dynamic(() => import("@/components/PhotoBgProcessor"), { ssr: false })
 
 type FieldConfig = { key: string; label: string; type: string; required: boolean }
 type TemplateElement = { 
@@ -30,6 +31,8 @@ type FormConfig = {
   // JPG template fields
   templateImageUrl: string | null
   fieldMappings: any[]
+  // Photo background color
+  photoBgColor: string
 }
 
 // Helper components moved outside to keep SubmitPage clean
@@ -100,7 +103,7 @@ export default function SubmitPage() {
   const params = useParams()
   const token = params.token as string
 
-  const [step, setStep] = useState<"loading" | "error" | "form" | "photo" | "review" | "success">("loading")
+  const [step, setStep] = useState<"loading" | "error" | "form" | "photo" | "bgprocess" | "review" | "success">("loading")
   const [errorMsg, setErrorMsg] = useState("")
   const [config, setConfig] = useState<FormConfig | null>(null)
   const [formData, setFormData] = useState<Record<string, string>>({})
@@ -502,23 +505,25 @@ export default function SubmitPage() {
         </div>
 
         {/* Step Indicators */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, padding: '16px 20px', background: '#f8fafc' }}>
-          {["Details", "Photo", "Review"].map((s, i) => {
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, padding: '16px 20px', background: '#f8fafc', flexWrap: 'wrap' }}>
+          {["Details", "Photo", "Background", "Review"].map((s, i) => {
             const currentStep = step as string
-            const isActive = (currentStep === "form" && i === 0) || (currentStep === "photo" && i === 1) || (currentStep === "review" && i === 2)
-            const isDone = (currentStep === "photo" && i === 0) || (currentStep === "review" && i <= 1)
+            const stepOrder = ["form", "photo", "bgprocess", "review"]
+            const currentIdx = stepOrder.indexOf(currentStep)
+            const isActive = currentIdx === i
+            const isDone = currentIdx > i
             return (
-              <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <div style={{
-                  width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 11, fontWeight: 700,
+                  width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10, fontWeight: 700,
                   background: isActive ? '#3b82f6' : isDone ? '#22c55e' : '#e2e8f0',
                   color: isActive || isDone ? 'white' : '#94a3b8',
                 }}>
                   {isDone ? "✓" : i + 1}
                 </div>
-                <span style={{ fontSize: 12, fontWeight: 600, color: isActive ? '#0f172a' : '#94a3b8' }}>{s}</span>
-                {i < 2 && <div style={{ width: 20, height: 1, background: '#e2e8f0' }} />}
+                <span style={{ fontSize: 11, fontWeight: 600, color: isActive ? '#0f172a' : '#94a3b8' }}>{s}</span>
+                {i < 3 && <div style={{ width: 16, height: 1, background: '#e2e8f0' }} />}
               </div>
             )
           })}
@@ -588,40 +593,8 @@ export default function SubmitPage() {
           {step === "photo" && (
             <div>
               <p style={{ fontSize: 14, color: '#64748b', marginBottom: 16 }}>
-                Upload a passport-size photo with a <strong>plain / solid background</strong>.
+                Upload a passport-size photo. Our AI will automatically process the background.
               </p>
-
-              {/* Photo Guidelines Box */}
-              <div style={{ marginBottom: 20, padding: '14px 16px', background: '#eff6ff', borderRadius: 12, border: '1px solid #bfdbfe' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', marginBottom: 8 }}>📸 Photo Requirements</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 20px', fontSize: 12, color: '#2563eb', lineHeight: 1.8 }}>
-                  <div>✅ Minimum 300 pixels wide</div>
-                  <div>✅ Plain/solid background</div>
-                  <div>✅ Face clearly visible</div>
-                  <div>✅ 3:4 ratio (passport size)</div>
-                  <div>❌ No group photos</div>
-                  <div>❌ No filters or editing</div>
-                </div>
-                {/* Sample Photo Reference */}
-                <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <div style={{ 
-                    width: 48, height: 64, borderRadius: 6, border: '2px solid #3b82f6', 
-                    background: '#dbeafe', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    position: 'relative', overflow: 'hidden'
-                  }}>
-                    <svg viewBox="0 0 40 56" width="36" height="50" fill="none">
-                      <rect width="40" height="56" fill="#dbeafe" />
-                      <circle cx="20" cy="18" r="8" fill="#93c5fd" />
-                      <ellipse cx="20" cy="38" rx="14" ry="10" fill="#93c5fd" />
-                    </svg>
-                    <div style={{ position: 'absolute', bottom: 2, fontSize: 6, fontWeight: 700, color: '#3b82f6' }}>SAMPLE</div>
-                  </div>
-                  <div style={{ fontSize: 11, color: '#3b82f6', lineHeight: 1.5 }}>
-                    <strong>Standard format:</strong> Head and shoulders, centered,<br/>
-                    looking straight at camera, plain background.
-                  </div>
-                </div>
-              </div>
 
               {!photoPreview ? (
                 <PhotoVerifier
@@ -629,18 +602,18 @@ export default function SubmitPage() {
                     setPhotoFile(file)
                     setPhotoPreview(previewUrl)
                     setPhotoVerified(true)
-                    setCrop({ unit: "%", width: 75, height: 100, x: 12.5, y: 0 })
                   }}
+                  schoolBgColor={config?.photoBgColor}
                 />
               ) : (
                 <div style={{ maxWidth: 400, margin: '0 auto' }}>
-                  <div style={{ padding: '8px 12px', background: '#dcfce7', borderRadius: 8, fontSize: 12, color: '#16a34a', fontWeight: 600, marginBottom: 12, textAlign: 'center' }}>
-                    ✅ Photo verified — Crop to passport size below
+                  <div style={{ padding: '10px 14px', background: '#dcfce7', borderRadius: 10, fontSize: 13, color: '#16a34a', fontWeight: 600, marginBottom: 12, textAlign: 'center' }}>
+                    ✅ Photo verified — proceed to background processing
                   </div>
-                  <ReactCrop crop={crop} onChange={(_, pc) => setCrop(pc)} aspect={3 / 4}>
-                    <img ref={imgRef} src={photoPreview} alt="Preview" style={{ maxWidth: '100%' }} />
-                  </ReactCrop>
-                  <button onClick={() => { setPhotoPreview(""); setPhotoFile(null); setCroppedPhoto(""); setPhotoVerified(false) }} className="btn btn-outline" style={{ width: '100%', marginTop: 12 }}>
+                  <div style={{ borderRadius: 10, overflow: 'hidden', border: '2px solid #22c55e', maxWidth: 200, margin: '0 auto' }}>
+                    <img src={photoPreview} alt="Preview" style={{ width: '100%', display: 'block' }} />
+                  </div>
+                  <button onClick={() => { setPhotoPreview(""); setPhotoFile(null); setCroppedPhoto(""); setPhotoVerified(false) }} className="btn btn-outline" style={{ width: '100%', marginTop: 12, fontSize: 12 }}>
                     Choose Different Photo
                   </button>
                 </div>
@@ -648,8 +621,38 @@ export default function SubmitPage() {
 
               <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
                 <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setStep("form")}>← Back</button>
-                <button className="btn btn-primary" style={{ flex: 1 }} disabled={!photoPreview} onClick={async () => { await generateCroppedPhoto(); setStep("review") }}>
-                  Review →
+                <button className="btn btn-primary" style={{ flex: 1 }} disabled={!photoPreview} onClick={() => setStep("bgprocess")}>
+                  Process Background →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* BACKGROUND PROCESSING STEP */}
+          {step === "bgprocess" && photoPreview && (
+            <div>
+              <PhotoBgProcessor
+                photoUrl={photoPreview}
+                defaultBgColor={config?.photoBgColor || "#FFFFFF"}
+                onProcessed={(processedUrl) => {
+                  // Use the processed photo (bg removed + color applied)
+                  setPhotoPreview(processedUrl)
+                  setCrop({ unit: "%", width: 75, height: 100, x: 12.5, y: 0 })
+                  setStep("review")
+                  // Auto-generate cropped version
+                  setTimeout(() => generateCroppedPhoto(), 100)
+                }}
+                onSkip={() => {
+                  // Skip bg processing, go straight to crop + review
+                  setCrop({ unit: "%", width: 75, height: 100, x: 12.5, y: 0 })
+                  setStep("review")
+                  setTimeout(() => generateCroppedPhoto(), 100)
+                }}
+              />
+
+              <div style={{ marginTop: 16 }}>
+                <button className="btn btn-outline" style={{ width: '100%', fontSize: 12 }} onClick={() => setStep("photo")}>
+                  ← Back to Photo Upload
                 </button>
               </div>
             </div>

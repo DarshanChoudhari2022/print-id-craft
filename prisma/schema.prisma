@@ -82,6 +82,7 @@ model Template {
   fieldMappings        Json        @default("[]")
   backFieldMappings    Json        @default("[]")
   hasBackSide          Boolean     @default(false)
+  photoBgColor         String      @default("#FFFFFF")
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 }

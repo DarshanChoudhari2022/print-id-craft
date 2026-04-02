@@ -59,6 +59,19 @@ const nextConfig = {
       },
     ]
   },
+  // Webpack: enable WASM for @imgly/background-removal
+  webpack: (config, { isServer }) => {
+    config.experiments = {
+      ...config.experiments,
+      asyncWebAssembly: true,
+    }
+    // Don't bundle background-removal on server side
+    if (isServer) {
+      config.externals = config.externals || []
+      config.externals.push('@imgly/background-removal')
+    }
+    return config
+  },
 }
 
 module.exports = nextConfig

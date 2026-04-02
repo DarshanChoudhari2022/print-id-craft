@@ -1,0 +1,338 @@
+"use client"
+import { useState, useRef, useCallback, useEffect } from "react"
+
+// Background color presets for ID cards
+export const BG_COLOR_PRESETS = [
+  { id: "white", label: "White", hex: "#FFFFFF", textColor: "#333" },
+  { id: "light-blue", label: "Light Blue", hex: "#DBEAFE", textColor: "#333" },
+  { id: "sky-blue", label: "Sky Blue", hex: "#BAE6FD", textColor: "#333" },
+  { id: "light-grey", label: "Light Grey", hex: "#F1F5F9", textColor: "#333" },
+  { id: "maroon", label: "Maroon", hex: "#7F1D1D", textColor: "#fff" },
+  { id: "cream", label: "Cream", hex: "#FEF3C7", textColor: "#333" },
+] as const
+
+type Props = {
+  photoUrl: string // Original photo data URL
+  defaultBgColor: string // Hex color from template config
+  onProcessed: (processedDataUrl: string) => void
+  onSkip: () => void
+}
+
+export default function PhotoBgProcessor({ photoUrl, defaultBgColor, onProcessed, onSkip }: Props) {
+  const [processing, setProcessing] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [progressMsg, setProgressMsg] = useState("")
+  const [selectedColor, setSelectedColor] = useState(defaultBgColor || "#FFFFFF")
+  const [removedBgUrl, setRemovedBgUrl] = useState<string | null>(null) // Transparent PNG
+  const [processedUrl, setProcessedUrl] = useState<string | null>(null) // With new bg
+  const [error, setError] = useState("")
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // Find nearest preset or use custom
+  const activePreset = BG_COLOR_PRESETS.find(p => p.hex.toLowerCase() === selectedColor.toLowerCase())
+
+  const removeBackground = useCallback(async () => {
+    setProcessing(true)
+    setProgress(5)
+    setProgressMsg("Loading AI model...")
+    setError("")
+
+    try {
+      // Dynamic import to avoid SSR issues
+      const { removeBackground: removeBg } = await import("@imgly/background-removal")
+      
+      setProgress(15)
+      setProgressMsg("Preparing image...")
+
+      // Convert data URL to blob
+      const response = await fetch(photoUrl)
+      const blob = await response.blob()
+
+      setProgress(25)
+      setProgressMsg("Removing background (this may take 15-30s on first use)...")
+
+      const resultBlob = await removeBg(blob, {
+        progress: (key: string, current: number, total: number) => {
+          const pct = Math.round((current / total) * 100)
+          if (key.includes("fetch")) {
+            setProgress(25 + pct * 0.3) // 25-55%
+            setProgressMsg("Downloading AI model...")
+          } else if (key.includes("inference")) {
+            setProgress(55 + pct * 0.4) // 55-95%
+            setProgressMsg("Processing photo...")
+          }
+        },
+      })
+
+      setProgress(95)
+      setProgressMsg("Finalizing...")
+
+      // Convert result blob to data URL
+      const reader = new FileReader()
+      reader.onload = () => {
+        const transparentUrl = reader.result as string
+        setRemovedBgUrl(transparentUrl)
+        setProgress(100)
+        setProcessing(false)
+        // Auto-apply the selected background color
+        applyBackground(transparentUrl, selectedColor)
+      }
+      reader.readAsDataURL(resultBlob)
+    } catch (err: any) {
+      console.error("Background removal failed:", err)
+      setError("Background removal failed. You can skip this step and use the original photo.")
+      setProcessing(false)
+      setProgress(0)
+    }
+  }, [photoUrl, selectedColor])
+
+  const applyBackground = useCallback((transparentUrl: string, bgColor: string) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    const img = new Image()
+    img.onload = () => {
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+
+      // Fill with background color
+      ctx.fillStyle = bgColor
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      // Draw the transparent person on top
+      ctx.drawImage(img, 0, 0)
+
+      const resultUrl = canvas.toDataURL("image/jpeg", 0.92)
+      setProcessedUrl(resultUrl)
+    }
+    img.src = transparentUrl
+  }, [])
+
+  // Re-apply background when color changes (if bg already removed)
+  useEffect(() => {
+    if (removedBgUrl) {
+      applyBackground(removedBgUrl, selectedColor)
+    }
+  }, [selectedColor, removedBgUrl, applyBackground])
+
+  // Auto-start background removal on mount
+  useEffect(() => {
+    removeBackground()
+  }, []) // Only run once on mount
+
+  const handleConfirm = () => {
+    if (processedUrl) {
+      onProcessed(processedUrl)
+    }
+  }
+
+  return (
+    <div style={{ padding: 0 }}>
+      <canvas ref={canvasRef} style={{ display: "none" }} />
+
+      {/* Header */}
+      <div style={{
+        fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 4,
+        display: 'flex', alignItems: 'center', gap: 8
+      }}>
+        <span style={{
+          width: 28, height: 28, borderRadius: 8,
+          background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 14, color: 'white'
+        }}>🎨</span>
+        Smart Background Processor
+      </div>
+      <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+        AI-powered background removal for a professional ID card photo
+      </p>
+
+      {/* Processing State */}
+      {processing && (
+        <div style={{
+          background: '#f0f9ff', borderRadius: 14, padding: 24,
+          border: '1px solid #bae6fd', textAlign: 'center'
+        }}>
+          <div className="login-spinner" style={{
+            width: 36, height: 36,
+            borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6',
+            margin: '0 auto 12px'
+          }} />
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#1e40af', marginBottom: 8 }}>
+            {progressMsg}
+          </div>
+          <div style={{
+            height: 6, borderRadius: 3, background: '#e0f2fe',
+            overflow: 'hidden', maxWidth: 280, margin: '0 auto'
+          }}>
+            <div style={{
+              height: '100%', borderRadius: 3,
+              background: 'linear-gradient(90deg, #3b82f6, #6366f1)',
+              width: `${progress}%`, transition: 'width 0.5s ease'
+            }} />
+          </div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
+            {progress < 55 ? "First-time model download (~30MB, cached after)" : `${Math.round(progress)}% complete`}
+          </div>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div style={{
+          background: '#fef2f2', borderRadius: 12, padding: 16,
+          border: '1px solid #fecaca', marginBottom: 16
+        }}>
+          <div style={{ fontSize: 13, color: '#dc2626', fontWeight: 600, marginBottom: 4 }}>
+            ⚠️ {error}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button
+              onClick={removeBackground}
+              style={{
+                fontSize: 12, padding: '8px 16px', background: '#3b82f6',
+                color: 'white', border: 'none', borderRadius: 8,
+                cursor: 'pointer', fontWeight: 600
+              }}
+            >
+              Retry
+            </button>
+            <button
+              onClick={onSkip}
+              style={{
+                fontSize: 12, padding: '8px 16px', background: '#f1f5f9',
+                color: '#475569', border: 'none', borderRadius: 8,
+                cursor: 'pointer', fontWeight: 600
+              }}
+            >
+              Skip & Use Original
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Result Preview */}
+      {!processing && processedUrl && (
+        <>
+          {/* Before / After Comparison */}
+          <div style={{
+            display: 'flex', gap: 12, marginBottom: 16,
+            flexWrap: 'wrap', justifyContent: 'center'
+          }}>
+            {/* Before */}
+            <div style={{ flex: '1 1 120px', maxWidth: 160, textAlign: 'center' }}>
+              <div style={{
+                fontSize: 11, fontWeight: 600, color: '#94a3b8',
+                textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6
+              }}>Before</div>
+              <div style={{
+                borderRadius: 10, overflow: 'hidden',
+                border: '2px solid #e2e8f0', aspectRatio: '3/4'
+              }}>
+                <img src={photoUrl} alt="Original" style={{
+                  width: '100%', height: '100%', objectFit: 'cover'
+                }} />
+              </div>
+            </div>
+
+            {/* Arrow */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 20, color: '#94a3b8', alignSelf: 'center'
+            }}>→</div>
+
+            {/* After */}
+            <div style={{ flex: '1 1 120px', maxWidth: 160, textAlign: 'center' }}>
+              <div style={{
+                fontSize: 11, fontWeight: 600, color: '#22c55e',
+                textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6
+              }}>After</div>
+              <div style={{
+                borderRadius: 10, overflow: 'hidden',
+                border: '2px solid #22c55e', aspectRatio: '3/4'
+              }}>
+                <img src={processedUrl} alt="Processed" style={{
+                  width: '100%', height: '100%', objectFit: 'cover'
+                }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Background Color Selector */}
+          <div style={{
+            background: '#f8fafc', borderRadius: 12, padding: 14,
+            border: '1px solid #e2e8f0', marginBottom: 16
+          }}>
+            <div style={{
+              fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 10
+            }}>
+              Choose Background Color
+            </div>
+            <div style={{
+              display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center'
+            }}>
+              {BG_COLOR_PRESETS.map(preset => (
+                <button
+                  key={preset.id}
+                  onClick={() => setSelectedColor(preset.hex)}
+                  style={{
+                    width: 44, height: 44, borderRadius: 10,
+                    background: preset.hex,
+                    border: selectedColor === preset.hex
+                      ? '3px solid #3b82f6'
+                      : '2px solid #d1d5db',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    boxShadow: selectedColor === preset.hex
+                      ? '0 0 0 2px rgba(59,130,246,0.3)'
+                      : 'none',
+                    transition: 'all 0.15s',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                  title={preset.label}
+                >
+                  {selectedColor === preset.hex && (
+                    <span style={{ fontSize: 16, color: preset.textColor }}>✓</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <div style={{
+              textAlign: 'center', fontSize: 11, color: '#94a3b8', marginTop: 8
+            }}>
+              {activePreset?.label || "Custom"} Background
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={onSkip}
+              style={{
+                flex: 1, padding: '12px', fontSize: 13, fontWeight: 600,
+                background: '#f1f5f9', color: '#475569', border: 'none',
+                borderRadius: 10, cursor: 'pointer'
+              }}
+            >
+              Use Original Instead
+            </button>
+            <button
+              onClick={handleConfirm}
+              style={{
+                flex: 2, padding: '12px', fontSize: 13, fontWeight: 700,
+                background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                color: 'white', border: 'none', borderRadius: 10,
+                cursor: 'pointer', letterSpacing: '-0.01em'
+              }}
+            >
+              ✓ Use Processed Photo
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}

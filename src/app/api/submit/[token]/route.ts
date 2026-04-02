@@ -45,6 +45,8 @@ export async function GET(req: Request, { params }: { params: { token: string } 
         // JPG template data for card preview
         templateImageUrl: template?.templateImageUrl || null,
         fieldMappings: template?.fieldMappings || [],
+        // Photo background color for auto-replacement
+        photoBgColor: template?.photoBgColor || "#FFFFFF",
       },
     })
   } catch (error) {

@@ -1,5 +1,6 @@
 "use client"
 import { useState, useRef, useEffect, useCallback } from "react"
+import { BG_COLOR_PRESETS } from "./PhotoBgProcessor"
 
 type FieldMapping = {
   id: string
@@ -22,8 +23,9 @@ type JpgTemplateMapperProps = {
   templateImageUrl: string | null
   fieldMappings: FieldMapping[]
   fieldConfig: { key: string; label: string; type: string; required: boolean }[]
-  onSave: (templateImageUrl: string, fieldMappings: FieldMapping[]) => Promise<void>
+  onSave: (templateImageUrl: string, fieldMappings: FieldMapping[], photoBgColor?: string) => Promise<void>
   onUploadImage: (file: File) => Promise<string>
+  initialPhotoBgColor?: string
 }
 
 const SAMPLE_DATA: Record<string, string> = {
@@ -58,11 +60,13 @@ export default function JpgTemplateMapper({
   fieldConfig,
   onSave,
   onUploadImage,
+  initialPhotoBgColor,
 }: JpgTemplateMapperProps) {
   const [imageUrl, setImageUrl] = useState(initialImageUrl || "")
   const [mappings, setMappings] = useState<FieldMapping[]>(
     initialMappings && initialMappings.length > 0 ? initialMappings : []
   )
+  const [photoBgColor, setPhotoBgColor] = useState(initialPhotoBgColor || "#FFFFFF")
 
   // Sync state when props change
   useEffect(() => {
@@ -265,7 +269,7 @@ export default function JpgTemplateMapper({
     if (!imageUrl) return
     setSaving(true)
     try {
-      await onSave(imageUrl, mappings)
+      await onSave(imageUrl, mappings, photoBgColor)
     } finally {
       setSaving(false)
     }
@@ -1451,6 +1455,89 @@ export default function JpgTemplateMapper({
             >
               <span style={{ fontSize: 16 }}>📋</span> Placed Fields ({mappings.length})
             </h4>
+
+            {/* Photo Background Color Picker */}
+            <div
+              style={{
+                background: "#faf5ff",
+                borderRadius: 12,
+                border: "1px solid #e9d5ff",
+                padding: 14,
+                marginBottom: 12,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "#7c3aed",
+                  marginBottom: 10,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 14 }}>🎨</span> Student Photo Background
+              </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#8b5cf6",
+                  marginBottom: 10,
+                  lineHeight: 1.5,
+                }}
+              >
+                AI will auto-replace the photo background with this color during student submission.
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 6,
+                  flexWrap: "wrap",
+                }}
+              >
+                {BG_COLOR_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => setPhotoBgColor(preset.hex)}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      background: preset.hex,
+                      border:
+                        photoBgColor === preset.hex
+                          ? "3px solid #7c3aed"
+                          : "2px solid #d1d5db",
+                      cursor: "pointer",
+                      boxShadow:
+                        photoBgColor === preset.hex
+                          ? "0 0 0 2px rgba(124,58,237,0.3)"
+                          : "none",
+                      transition: "all 0.15s",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                    title={preset.label}
+                  >
+                    {photoBgColor === preset.hex && (
+                      <span style={{ fontSize: 14, color: preset.textColor }}>✓</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "#a78bfa",
+                  marginTop: 6,
+                  textAlign: "center",
+                }}
+              >
+                {BG_COLOR_PRESETS.find((p) => p.hex === photoBgColor)?.label || "Custom"} selected
+              </div>
+            </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {mappings.map((m) => (
