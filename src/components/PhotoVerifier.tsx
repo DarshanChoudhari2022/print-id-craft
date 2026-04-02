@@ -28,14 +28,68 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  const [cameraActive, setCameraActive] = useState(false)
+  const [stream, setStream] = useState<MediaStream | null>(null)
+
+  const stopCamera = useCallback(() => {
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop())
+      setStream(null)
+    }
+    setCameraActive(false)
+  }, [stream])
 
   useEffect(() => {
     return () => {
+      stopCamera()
       if (preview && preview.startsWith("blob:")) {
         URL.revokeObjectURL(preview)
       }
     }
-  }, [preview])
+  }, [preview, stopCamera])
+
+  const startCamera = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+      setStream(s)
+      setCameraActive(true)
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = s
+          videoRef.current.play()
+        }
+      }, 50)
+    } catch (err) {
+      alert("Could not access camera. Please check permissions.")
+    }
+  }
+
+  const takePhoto = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!videoRef.current) return
+    const video = videoRef.current
+    const canvas = document.createElement("canvas")
+    canvas.width = video.videoWidth || 640
+    canvas.height = video.videoHeight || 480
+    const ctx = canvas.getContext("2d")
+    if (ctx) {
+      // Mirror the context so the photo isn't flipped horizontally
+      ctx.translate(canvas.width, 0)
+      ctx.scale(-1, 1)
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      
+      canvas.toBlob((blob) => {
+        if (blob) {
+           const file = new File([blob], `capture-${Date.now()}.jpg`, { type: "image/jpeg" })
+           handleFile(file)
+        }
+        stopCamera()
+      }, "image/jpeg", 0.95)
+    }
+  }
 
   // ──────────────────────────────────────────────────────
   // Master analysis function
@@ -640,11 +694,13 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
           const file = e.dataTransfer.files[0]
           if (file) handleFile(file)
         }}
-        onClick={() => fileInputRef.current?.click()}
+        onClick={() => {
+          if (!cameraActive) fileInputRef.current?.click()
+        }}
         style={{
           border: `2px dashed ${dragOver ? '#3b82f6' : preview ? (result?.valid ? '#22c55e' : result?.canOverride ? '#f59e0b' : '#ef4444') : '#e2e8f0'}`,
           borderRadius: 14,
-          padding: preview ? 16 : 36,
+          padding: preview || cameraActive ? 16 : 36,
           textAlign: 'center',
           cursor: verifying ? 'wait' : 'pointer',
           background: dragOver ? '#eff6ff' : '#fafafa',
@@ -805,6 +861,22 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
               )}
             </div>
           </div>
+        ) : cameraActive ? (
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ position: 'relative', width: '100%', maxWidth: 320, borderRadius: 12, overflow: 'hidden', background: '#000', marginBottom: 12, aspectRatio: '3/4' }}>
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                muted 
+                style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} 
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+               <button onClick={(e) => { e.stopPropagation(); stopCamera(); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#f1f5f9', color: '#475569', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+               <button onClick={takePhoto} style={{ padding: '8px 24px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontWeight: 700, cursor: 'pointer' }}>📸 Capture</button>
+            </div>
+          </div>
         ) : (
           <>
             <div style={{ fontSize: 32, marginBottom: 8 }}>📷</div>
@@ -812,7 +884,11 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
               Upload Student Photo
             </div>
             <div style={{ fontSize: 12, color: '#94a3b8' }}>Drag & drop or click to browse</div>
-            <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 12 }}>
+               <button onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }} style={{ padding: '8px 16px', background: '#e0e7ff', color: '#4f46e5', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Browse File</button>
+               <button onClick={startCamera} style={{ padding: '8px 16px', background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Take Photo</button>
+            </div>
+            <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 12 }}>
               JPEG, PNG — Passport size, plain background
             </div>
           </>

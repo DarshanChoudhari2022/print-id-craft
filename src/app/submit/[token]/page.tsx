@@ -180,31 +180,6 @@ export default function SubmitPage() {
     img.src = URL.createObjectURL(file)
   }
 
-  const generateCroppedPhoto = useCallback(async () => {
-    if (!imgRef.current || !crop.width || !crop.height) return
-    const img = imgRef.current
-    const canvas = document.createElement("canvas")
-    const scaleX = img.naturalWidth / img.width
-    const scaleY = img.naturalHeight / img.height
-    const pixelCrop = {
-      x: (crop.x / 100) * img.width * scaleX,
-      y: (crop.y / 100) * img.height * scaleY,
-      width: (crop.width / 100) * img.width * scaleX,
-      height: (crop.height / 100) * img.height * scaleY,
-    }
-
-    const TARGET_W = 300
-    const TARGET_H = 400
-    canvas.width = TARGET_W
-    canvas.height = TARGET_H
-    const ctx = canvas.getContext("2d")!
-    ctx.imageSmoothingQuality = "high"
-    ctx.drawImage(img, pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height, 0, 0, TARGET_W, TARGET_H)
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.85)
-    setCroppedPhoto(dataUrl)
-    return dataUrl
-  }, [crop])
-
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!photoFile) {
@@ -216,7 +191,7 @@ export default function SubmitPage() {
 
   const handleReview = async () => {
     if (photoPreview && !croppedPhoto) {
-      await generateCroppedPhoto()
+      setCroppedPhoto(photoPreview)
     }
     setStep("review")
   }
@@ -637,16 +612,13 @@ export default function SubmitPage() {
                 onProcessed={(processedUrl) => {
                   // Use the processed photo (bg removed + color applied)
                   setPhotoPreview(processedUrl)
-                  setCrop({ unit: "%", width: 75, height: 100, x: 12.5, y: 0 })
+                  setCroppedPhoto(processedUrl)
                   setStep("review")
-                  // Auto-generate cropped version
-                  setTimeout(() => generateCroppedPhoto(), 100)
                 }}
                 onSkip={() => {
-                  // Skip bg processing, go straight to crop + review
-                  setCrop({ unit: "%", width: 75, height: 100, x: 12.5, y: 0 })
+                  // Skip bg processing, go straight to review
+                  setCroppedPhoto(photoPreview)
                   setStep("review")
-                  setTimeout(() => generateCroppedPhoto(), 100)
                 }}
               />
 
