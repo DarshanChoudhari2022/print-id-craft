@@ -1,8 +1,6 @@
 "use client"
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
-import ReactCrop, { type Crop } from "react-image-crop"
-import "react-image-crop/dist/ReactCrop.css"
 import SharedIDCardPreview from "@/components/IDCardPreview"
 import dynamic from "next/dynamic"
 import PhotoVerifier from "@/components/PhotoVerifier"
@@ -108,8 +106,7 @@ export default function SubmitPage() {
   const [config, setConfig] = useState<FormConfig | null>(null)
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [photoFile, setPhotoFile] = useState<File | null>(null)
-  const [photoPreview, setPhotoPreview] = useState("")
-  const [crop, setCrop] = useState<Crop>({ unit: "%", width: 75, height: 100, x: 12.5, y: 0 })
+  const [photoPreview, setPhotoPreview] = useState("") // Data URL of the accepted photo
   const [croppedPhoto, setCroppedPhoto] = useState("")
   const [cardSide, setCardSide] = useState<"front" | "back">("front")
   const [submitting, setSubmitting] = useState(false)
@@ -117,9 +114,6 @@ export default function SubmitPage() {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [alertMsg, setAlertMsg] = useState("")
   const [photoVerified, setPhotoVerified] = useState(false)
-
-  const imgRef = useRef<HTMLImageElement>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch(`/api/submit/${token}`)
@@ -144,41 +138,7 @@ export default function SubmitPage() {
     setFormData(prev => ({ ...prev, [key]: value }))
   }
 
-  const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
-
-  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      setAlertMsg("Invalid file type. Please upload JPEG, PNG, or WebP only.")
-      setTimeout(() => setAlertMsg(""), 4000)
-      return
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setAlertMsg("Photo must be less than 5MB")
-      setTimeout(() => setAlertMsg(""), 4000)
-      return
-    }
-    // Validate minimum 300px dimension
-    const img = new Image()
-    img.onload = () => {
-      if (img.naturalWidth < 300 || img.naturalHeight < 300) {
-        setAlertMsg("Photo must be at least 300×300 pixels. Please upload a higher resolution image.")
-        setTimeout(() => setAlertMsg(""), 5000)
-        return
-      }
-      setPhotoFile(file)
-      const reader = new FileReader()
-      reader.onload = () => setPhotoPreview(reader.result as string)
-      reader.readAsDataURL(file)
-      setCrop({ unit: "%", width: 75, height: 100, x: 12.5, y: 0 })
-    }
-    img.onerror = () => {
-      setAlertMsg("Failed to read image. Please try another file.")
-      setTimeout(() => setAlertMsg(""), 4000)
-    }
-    img.src = URL.createObjectURL(file)
-  }
+  // Note: PhotoVerifier now returns stable data URLs directly
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -575,6 +535,7 @@ export default function SubmitPage() {
                 <PhotoVerifier
                   onPhotoAccepted={(file, previewUrl) => {
                     setPhotoFile(file)
+                    // previewUrl is already a stable data URL from PhotoVerifier
                     setPhotoPreview(previewUrl)
                     setPhotoVerified(true)
                   }}
