@@ -6,6 +6,8 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true, 
   },
+  // Disable SWC Minify due to SyntaxError in onnxruntime-web pre-compiled code
+  swcMinify: false,
   // Performance: enable React strict mode (catches bugs early)
   reactStrictMode: true,
   // Performance: compress responses
@@ -34,6 +36,7 @@ const nextConfig = {
       '@supabase/supabase-js',
       'zod',
     ],
+    serverComponentsExternalPackages: ['@imgly/background-removal', 'onnxruntime-web'],
   },
   // Security-relevant headers (augments middleware headers)
   async headers() {
@@ -59,17 +62,28 @@ const nextConfig = {
       },
     ]
   },
-  // Webpack: enable WASM for @imgly/background-removal
+  // Webpack: handle @imgly/background-removal (loaded dynamically at runtime only)
   webpack: (config, { isServer }) => {
     config.experiments = {
       ...config.experiments,
       asyncWebAssembly: true,
     }
-    // Don't bundle background-removal on server side
+
+    // Externalize heavy WASM/ONNX packages from server bundle
     if (isServer) {
       config.externals = config.externals || []
       config.externals.push('@imgly/background-removal')
+      config.externals.push('onnxruntime-web')
+      config.externals.push('onnxruntime-web/webgpu')
+    } else {
+      // Client: resolve ONNX runtime modules that may not exist at build time
+      config.resolve = config.resolve || {}
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        'onnxruntime-web/webgpu': false,
+      }
     }
+
     return config
   },
 }

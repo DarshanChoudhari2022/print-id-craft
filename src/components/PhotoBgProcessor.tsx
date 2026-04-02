@@ -1,8 +1,7 @@
 "use client"
 import { useState, useRef, useCallback, useEffect } from "react"
 
-// Background color presets for ID cards
-export const BG_COLOR_PRESETS = [
+const BG_COLOR_PRESETS = [
   { id: "white", label: "White", hex: "#FFFFFF", textColor: "#333" },
   { id: "light-blue", label: "Light Blue", hex: "#DBEAFE", textColor: "#333" },
   { id: "sky-blue", label: "Sky Blue", hex: "#BAE6FD", textColor: "#333" },

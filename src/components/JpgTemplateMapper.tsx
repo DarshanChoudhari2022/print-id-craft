@@ -1,6 +1,14 @@
 "use client"
 import { useState, useRef, useEffect, useCallback } from "react"
-import { BG_COLOR_PRESETS } from "./PhotoBgProcessor"
+
+const BG_COLOR_PRESETS = [
+  { id: "white", label: "White", hex: "#FFFFFF", textColor: "#333" },
+  { id: "light-blue", label: "Light Blue", hex: "#DBEAFE", textColor: "#333" },
+  { id: "sky-blue", label: "Sky Blue", hex: "#BAE6FD", textColor: "#333" },
+  { id: "light-grey", label: "Light Grey", hex: "#F1F5F9", textColor: "#333" },
+  { id: "maroon", label: "Maroon", hex: "#7F1D1D", textColor: "#fff" },
+  { id: "cream", label: "Cream", hex: "#FEF3C7", textColor: "#333" },
+]
 
 type FieldMapping = {
   id: string
