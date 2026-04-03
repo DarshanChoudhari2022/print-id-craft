@@ -114,6 +114,7 @@ export default function SubmitPage() {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [alertMsg, setAlertMsg] = useState("")
   const [photoVerified, setPhotoVerified] = useState(false)
+  const [bgSkippable, setBgSkippable] = useState(false)
 
   useEffect(() => {
     fetch(`/api/submit/${token}`)
@@ -533,11 +534,13 @@ export default function SubmitPage() {
 
               {!photoPreview ? (
                 <PhotoVerifier
-                  onPhotoAccepted={(file, previewUrl) => {
+                  onPhotoAccepted={(file, previewUrl, bgQualityGood) => {
                     setPhotoFile(file)
                     // previewUrl is already a stable data URL from PhotoVerifier
                     setPhotoPreview(previewUrl)
                     setPhotoVerified(true)
+                    // If background is already clean, skip AI bg removal
+                    setBgSkippable(!!bgQualityGood)
                   }}
                   schoolBgColor={config?.photoBgColor}
                 />
@@ -557,8 +560,16 @@ export default function SubmitPage() {
 
               <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
                 <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setStep("form")}>← Back</button>
-                <button className="btn btn-primary" style={{ flex: 1 }} disabled={!photoPreview} onClick={() => setStep("bgprocess")}>
-                  Process Background →
+                <button className="btn btn-primary" style={{ flex: 1 }} disabled={!photoPreview} onClick={() => {
+                  if (bgSkippable) {
+                    // Photo already has clean background — skip AI processing
+                    setCroppedPhoto(photoPreview)
+                    setStep("review")
+                  } else {
+                    setStep("bgprocess")
+                  }
+                }}>
+                  {bgSkippable ? "Skip to Review →" : "Process Background →"}
                 </button>
               </div>
             </div>

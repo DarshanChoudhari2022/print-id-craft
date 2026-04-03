@@ -1,0 +1,10 @@
+[
+  {
+    "title": "correctly parses CSV data rows into database student objects and calls createMany",
+    "message": "AssertionError: expected 400 to be 200 // Object.is equality\n    at C:/Users/choud/Desktop/print-id-craft/print-id-craft/src/__tests__/integration/api/students/import.test.ts:75:26\n    at file:///C:/Users/choud/Desktop/print-id-craft/print-id-craft/node_modules/@vitest/runner/dist/chunk-artifact.js:1893:20"
+  },
+  {
+    "title": "catches and returns a 500 status nicely if the database connection drops during createMany",
+    "message": "AssertionError: expected 400 to be 500 // Object.is equality\n    at C:/Users/choud/Desktop/print-id-craft/print-id-craft/src/__tests__/integration/api/students/import.test.ts:97:26\n    at file:///C:/Users/choud/Desktop/print-id-craft/print-id-craft/node_modules/@vitest/runner/dist/chunk-artifact.js:1893:20"
+  }
+]

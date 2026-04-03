@@ -16,7 +16,7 @@ type PhotoVerificationResult = {
 }
 
 type Props = {
-  onPhotoAccepted: (file: File, previewUrl: string) => void
+  onPhotoAccepted: (file: File, previewUrl: string, bgQualityGood?: boolean) => void
   currentPhotoUrl?: string
   schoolBgColor?: string
 }
@@ -351,21 +351,21 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
           tip: "Use a plain, solid-colored wall as background"
         })
 
-        // ── 10. Face Detection ──
+        // ── 10. Face Detection (CRITICAL for ID cards) ──
         const faceResult = await detectFace(img)
         checks.push({
           passed: faceResult.detected,
-          severity: "warning",
+          severity: "critical",
           label: "Face Detected",
           detail: faceResult.detail,
-          tip: faceResult.tip
+          tip: faceResult.tip || "Upload a clear front-facing photo of your face for the ID card"
         })
 
         // ── 11. Face Count ──
         if (faceResult.detected) {
           checks.push({
             passed: faceResult.count === 1,
-            severity: "warning",
+            severity: "critical",
             label: "Single Face",
             detail: faceResult.count === 1 ? "1 face found" : `${faceResult.count} faces found`,
             tip: "Only the student's face should be in the photo — no group photos"
@@ -381,33 +381,33 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
 
           checks.push({
             passed: offCenterX < 0.2 && offCenterY < 0.25,
-            severity: "warning",
+            severity: "critical",
             label: "Face Centering",
-            detail: offCenterX < 0.15 && offCenterY < 0.2 ? "Centered" : "Slightly off-center",
+            detail: offCenterX < 0.15 && offCenterY < 0.2 ? "Centered" : "Face is off-center",
             tip: "Position your face in the center of the frame"
           })
 
           // ── 13. Face Size Ratio ──
           const faceHeightRatio = faceResult.bounds.height / img.height
           checks.push({
-            passed: faceHeightRatio >= 0.25 && faceHeightRatio <= 0.75,
-            severity: "warning",
+            passed: faceHeightRatio >= 0.20 && faceHeightRatio <= 0.75,
+            severity: "critical",
             label: "Face Size",
-            detail: faceHeightRatio < 0.25 ? "Too far away" : faceHeightRatio > 0.75 ? "Too close" : "Good",
-            tip: faceHeightRatio < 0.25
-              ? "Move closer to the camera — face should fill most of the frame"
+            detail: faceHeightRatio < 0.20 ? "Too far / no face visible" : faceHeightRatio > 0.75 ? "Too close" : "Good",
+            tip: faceHeightRatio < 0.20
+              ? "Move closer — your face should fill 30-60% of the frame"
               : "Move further from the camera"
           })
         }
 
-        // ── 14. Front-Facing Heuristic ──
+        // ── 14. Front-Facing Heuristic (CRITICAL for ID) ──
         const frontFacing = analyzeFrontFacing(ctx, img.width, img.height)
         checks.push({
           passed: frontFacing.passed,
-          severity: "warning",
+          severity: "critical",
           label: "Front-Facing",
           detail: frontFacing.confidence,
-          tip: "Look directly at the camera — avoid side angles"
+          tip: "Look directly at the camera — avoid side angles. ID cards require a front-facing photo."
         })
 
         // ── 15. Color Cast / White Balance Check ──
@@ -425,12 +425,22 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
           const occlusion = analyzeOcclusion(ctx, img.width, img.height, faceResult.bounds)
           checks.push({
             passed: occlusion.passed,
-            severity: "warning",
+            severity: "critical",
             label: "Face Visible",
             detail: occlusion.detail,
-            tip: occlusion.tip
+            tip: occlusion.tip || "Eyes, nose, and mouth must be clearly visible"
           })
         }
+
+        // ── 17. Content Appropriateness Check (CRITICAL) ──
+        const contentCheck = analyzeContentAppropriateness(ctx, img.width, img.height, faceResult)
+        checks.push({
+          passed: contentCheck.passed,
+          severity: "critical",
+          label: "ID Photo Content",
+          detail: contentCheck.detail,
+          tip: contentCheck.tip
+        })
 
         URL.revokeObjectURL(url)
         const criticalFails = checks.filter(c => !c.passed && c.severity === "critical")
@@ -605,6 +615,82 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
     } catch { return { passed: true, detail: "OK", tip: "" } }
   }
 
+  // ── Content Appropriateness: ensures photo is a proper head-and-shoulders portrait ──
+  const analyzeContentAppropriateness = (
+    ctx: CanvasRenderingContext2D, w: number, h: number,
+    faceResult: { detected: boolean; count: number; bounds?: { x: number; y: number; width: number; height: number } }
+  ) => {
+    try {
+      // Check 1: If no face detected at all, this is likely not a person photo
+      if (!faceResult.detected) {
+        return { passed: false, detail: "No person detected", tip: "Upload a clear photo of your face — ID cards require a front-facing portrait photo" }
+      }
+
+      // Check 2: Face should be in the upper half of image (head-and-shoulders portrait)
+      if (faceResult.bounds) {
+        const faceTopRatio = faceResult.bounds.y / h
+        const faceBotRatio = (faceResult.bounds.y + faceResult.bounds.height) / h
+        // Face should start in the upper 50% of the image
+        if (faceTopRatio > 0.55) {
+          return { passed: false, detail: "Face not in expected position", tip: "Your face should be in the upper portion of the photo — take a head-and-shoulders portrait" }
+        }
+        // Face bottom should not be below 85% (face too low = not portrait)
+        if (faceBotRatio > 0.90) {
+          return { passed: false, detail: "Improper framing", tip: "Only your head and shoulders should be visible — not full body" }
+        }
+      }
+
+      // Check 3: Skin distribution analysis
+      // A valid ID portrait has skin concentrated in the face region (upper-center)
+      // Inappropriate content would have skin spread across the entire image
+      const sampleData = ctx.getImageData(0, 0, w, h).data
+
+      // Count skin pixels in 4 quadrants
+      let skinUpper = 0, skinLower = 0, upperTotal = 0, lowerTotal = 0
+      const midY = Math.floor(h * 0.5)
+
+      for (let y = 0; y < h; y += 4) {
+        for (let x = 0; x < w; x += 4) {
+          const i = (y * w + x) * 4
+          if (i >= sampleData.length - 3) continue
+          const r = sampleData[i], g = sampleData[i + 1], b = sampleData[i + 2]
+          const isSkin = (r > 60 && g > 40 && b > 20 && r > g && r > b && Math.abs(r - g) > 8 && r - b > 12)
+            || (r > 40 && g > 30 && b > 15 && r > b && g > b && r - b > 5 && r < 120 && g < 100)
+            || (r > 160 && g > 130 && b > 100 && r < 250 && r > g && Math.abs(r - g) < 40 && r - b > 20)
+
+          if (y < midY) { upperTotal++; if (isSkin) skinUpper++ }
+          else { lowerTotal++; if (isSkin) skinLower++ }
+        }
+      }
+
+      const upperSkinRatio = upperTotal > 0 ? skinUpper / upperTotal : 0
+      const lowerSkinRatio = lowerTotal > 0 ? skinLower / lowerTotal : 0
+      const totalSkinRatio = (upperTotal + lowerTotal) > 0 ? (skinUpper + skinLower) / (upperTotal + lowerTotal) : 0
+
+      // Red flag: excessive skin in the lower half with no proper face detected in upper half
+      // A normal ID portrait has most skin in the upper region (face) and clothed body below
+      if (lowerSkinRatio > 0.45 && upperSkinRatio < 0.15) {
+        return { passed: false, detail: "Not an ID portrait photo", tip: "Upload a head-and-shoulders portrait — your face must be clearly visible in the upper portion" }
+      }
+
+      // Red flag: too much total skin exposure (more than 60% of image is skin)
+      // Normal ID portrait: ~15-35% skin (face + neck area)
+      if (totalSkinRatio > 0.55) {
+        return { passed: false, detail: "Inappropriate photo content", tip: "This doesn't appear to be a standard ID portrait. Upload a photo showing only your face and shoulders." }
+      }
+
+      // Red flag: high skin in lower half (> 35%) suggests non-portrait content
+      if (lowerSkinRatio > 0.35 && totalSkinRatio > 0.40) {
+        return { passed: false, detail: "Not a standard portrait", tip: "ID cards require a head-and-shoulders photo. Your lower body should not be prominently visible." }
+      }
+
+      return { passed: true, detail: "Valid ID portrait", tip: "" }
+    } catch {
+      // If analysis fails, be conservative and allow (other checks will catch issues)
+      return { passed: true, detail: "OK", tip: "" }
+    }
+  }
+
   const detectFace = async (img: HTMLImageElement): Promise<{
     detected: boolean; count: number; detail: string; tip: string;
     bounds?: { x: number; y: number; width: number; height: number }
@@ -648,7 +734,9 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
         if (isSkin) skinPixels++
         totalSampled++
       }
-      if (skinPixels / totalSampled > 0.08) {
+      // Require at least 18% skin pixels in the face region for a valid face
+      // (up from 8% — the old threshold was accepting random body parts and colored objects)
+      if (skinPixels / totalSampled > 0.18) {
         return {
           detected: true, count: 1, detail: "Face likely present", tip: "",
           bounds: { x: Math.floor(img.width * 0.3), y: Math.floor(img.height * 0.08), width: Math.floor(img.width * 0.4), height: Math.floor(img.height * 0.45) }
@@ -789,10 +877,12 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
     setResult(verificationResult)
     setVerifying(false)
 
-    // Auto-accept: if valid OR if only warnings (canOverride=true, no critical fails)
-    // This removes the need for students to click "Use Anyway"
-    if (verificationResult.valid || verificationResult.canOverride) {
-      onPhotoAccepted(adjustedFile, previewUrl)
+    // STRICT: Only auto-accept if ALL checks pass (valid=true)
+    // Photos with any critical failures (no face, not front-facing, inappropriate) are BLOCKED
+    if (verificationResult.valid) {
+      const bgCheck = verificationResult.checks.find(c => c.label === "Background")
+      const bgGood = bgCheck ? bgCheck.passed : false
+      onPhotoAccepted(adjustedFile, previewUrl, bgGood)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analyzePhoto, onPhotoAccepted])
@@ -845,8 +935,8 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
 
       {/* Photo Requirements Card */}
       <div style={{
-        marginBottom: 16, padding: 14, background: '#f0fdf4',
-        borderRadius: 12, border: '1px solid #bbf7d0'
+        marginBottom: 16, padding: 14, background: '#fef2f2',
+        borderRadius: 12, border: '1px solid #fecaca'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{
@@ -861,16 +951,18 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
             </svg>
           </div>
           <div style={{ flex: 1, fontSize: 12 }}>
-            <div style={{ fontWeight: 700, color: '#15803d', marginBottom: 4 }}>📸 Photo Requirements</div>
-            <ul style={{ margin: 0, paddingLeft: 14, color: '#16a34a', lineHeight: 1.8 }}>
-              <li>Minimum <strong>300px</strong> width</li>
-              <li>Passport size (<strong>3:4 ratio</strong>) — auto-cropped</li>
-              <li><strong>Plain/solid</strong> background</li>
-              <li><strong>Front-facing</strong>, eyes visible</li>
-              <li><strong>Not blurry</strong>, good lighting</li>
-              <li>Max file size: <strong>5 MB</strong></li>
-              <li><strong>One person only</strong> — no group photos</li>
+            <div style={{ fontWeight: 700, color: '#dc2626', marginBottom: 4 }}>🚨 Strict ID Photo Requirements</div>
+            <ul style={{ margin: 0, paddingLeft: 14, color: '#991b1b', lineHeight: 1.8 }}>
+              <li><strong>Front-facing only</strong> — look directly at the camera</li>
+              <li><strong>Head &amp; shoulders</strong> — passport-style portrait only</li>
+              <li><strong>One person</strong> — no group photos</li>
+              <li><strong>Face clearly visible</strong> — eyes, nose, mouth</li>
+              <li><strong>Not blurry</strong> — good lighting required</li>
+              <li><strong>No inappropriate content</strong> — will be auto-rejected</li>
             </ul>
+            <div style={{ marginTop: 6, fontSize: 11, color: '#b91c1c', fontWeight: 600, fontStyle: 'italic' }}>
+              ⚠️ Photos not meeting these standards will be automatically rejected.
+            </div>
           </div>
         </div>
       </div>
@@ -1040,30 +1132,79 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
                     )}
                   </div>
 
-                  {/* Action Buttons — only show Re-upload for critical failures */}
-                  {!result.valid && !result.canOverride && (
-                    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setPreview(""); setResult(null); lastAdjustedFileRef.current = null }}
-                        style={{
-                          fontSize: 11, padding: '6px 12px', background: '#f1f5f9',
-                          color: '#64748b', border: 'none', borderRadius: 6,
-                          cursor: 'pointer', fontWeight: 600
-                        }}
-                      >
-                        Re-upload
-                      </button>
+                  {/* Action Buttons for rejected photos */}
+                  {!result.valid && (
+                    <div style={{ marginTop: 12 }}>
+                      {/* Critical rejection banner */}
+                      {criticalFails.length > 0 && (
+                        <div style={{
+                          padding: '10px 14px', borderRadius: 8,
+                          background: '#fef2f2', border: '1px solid #fecaca',
+                          marginBottom: 10
+                        }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', marginBottom: 4 }}>
+                            🚫 Photo Rejected — Does Not Meet ID Card Standards
+                          </div>
+                          <div style={{ fontSize: 11, color: '#991b1b', lineHeight: 1.6 }}>
+                            {criticalFails.some(c => c.label === "Face Detected" || c.label === "ID Photo Content")
+                              ? "This photo does not contain a valid front-facing face. ID cards require a clear head-and-shoulders portrait."
+                              : criticalFails.some(c => c.label === "Front-Facing")
+                                ? "Please look directly at the camera. Side angles are not accepted for ID cards."
+                                : "Please fix the issues listed above and try again."
+                            }
+                          </div>
+                        </div>
+                      )}
+                      {/* Warning-only: still needs re-upload since auto-accept is strict now */}
+                      {criticalFails.length === 0 && result.canOverride && (
+                        <div style={{
+                          padding: '8px 12px', borderRadius: 8,
+                          background: '#fffbeb', border: '1px solid #fde68a',
+                          marginBottom: 10, fontSize: 11, color: '#92400e'
+                        }}>
+                          ⚠️ Minor issues detected — they may affect ID card quality. Consider re-uploading a better photo.
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setPreview(""); setResult(null); lastAdjustedFileRef.current = null }}
+                          style={{
+                            fontSize: 12, padding: '8px 16px',
+                            background: criticalFails.length > 0 ? '#ef4444' : '#f1f5f9',
+                            color: criticalFails.length > 0 ? 'white' : '#64748b',
+                            border: 'none', borderRadius: 8,
+                            cursor: 'pointer', fontWeight: 700, flex: 1
+                          }}
+                        >
+                          📷 {criticalFails.length > 0 ? "Upload a Proper ID Photo" : "Re-upload Photo"}
+                        </button>
+                        {/* Only allow force-accept if no critical failures */}
+                        {result.canOverride && criticalFails.length === 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleForceAccept() }}
+                            style={{
+                              fontSize: 12, padding: '8px 16px',
+                              background: '#f0fdf4', color: '#16a34a',
+                              border: '1px solid #bbf7d0', borderRadius: 8,
+                              cursor: 'pointer', fontWeight: 600
+                            }}
+                          >
+                            Use Anyway
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
-                  {/* Show auto-accepted message for warning-only photos */}
-                  {!result.valid && result.canOverride && (
+                  {/* Show accepted message for valid photos */}
+                  {result.valid && (
                     <div style={{
                       marginTop: 10, padding: '6px 10px', borderRadius: 6,
                       background: '#f0fdf4', border: '1px solid #bbf7d0',
                       fontSize: 11, color: '#16a34a', fontWeight: 600
                     }}>
-                      ✓ Photo accepted — minor warnings won&apos;t affect your ID card
+                      ✓ Photo accepted — meets ID card requirements
                     </div>
                   )}
                 </div>
