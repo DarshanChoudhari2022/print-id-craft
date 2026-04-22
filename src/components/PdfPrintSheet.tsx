@@ -3,12 +3,15 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import {
   calculateGridLayout,
+  calculatePvcLayout,
   generatePdfFilename,
   getOrientation,
   getMirroredCol,
+  getPvcCardPositions,
   PAGE_SIZES,
   CARD_PRESETS,
   QUICK_PRESETS,
+  PVC_PRINT_CONFIG,
 } from "@/lib/pdf-layout"
 
 /* ─── Types ─── */
@@ -52,24 +55,27 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
   const [generating, setGenerating] = useState(false)
   const [printSide, setPrintSide] = useState<"both" | "front" | "back">("both")
   const [imageFormat, setImageFormat] = useState<"jpeg" | "png">("png") // PNG for lossless print
+  const [pvcMode, setPvcMode] = useState(false) // PVC precision print mode
 
   const previewRef = useRef<HTMLCanvasElement>(null)
 
-  /* ── Derived sizes ── */
-  const rawPageW = pageSizeKey === "CUSTOM" ? customPageW : PAGE_SIZES[pageSizeKey].widthMm
-  const rawPageH = pageSizeKey === "CUSTOM" ? customPageH : PAGE_SIZES[pageSizeKey].heightMm
+  /* ── Derived sizes (PVC mode overrides all) ── */
+  const rawPageW = pvcMode ? PVC_PRINT_CONFIG.pageW : pageSizeKey === "CUSTOM" ? customPageW : PAGE_SIZES[pageSizeKey].widthMm
+  const rawPageH = pvcMode ? PVC_PRINT_CONFIG.pageH : pageSizeKey === "CUSTOM" ? customPageH : PAGE_SIZES[pageSizeKey].heightMm
   // Swap dimensions when landscape orientation is selected
-  const pageW = landscape ? Math.max(rawPageW, rawPageH) : Math.min(rawPageW, rawPageH)
-  const pageH = landscape ? Math.min(rawPageW, rawPageH) : Math.max(rawPageW, rawPageH)
-  const cardW = cardPresetKey === "CUSTOM" ? customCardW : CARD_PRESETS[cardPresetKey].widthMm
-  const cardH = cardPresetKey === "CUSTOM" ? customCardH : CARD_PRESETS[cardPresetKey].heightMm
+  const pageW = pvcMode ? PVC_PRINT_CONFIG.pageW : landscape ? Math.max(rawPageW, rawPageH) : Math.min(rawPageW, rawPageH)
+  const pageH = pvcMode ? PVC_PRINT_CONFIG.pageH : landscape ? Math.min(rawPageW, rawPageH) : Math.max(rawPageW, rawPageH)
+  const cardW = pvcMode ? PVC_PRINT_CONFIG.cardW : cardPresetKey === "CUSTOM" ? customCardW : CARD_PRESETS[cardPresetKey].widthMm
+  const cardH = pvcMode ? PVC_PRINT_CONFIG.cardH : cardPresetKey === "CUSTOM" ? customCardH : CARD_PRESETS[cardPresetKey].heightMm
 
   const hasBackSide = cards.some(c => !!c.backDataUrl)
 
   /* ── Grid layout calculator ── */
   const layout = useMemo(
-    () => calculateGridLayout(pageW, pageH, cardW, cardH, marginMm, gapMm, cards.length),
-    [pageW, pageH, cardW, cardH, marginMm, gapMm, cards.length]
+    () => pvcMode
+      ? calculatePvcLayout(cards.length)
+      : calculateGridLayout(pageW, pageH, cardW, cardH, marginMm, gapMm, cards.length),
+    [pvcMode, pageW, pageH, cardW, cardH, marginMm, gapMm, cards.length]
   )
 
   /* ── Live preview canvas ── */
@@ -106,27 +112,29 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
 
     // draw card slots
     const { cols, rows, startX, startY } = layout
+    const effectiveGapH = pvcMode ? PVC_PRINT_CONFIG.gapH : gapMm
+    const effectiveGapV = pvcMode ? PVC_PRINT_CONFIG.gapV : gapMm
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const idx = r * cols + c
-        const x = mmToPx(startX + c * (cardW + gapMm))
-        const y = mmToPx(startY + r * (cardH + gapMm))
+        const x = mmToPx(startX + c * (cardW + effectiveGapH))
+        const y = mmToPx(startY + r * (cardH + effectiveGapV))
         const w = mmToPx(cardW)
         const h = mmToPx(cardH)
 
         if (idx < cards.length) {
           // filled card slot
           const grad = ctx.createLinearGradient(x, y, x + w, y + h)
-          grad.addColorStop(0, "#dbeafe")
-          grad.addColorStop(1, "#bfdbfe")
+          grad.addColorStop(0, pvcMode ? "#dcfce7" : "#dbeafe")
+          grad.addColorStop(1, pvcMode ? "#bbf7d0" : "#bfdbfe")
           ctx.fillStyle = grad
           ctx.fillRect(x, y, w, h)
-          ctx.strokeStyle = "#3b82f6"
+          ctx.strokeStyle = pvcMode ? "#16a34a" : "#3b82f6"
           ctx.lineWidth = 0.8
           ctx.strokeRect(x, y, w, h)
 
           // serial number
-          ctx.fillStyle = "#1d4ed8"
+          ctx.fillStyle = pvcMode ? "#166534" : "#1d4ed8"
           ctx.font = `bold ${Math.max(6, mmToPx(3))}px Inter, system-ui, sans-serif`
           ctx.textAlign = "center"
           ctx.textBaseline = "middle"
@@ -144,36 +152,37 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
 
         // cut marks
         if (addCutMarks && idx < cards.length) {
-          ctx.strokeStyle = "#94a3b8"
-          ctx.lineWidth = 0.3
-          const cmLen = mmToPx(3)
+          const cmLen = pvcMode ? mmToPx(PVC_PRINT_CONFIG.cropMarkLen) : mmToPx(3)
+          const cmOff = pvcMode ? mmToPx(PVC_PRINT_CONFIG.cropMarkOff) : 0
+          ctx.strokeStyle = pvcMode ? "#059669" : "#94a3b8"
+          ctx.lineWidth = pvcMode ? 0.4 : 0.3
           // top-left
-          ctx.beginPath(); ctx.moveTo(x - cmLen, y); ctx.lineTo(x, y); ctx.stroke()
-          ctx.beginPath(); ctx.moveTo(x, y - cmLen); ctx.lineTo(x, y); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(x - cmOff - cmLen, y); ctx.lineTo(x - cmOff, y); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(x, y - cmOff - cmLen); ctx.lineTo(x, y - cmOff); ctx.stroke()
           // top-right
-          ctx.beginPath(); ctx.moveTo(x + w, y); ctx.lineTo(x + w + cmLen, y); ctx.stroke()
-          ctx.beginPath(); ctx.moveTo(x + w, y - cmLen); ctx.lineTo(x + w, y); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(x + w + cmOff, y); ctx.lineTo(x + w + cmOff + cmLen, y); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(x + w, y - cmOff - cmLen); ctx.lineTo(x + w, y - cmOff); ctx.stroke()
           // bottom-left
-          ctx.beginPath(); ctx.moveTo(x - cmLen, y + h); ctx.lineTo(x, y + h); ctx.stroke()
-          ctx.beginPath(); ctx.moveTo(x, y + h); ctx.lineTo(x, y + h + cmLen); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(x - cmOff - cmLen, y + h); ctx.lineTo(x - cmOff, y + h); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(x, y + h + cmOff); ctx.lineTo(x, y + h + cmOff + cmLen); ctx.stroke()
           // bottom-right
-          ctx.beginPath(); ctx.moveTo(x + w, y + h); ctx.lineTo(x + w + cmLen, y + h); ctx.stroke()
-          ctx.beginPath(); ctx.moveTo(x + w, y + h); ctx.lineTo(x + w, y + h + cmLen); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(x + w + cmOff, y + h); ctx.lineTo(x + w + cmOff + cmLen, y + h); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(x + w, y + h + cmOff); ctx.lineTo(x + w, y + h + cmOff + cmLen); ctx.stroke()
         }
       }
     }
 
     // page info text
-    ctx.fillStyle = "#94a3b8"
+    ctx.fillStyle = pvcMode ? "#059669" : "#94a3b8"
     ctx.font = `10px Inter, system-ui, sans-serif`
     ctx.textAlign = "center"
     ctx.textBaseline = "bottom"
     ctx.fillText(
-      `Page 1 of ${layout.totalPages} · ${layout.cols}×${layout.rows} (${layout.cardsPerPage}/page)`,
+      `${pvcMode ? "🪪 PVC · " : ""}Page 1 of ${layout.totalPages} · ${layout.cols}×${layout.rows} (${layout.cardsPerPage}/page)`,
       cWidth / 2,
       cHeight - 4
     )
-  }, [layout, cards, pageW, pageH, cardW, cardH, marginMm, gapMm, addCutMarks])
+  }, [layout, cards, pageW, pageH, cardW, cardH, marginMm, gapMm, addCutMarks, pvcMode])
 
   /* ── PDF Generation ── */
   const generatePdf = useCallback(async () => {
@@ -204,54 +213,51 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
           img.src = dataUrl
         })
 
-      // Helper: render high-quality image data from a dataUrl
-      // PNG = lossless (larger file, perfect quality for print)
-      // JPEG = lossy at max quality (smaller file, negligible loss)
-      const usePng = imageFormat === "png"
-      const imgFmt = usePng ? "PNG" : "JPEG"
-
-      const getHighResImageData = async (dataUrl: string): Promise<string> => {
-        if (usePng) {
-          // Convert everything to PNG for lossless print quality
-          if (dataUrl.startsWith("data:image/png")) return dataUrl
-          const img = await loadImage(dataUrl)
-          const canvas = document.createElement("canvas")
-          canvas.width = img.naturalWidth
-          canvas.height = img.naturalHeight
-          const ctx2 = canvas.getContext("2d")!
-          ctx2.drawImage(img, 0, 0)
-          return canvas.toDataURL("image/png")
-        } else {
-          // JPEG at maximum quality
-          if (dataUrl.startsWith("data:image/jpeg")) return dataUrl
-          const img = await loadImage(dataUrl)
-          const canvas = document.createElement("canvas")
-          canvas.width = img.naturalWidth
-          canvas.height = img.naturalHeight
-          const ctx2 = canvas.getContext("2d")!
-          ctx2.drawImage(img, 0, 0)
-          return canvas.toDataURL("image/jpeg", 1.0)
+      // Helper: convert a data URL to Uint8Array binary for jsPDF.
+      // Passing binary Uint8Array avoids hitting JS string length limits.
+      const dataUrlToBytes = (dataUrl: string): Uint8Array => {
+        const base64 = dataUrl.split(",")[1]
+        const binaryString = atob(base64)
+        const bytes = new Uint8Array(binaryString.length)
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i)
         }
+        return bytes
+      }
+
+      // Detect image format from data URL
+      const getImageFormat = (dataUrl: string): "PNG" | "JPEG" =>
+        dataUrl.startsWith("data:image/png") ? "PNG" : "JPEG"
+
+      // Extract binary directly from source — NO re-encoding, NO quality loss.
+      // PNG stays PNG (lossless, crisp text). JPEG stays JPEG (no double-compression).
+      const getCardImageBinary = (dataUrl: string): { bytes: Uint8Array; format: "PNG" | "JPEG" } => {
+        return { bytes: dataUrlToBytes(dataUrl), format: getImageFormat(dataUrl) }
       }
 
       // Helper: add cut marks to the PDF
       const drawCutMarks = (d: typeof doc, x: number, y: number, w: number, h: number) => {
-        const cm = 3 // cut mark length in mm
-        d.setDrawColor(150, 150, 150)
-        d.setLineWidth(0.1)
+        const cm = pvcMode ? PVC_PRINT_CONFIG.cropMarkLen : 3 // cut mark length in mm
+        const off = pvcMode ? PVC_PRINT_CONFIG.cropMarkOff : 0.5 // offset from card edge
+        d.setDrawColor(0, 0, 0) // pure black for print
+        d.setLineWidth(pvcMode ? 0.15 : 0.1)
         // top-left
-        d.line(x - cm, y, x - 0.5, y)
-        d.line(x, y - cm, x, y - 0.5)
+        d.line(x - off - cm, y, x - off, y)
+        d.line(x, y - off - cm, x, y - off)
         // top-right
-        d.line(x + w + 0.5, y, x + w + cm, y)
-        d.line(x + w, y - cm, x + w, y - 0.5)
+        d.line(x + w + off, y, x + w + off + cm, y)
+        d.line(x + w, y - off - cm, x + w, y - off)
         // bottom-left
-        d.line(x - cm, y + h, x - 0.5, y + h)
-        d.line(x, y + h + 0.5, x, y + h + cm)
+        d.line(x - off - cm, y + h, x - off, y + h)
+        d.line(x, y + h + off, x, y + h + off + cm)
         // bottom-right
-        d.line(x + w + 0.5, y + h, x + w + cm, y + h)
-        d.line(x + w, y + h + 0.5, x + w, y + h + cm)
+        d.line(x + w + off, y + h, x + w + off + cm, y + h)
+        d.line(x + w, y + h + off, x + w, y + h + off + cm)
       }
+
+      // Image cache with unique aliases — jsPDF deduplicates images by alias,
+      // so identical images are only stored once in the PDF.
+      let aliasCounter = 0
 
       // Generate FRONT pages
       if (includeFront) {
@@ -269,12 +275,15 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
 
             const row = Math.floor(slot / cols)
             const col = slot % cols
-            const x = startX + col * (cardW + gapMm)
-            const y = startY + row * (cardH + gapMm)
+            const pdfGapH = pvcMode ? PVC_PRINT_CONFIG.gapH : gapMm
+            const pdfGapV = pvcMode ? PVC_PRINT_CONFIG.gapV : gapMm
+            const x = startX + col * (cardW + pdfGapH)
+            const y = startY + row * (cardH + pdfGapV)
 
             try {
-              const imgData = await getHighResImageData(cards[cardIdx].frontDataUrl)
-              doc.addImage(imgData, imgFmt, x, y, cardW, cardH, undefined, "NONE")
+              const { bytes, format } = getCardImageBinary(cards[cardIdx].frontDataUrl)
+              const alias = `img_${aliasCounter++}`
+              doc.addImage(bytes, format, x, y, cardW, cardH, alias, "FAST")
 
               if (addCutMarks) drawCutMarks(doc, x, y, cardW, cardH)
             } catch (err) {
@@ -307,12 +316,15 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
             const row = Math.floor(slot / cols)
             const col = slot % cols
             const mirroredCol = getMirroredCol(col, cols)
-            const x = startX + mirroredCol * (cardW + gapMm)
-            const y = startY + row * (cardH + gapMm)
+            const pdfGapH = pvcMode ? PVC_PRINT_CONFIG.gapH : gapMm
+            const pdfGapV = pvcMode ? PVC_PRINT_CONFIG.gapV : gapMm
+            const x = startX + mirroredCol * (cardW + pdfGapH)
+            const y = startY + row * (cardH + pdfGapV)
 
             try {
-              const imgData = await getHighResImageData(cards[cardIdx].backDataUrl!)
-              doc.addImage(imgData, imgFmt, x, y, cardW, cardH, undefined, "NONE")
+              const { bytes, format } = getCardImageBinary(cards[cardIdx].backDataUrl!)
+              const alias = `img_${aliasCounter++}`
+              doc.addImage(bytes, format, x, y, cardW, cardH, alias, "FAST")
 
               if (addCutMarks) drawCutMarks(doc, x, y, cardW, cardH)
             } catch (err) {
@@ -321,10 +333,18 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
           }
         }
       }
-
-      // Save
+      // Save using Blob-based download to avoid doc.save()'s internal
+      // Array.join('') which crashes with "Invalid string length" on large PDFs.
       const filename = generatePdfFilename(schoolName)
-      doc.save(filename)
+      const pdfBlob = doc.output("blob")
+      const blobUrl = URL.createObjectURL(pdfBlob)
+      const a = document.createElement("a")
+      a.href = blobUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000)
       toast.success(`PDF saved! ${cards.length} cards on ${layout.totalPages} page(s).`)
     } catch (err: any) {
       console.error("PDF generation error:", err)
@@ -414,49 +434,64 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
             {/* Quick Presets */}
             <SettingsSection title="⚡ Quick Presets" subtitle="One-click configurations for common layouts">
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {QUICK_PRESETS.map((preset, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setPageSizeKey(preset.pageSizeKey)
-                      setCardPresetKey(preset.cardPresetKey)
-                      setMarginMm(preset.marginMm)
-                      setGapMm(preset.gapMm)
-                      setLandscape(preset.landscape)
-                      if (preset.cardPresetKey !== "CUSTOM") {
-                        setCustomCardW(CARD_PRESETS[preset.cardPresetKey].widthMm)
-                        setCustomCardH(CARD_PRESETS[preset.cardPresetKey].heightMm)
-                      }
-                    }}
-                    style={{
-                      padding: "8px 14px",
-                      borderRadius: 10,
-                      border: "1.5px solid #3b82f6",
-                      background: "linear-gradient(135deg, #eff6ff, #dbeafe)",
-                      cursor: "pointer",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "#1d4ed8",
-                      transition: "all 0.15s",
-                      textAlign: "left",
-                      lineHeight: 1.4,
-                    }}
-                    onMouseEnter={e => {
-                      (e.target as HTMLElement).style.background = "linear-gradient(135deg, #dbeafe, #bfdbfe)";
-                      (e.target as HTMLElement).style.transform = "translateY(-1px)";
-                    }}
-                    onMouseLeave={e => {
-                      (e.target as HTMLElement).style.background = "linear-gradient(135deg, #eff6ff, #dbeafe)";
-                      (e.target as HTMLElement).style.transform = "translateY(0)";
-                    }}
-                  >
-                    <div>{preset.label}</div>
-                    <div style={{ fontSize: 10, fontWeight: 500, color: "#3b82f6", marginTop: 2 }}>
-                      {preset.description}
-                    </div>
-                  </button>
-                ))}
+                {QUICK_PRESETS.map((preset, idx) => {
+                  const isActive = preset.isPvc ? pvcMode : false
+                  const isPvc = !!preset.isPvc
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setPvcMode(!!preset.isPvc)
+                        setPageSizeKey(preset.pageSizeKey)
+                        setCardPresetKey(preset.cardPresetKey)
+                        setMarginMm(preset.marginMm)
+                        setGapMm(preset.gapMm)
+                        setLandscape(preset.landscape)
+                        setAddCutMarks(true)
+                        if (preset.cardPresetKey !== "CUSTOM") {
+                          setCustomCardW(CARD_PRESETS[preset.cardPresetKey].widthMm)
+                          setCustomCardH(CARD_PRESETS[preset.cardPresetKey].heightMm)
+                        }
+                      }}
+                      style={{
+                        padding: "8px 14px",
+                        borderRadius: 10,
+                        border: `1.5px solid ${isActive ? "#16a34a" : isPvc ? "#22c55e" : "#3b82f6"}`,
+                        background: isActive
+                          ? "linear-gradient(135deg, #166534, #15803d)"
+                          : isPvc
+                            ? "linear-gradient(135deg, #f0fdf4, #dcfce7)"
+                            : "linear-gradient(135deg, #eff6ff, #dbeafe)",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: isActive ? "#ffffff" : isPvc ? "#166534" : "#1d4ed8",
+                        transition: "all 0.15s",
+                        textAlign: "left",
+                        lineHeight: 1.4,
+                        boxShadow: isActive ? "0 2px 8px rgba(22,163,74,0.3)" : "none",
+                      }}
+                    >
+                      <div>{preset.label}</div>
+                      <div style={{
+                        fontSize: 10, fontWeight: 500, marginTop: 2,
+                        color: isActive ? "#bbf7d0" : isPvc ? "#16a34a" : "#3b82f6",
+                      }}>
+                        {preset.description}
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
+              {pvcMode && (
+                <div style={{
+                  marginTop: 10, padding: "8px 12px", borderRadius: 8,
+                  background: "linear-gradient(135deg, #f0fdf4, #dcfce7)",
+                  border: "1px solid #bbf7d0", fontSize: 11, color: "#166534",
+                }}>
+                  🪪 <strong>PVC Mode Active</strong> — All settings locked to factory spec: 56×88mm cards, 5×2 grid, 1.7mm margins, 3.4/3.0mm gaps, crop marks with 1mm offset
+                </div>
+              )}
             </SettingsSection>
 
             {/* Page Size */}
@@ -769,8 +804,9 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
           flexWrap: "wrap",
           gap: 12,
         }}>
-          <div style={{ fontSize: 12, color: "#94a3b8" }}>
-            {cards.length} cards → {layout.totalPages} page(s) at {layout.cols}×{layout.rows} grid
+          <div style={{ fontSize: 12, color: pvcMode ? "#166534" : "#94a3b8" }}>
+            {pvcMode ? "🪪 PVC · " : ""}{cards.length} cards → {layout.totalPages} page(s) at {layout.cols}×{layout.rows} grid
+            {pvcMode && " · 56×88mm · 1.7mm margins"}
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <button
@@ -797,7 +833,9 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
                 border: "none",
                 background: generating
                   ? "#94a3b8"
-                  : "linear-gradient(135deg, #dc2626, #b91c1c)",
+                  : pvcMode
+                    ? "linear-gradient(135deg, #16a34a, #15803d)"
+                    : "linear-gradient(135deg, #dc2626, #b91c1c)",
                 color: "white",
                 fontSize: 14,
                 fontWeight: 700,
@@ -805,7 +843,9 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
-                boxShadow: generating ? "none" : "0 4px 14px rgba(220,38,38,0.35)",
+                boxShadow: generating ? "none" : pvcMode
+                  ? "0 4px 14px rgba(22,163,74,0.35)"
+                  : "0 4px 14px rgba(220,38,38,0.35)",
               }}
             >
               {generating ? (
@@ -820,7 +860,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
                   Generating PDF...
                 </>
               ) : (
-                <>📄 Download PDF Print</>
+                <>{pvcMode ? "🪪 Download PVC Print" : "📄 Download PDF Print"}</>
               )}
             </button>
           </div>

@@ -25,6 +25,7 @@ export type QuickPreset = {
   gapMm: number
   landscape: boolean
   expectedGrid: string
+  isPvc?: boolean
 }
 
 export type GridLayout = {
@@ -57,8 +58,84 @@ export const CARD_PRESETS: Record<string, CardPreset> = {
   CUSTOM: { label: "Custom Size", widthMm: 85.6, heightMm: 54 },
 }
 
+/* ─── PVC Print Configuration (Aaryans Exact Spec) ─── */
+export const PVC_PRINT_CONFIG = {
+  cardW: 56,       // mm
+  cardH: 88,       // mm
+  pageW: 297,      // A4 landscape width
+  pageH: 210,      // A4 landscape height
+  marginX: 1.7,    // left/right margin
+  marginY: 15.5,   // top/bottom margin
+  gapH: 3.4,       // horizontal gap between cards
+  gapV: 3.0,       // vertical gap between cards
+  cols: 5,
+  rows: 2,
+  bleed: 1.5,      // mm bleed on all sides
+  cornerRadius: 2.5, // mm corner radius for die-cut
+  cropMarkLen: 3.0,  // mm crop mark length
+  cropMarkOff: 1.0,  // mm offset from card edge
+  // Verification:
+  // Width:  5×56 + 4×3.4 + 2×1.7 = 280 + 13.6 + 3.4 = 297mm ✅
+  // Height: 2×88 + 1×3.0 + 2×15.5 = 176 + 3.0 + 31.0 = 210mm ✅
+} as const
+
+export type PvcCardPosition = { x: number; y: number; col: number; row: number }
+
+/**
+ * Returns the exact (x, y) positions for each card slot on a PVC print page.
+ * Uses fixed margins and separate H/V gaps — no auto-centering.
+ */
+export function getPvcCardPositions(): PvcCardPosition[] {
+  const { marginX, marginY, cardW, cardH, gapH, gapV, cols, rows } = PVC_PRINT_CONFIG
+  const positions: PvcCardPosition[] = []
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      positions.push({
+        x: marginX + c * (cardW + gapH),
+        y: marginY + r * (cardH + gapV),
+        col: c,
+        row: r,
+      })
+    }
+  }
+  return positions
+}
+
+/**
+ * Calculates the PVC grid layout for a given number of cards.
+ * Returns a GridLayout compatible with the existing system.
+ */
+export function calculatePvcLayout(totalCards: number): GridLayout {
+  const { cols, rows, marginX, marginY, cardW, cardH, gapH, gapV } = PVC_PRINT_CONFIG
+  const cardsPerPage = cols * rows
+  const totalPages = Math.ceil(totalCards / cardsPerPage)
+  const usedW = cols * cardW + (cols - 1) * gapH
+  const usedH = rows * cardH + (rows - 1) * gapV
+  return {
+    cols,
+    rows,
+    cardsPerPage,
+    totalPages,
+    startX: marginX,
+    startY: marginY,
+    usedW,
+    usedH,
+  }
+}
+
 /* ─── Quick Presets for common print configurations ─── */
 export const QUICK_PRESETS: QuickPreset[] = [
+  {
+    label: "🪪 PVC Print (56×88)",
+    description: "Exact 5×2 · 1.7mm margins · Bleed + Crop marks",
+    pageSizeKey: "A4",
+    cardPresetKey: "SCHOOL_ID",
+    marginMm: 1.7,
+    gapMm: 3.4,
+    landscape: true,
+    expectedGrid: "5×2",
+    isPvc: true,
+  },
   {
     label: "10 Cards on A4",
     description: "56×88mm cards · A4 Landscape · 5×2 grid",

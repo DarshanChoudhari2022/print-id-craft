@@ -88,12 +88,34 @@ async function renderIdCard(
   const templateImg = await getCachedImage(templateImageUrl)
   if (!templateImg) throw new Error("Failed to load template")
 
-  canvas.width = templateImg.naturalWidth * outputScale
-  canvas.height = templateImg.naturalHeight * outputScale
-  const w = canvas.width
-  const h = canvas.height
+  // ── Force exact 56×88mm card aspect ratio at 300 DPI ──
+  // At 300 DPI: 56mm = 661px, 88mm = 1039px
+  const CARD_W_PX = Math.ceil((56 / 25.4) * 300) // 661
+  const CARD_H_PX = Math.ceil((88 / 25.4) * 300) // 1039
+  const w = CARD_W_PX * outputScale
+  const h = CARD_H_PX * outputScale
+  canvas.width = w
+  canvas.height = h
 
-  ctx.drawImage(templateImg, 0, 0, w, h)
+  // Draw template with cover-fit (fill entire card, crop overflow)
+  const imgW = templateImg.naturalWidth
+  const imgH = templateImg.naturalHeight
+  const imgAspect = imgW / imgH
+  const cardAspect = w / h
+  let sx = 0, sy = 0, sw = imgW, sh = imgH
+  if (imgAspect > cardAspect) {
+    // Image is wider — crop sides
+    sw = imgH * cardAspect
+    sx = (imgW - sw) / 2
+  } else {
+    // Image is taller — crop top/bottom
+    sh = imgW / cardAspect
+    sy = (imgH - sh) / 2
+  }
+  // Use imageSmoothingQuality for best interpolation
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = "high"
+  ctx.drawImage(templateImg, sx, sy, sw, sh, 0, 0, w, h)
 
   for (const field of fieldMappings) {
     const fx = (field.x / 100) * w
@@ -107,15 +129,15 @@ async function renderIdCard(
         if (photoImg) {
           const aspectRatio = photoImg.naturalWidth / photoImg.naturalHeight
           const targetAspect = fw / fh
-          let sx = 0, sy = 0, sw = photoImg.naturalWidth, sh = photoImg.naturalHeight
+          let psx = 0, psy = 0, psw = photoImg.naturalWidth, psh = photoImg.naturalHeight
           if (aspectRatio > targetAspect) {
-            sw = photoImg.naturalHeight * targetAspect
-            sx = (photoImg.naturalWidth - sw) / 2
+            psw = photoImg.naturalHeight * targetAspect
+            psx = (photoImg.naturalWidth - psw) / 2
           } else {
-            sh = photoImg.naturalWidth / targetAspect
-            sy = (photoImg.naturalHeight - sh) / 2
+            psh = photoImg.naturalWidth / targetAspect
+            psy = (photoImg.naturalHeight - psh) / 2
           }
-          ctx.drawImage(photoImg, sx, sy, sw, sh, fx, fy, fw, fh)
+          ctx.drawImage(photoImg, psx, psy, psw, psh, fx, fy, fw, fh)
         }
       }
     } else {
@@ -430,18 +452,13 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           const chunk = students.slice(i, i + CHUNK_SIZE)
           const promises = chunk.map(async (student: any) => {
             try {
-              // Calculate dynamic scale to ensure minimum 300 DPI at card size
-              // Card width = 56mm = 2.205 inches → need 661px minimum at 300 DPI
-              const templateImg = await getCachedImage(templateImageUrl)
-              const templatePxW = templateImg?.naturalWidth || 800
-              const cardMm = 56 // target card width in mm
-              const targetDpi = 300
-              const cardInches = cardMm / 25.4
-              const neededPx = Math.ceil(cardInches * targetDpi)
-              const minScale = Math.ceil(neededPx / templatePxW)
-              const printScale = Math.max(2, minScale) // at least 2×, higher if template is small
+              // renderIdCard now enforces 300 DPI at base scale (661×1039px)
+              // Scale=1 = 300 DPI, Scale=2 = 600 DPI (ultra-sharp for print)
+              const printScale = 1 // 300 DPI is print-standard quality
 
-              // Render at calculated scale with PNG for lossless quality
+              // Render as PNG (lossless) — JPEG creates artifacts on text/edges
+              // which is unacceptable for printed ID cards. The Blob-based PDF
+              // download in PdfPrintSheet handles the memory safely.
               const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, printScale, "png")
               let backDataUrl: string | undefined
               if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
