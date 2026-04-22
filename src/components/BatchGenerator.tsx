@@ -125,18 +125,25 @@ async function renderIdCard(
       if (student.photoUrl) {
         const photoImg = await getCachedImage(student.photoUrl)
         if (photoImg) {
-          // Cover-fit the student photo into its box
-          const aspectRatio = photoImg.naturalWidth / photoImg.naturalHeight
-          const targetAspect = fw / fh
-          let psx = 0, psy = 0, psw = photoImg.naturalWidth, psh = photoImg.naturalHeight
-          if (aspectRatio > targetAspect) {
-            psw = photoImg.naturalHeight * targetAspect
-            psx = (photoImg.naturalWidth - psw) / 2
+          // Contain-fit: show the ENTIRE photo, no cropping
+          // This prevents heads/faces from being cut off
+          const photoAspect = photoImg.naturalWidth / photoImg.naturalHeight
+          const boxAspect = fw / fh
+          let dx: number, dy: number, dw: number, dh: number
+          if (photoAspect > boxAspect) {
+            // Photo is wider than box — fit to width, center vertically
+            dw = fw
+            dh = fw / photoAspect
+            dx = fx
+            dy = fy + (fh - dh) / 2
           } else {
-            psh = photoImg.naturalWidth / targetAspect
-            psy = (photoImg.naturalHeight - psh) / 2
+            // Photo is taller than box — fit to height, center horizontally
+            dh = fh
+            dw = fh * photoAspect
+            dx = fx + (fw - dw) / 2
+            dy = fy
           }
-          ctx.drawImage(photoImg, psx, psy, psw, psh, fx, fy, fw, fh)
+          ctx.drawImage(photoImg, 0, 0, photoImg.naturalWidth, photoImg.naturalHeight, dx, dy, dw, dh)
         }
       }
     } else {
