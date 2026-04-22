@@ -793,11 +793,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
               Generating...
             </>
           ) : (
-<<<<<<< HEAD
-            <>{outputFormat === "CDR" ? "📐 Generate CorelDRAW Files (ZIP)" : "🖨️ Generate & Download ID Cards (ZIP)"}</>
-=======
             <>{outputFormat === "CDR" ? "📐 Generate CorelDRAW Files (ZIP)" : outputFormat === "PDF_PRINT" ? "📄 Generate PDF Print" : "🖨️ Generate & Download ID Cards (ZIP)"}</>
->>>>>>> 022f084 (Optimize performance & stability: 1. Improved DB query resilience (dashboard/schools API) 2. 3-4x faster AI background removal (quantized model + downscaling) 3. Added vector CDR export option via SVG + VBScript batch converter)
           )}
         </button>
       </div>
