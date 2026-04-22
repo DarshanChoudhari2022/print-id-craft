@@ -76,18 +76,16 @@ async function imageToDataUrl(url: string): Promise<string> {
 
 // ── Print resolution limits ──
 const MIN_PRINT_W = 661   // 300 DPI minimum (56mm)
-const MAX_PRINT_W = 1500  // cap to prevent massive PDFs
 
 /**
  * Renders an ID card at the 56:88 mm card ratio, using the template's
- * native resolution (capped between 300-680 DPI) for maximum sharpness.
+ * full native resolution for maximum sharpness (minimum 300 DPI).
  *
  * The template is stretched to fill the canvas. Because field positions
  * are stored as percentages, they scale perfectly — no misalignment,
  * no cropping, and jsPDF never needs to resize the image.
  *
- * Output is JPEG at 95% quality — virtually indistinguishable from
- * lossless PNG but ~8-10× smaller file size.
+ * Output is PNG (lossless) for maximum PVC print quality.
  */
 async function renderIdCard(
   templateImageUrl: string,
@@ -97,8 +95,8 @@ async function renderIdCard(
   const templateImg = await getCachedImage(templateImageUrl)
   if (!templateImg) throw new Error("Failed to load template")
 
-  // Use template's native width (clamped) and enforce 56:88 ratio for height
-  const printW = Math.max(MIN_PRINT_W, Math.min(MAX_PRINT_W, templateImg.naturalWidth))
+  // Use template's FULL native width (min 300 DPI) and enforce 56:88 ratio
+  const printW = Math.max(MIN_PRINT_W, templateImg.naturalWidth)
   const printH = Math.round(printW * 88 / 56)
 
   const canvas = document.createElement("canvas")
