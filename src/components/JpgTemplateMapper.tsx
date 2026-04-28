@@ -227,6 +227,8 @@ export default function JpgTemplateMapper({
   const [showColorDialog, setShowColorDialog] = useState(false)
   const [showWrapDialog, setShowWrapDialog] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; fieldId: string } | null>(null)
+  // Snapshot of the field state when a dialog opens — used for Cancel-revert when live-preview is enabled
+  const dialogSnapshotRef = useRef<{ id: string; mapping: FieldMapping } | null>(null)
 
   // ── Professional Features State ──
   const [zoomLevel, setZoomLevel] = useState(100) // percentage
@@ -560,6 +562,25 @@ export default function JpgTemplateMapper({
       prev.map((m) => (m.id === id ? { ...m, ...updates } : m))
     )
   }
+
+  // ── Snapshot helpers for dialogs that support live-preview ──
+  // Call openDialogWithSnapshot before opening a dialog; if user clicks Cancel, call revertDialogSnapshot()
+  const openDialogWithSnapshot = useCallback((opener: () => void) => {
+    const sel = mappings.find((m) => m.id === selectedId)
+    if (sel) dialogSnapshotRef.current = { id: sel.id, mapping: { ...sel } }
+    opener()
+  }, [mappings, selectedId])
+
+  const revertDialogSnapshot = useCallback(() => {
+    const snap = dialogSnapshotRef.current
+    if (!snap) return
+    setMappings((prev) => prev.map((m) => (m.id === snap.id ? snap.mapping : m)))
+    dialogSnapshotRef.current = null
+  }, [])
+
+  const clearDialogSnapshot = useCallback(() => {
+    dialogSnapshotRef.current = null
+  }, [])
 
   // Mouse/touch handlers for dragging fields on the image
   const handleMouseDown = (
@@ -973,6 +994,24 @@ export default function JpgTemplateMapper({
   // ---------------------------------------------------------------
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* ── Responsive overrides for mobile ── */}
+      <style>{`
+        @media (max-width: 900px) {
+          .mapper-sidebar {
+            position: static !important;
+            max-height: none !important;
+            width: 100% !important;
+            padding-right: 0 !important;
+          }
+          .mapper-layout {
+            gap: 12px !important;
+          }
+        }
+        @media (max-width: 640px) {
+          .mapper-toolbar { font-size: 10px !important; padding: 6px 8px !important; }
+          .mapper-toolbar button { width: 26px !important; height: 26px !important; font-size: 12px !important; }
+        }
+      `}</style>
       {/* Top Bar */}
       <div
         style={{
@@ -1626,7 +1665,10 @@ export default function JpgTemplateMapper({
         </div>
 
         {/* Right: Sidebar */}
-        <div style={{ flex: "1 1 320px", maxWidth: "100%", display: "flex", flexDirection: "column", gap: 16, position: "sticky", top: 20, maxHeight: "calc(100vh - 40px)", overflowY: "auto", paddingRight: 4 }}>
+        <div
+          className="mapper-sidebar"
+          style={{ flex: "1 1 320px", maxWidth: "100%", display: "flex", flexDirection: "column", gap: 16, position: "sticky", top: 20, maxHeight: "calc(100vh - 40px)", overflowY: "auto", paddingRight: 4 }}
+        >
 
           {/* Card Settings Panel */}
           {!showPreview && (
@@ -2275,7 +2317,7 @@ export default function JpgTemplateMapper({
                   {/* Quick Dialog Buttons */}
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button
-                      onClick={() => setShowFontDialog(true)}
+                      onClick={() => openDialogWithSnapshot(() => setShowFontDialog(true))}
                       style={{
                         flex: 1, padding: "6px 10px", borderRadius: 6,
                         border: "1.5px solid #3b82f6", background: "#eff6ff",
@@ -2286,7 +2328,7 @@ export default function JpgTemplateMapper({
                       A Font...
                     </button>
                     <button
-                      onClick={() => setShowColorDialog(true)}
+                      onClick={() => openDialogWithSnapshot(() => setShowColorDialog(true))}
                       style={{
                         flex: 1, padding: "6px 10px", borderRadius: 6,
                         border: "1.5px solid #e2e8f0", background: "white",
@@ -2777,7 +2819,7 @@ export default function JpgTemplateMapper({
                   {/* Photo action buttons */}
                   <div style={{ display: "flex", gap: 6 }}>
                     <button
-                      onClick={() => setShowPhotoSizeDialog(true)}
+                      onClick={() => openDialogWithSnapshot(() => setShowPhotoSizeDialog(true))}
                       style={{
                         flex: 1, padding: "6px 10px", borderRadius: 6,
                         border: "1.5px solid #3b82f6", background: "#eff6ff",
@@ -2788,7 +2830,7 @@ export default function JpgTemplateMapper({
                       📐 Photo Size...
                     </button>
                     <button
-                      onClick={() => setShowPhotoBorderDialog(true)}
+                      onClick={() => openDialogWithSnapshot(() => setShowPhotoBorderDialog(true))}
                       style={{
                         flex: 1, padding: "6px 10px", borderRadius: 6,
                         border: "1.5px solid #e2e8f0", background: "white",
@@ -2909,21 +2951,39 @@ export default function JpgTemplateMapper({
                           padding: 0,
                         }}
                       />
-                      <div style={{ display: "flex", gap: 3, flex: 1 }}>
-                        {["#000000", "#ffffff", "#1e3a5f", "#8b0000", "#2e7d32", "#c0c0c0"].map((c) => (
-                          <button
-                            key={c}
-                            onClick={() => updateMapping(selectedMapping.id, { photoBorderColor: c })}
-                            style={{
-                              width: 22,
-                              height: 22,
-                              borderRadius: 4,
-                              background: c,
-                              border: `2px solid ${selectedMapping.photoBorderColor === c ? "#3b82f6" : "#d1d5db"}`,
-                              cursor: "pointer",
-                            }}
-                          />
-                        ))}
+                      <div style={{ display: "flex", gap: 4, flex: 1, alignItems: "center" }}>
+                        {["#000000", "#ffffff", "#1e3a5f", "#8b0000", "#2e7d32", "#c0c0c0"].map((c) => {
+                          const isSel = (selectedMapping.photoBorderColor || "").toLowerCase() === c.toLowerCase()
+                          const lum = parseInt(c.slice(1, 3), 16) * 0.299 + parseInt(c.slice(3, 5), 16) * 0.587 + parseInt(c.slice(5, 7), 16) * 0.114
+                          const checkColor = lum > 140 ? "#000" : "#fff"
+                          return (
+                            <button
+                              key={c}
+                              onClick={() => updateMapping(selectedMapping.id, { photoBorderColor: c })}
+                              aria-label={`Border color ${c}`}
+                              aria-pressed={isSel}
+                              style={{
+                                width: 24,
+                                height: 24,
+                                borderRadius: 6,
+                                background: c,
+                                padding: 0,
+                                border: isSel ? "2px solid #3b82f6" : "1.5px solid #d1d5db",
+                                boxShadow: isSel ? "0 0 0 3px rgba(59,130,246,0.35)" : "none",
+                                transform: isSel ? "scale(1.12)" : "scale(1)",
+                                transition: "transform .15s ease, box-shadow .15s ease",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                position: "relative",
+                                zIndex: isSel ? 2 : 1,
+                              }}
+                            >
+                              {isSel && <span style={{ color: checkColor, fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                            </button>
+                          )
+                        })}
                       </div>
                     </div>
                   </div>
@@ -3423,7 +3483,7 @@ export default function JpgTemplateMapper({
             strikeout: selectedMapping.textDecoration === "line-through",
             underline: selectedMapping.textDecoration === "underline",
           }}
-          onOk={(cfg: FontConfig) => {
+          onChange={(cfg: FontConfig) => {
             updateMapping(selectedMapping.id, {
               fontFamily: cfg.fontFamily,
               fontWeight: cfg.fontStyle.toLowerCase().includes("bold") ? "bold" : "normal",
@@ -3431,9 +3491,9 @@ export default function JpgTemplateMapper({
               fontSize: cfg.fontSize,
               textDecoration: cfg.strikeout ? "line-through" : cfg.underline ? "underline" : "none",
             })
-            setShowFontDialog(false)
           }}
-          onCancel={() => setShowFontDialog(false)}
+          onOk={() => { clearDialogSnapshot(); setShowFontDialog(false) }}
+          onCancel={() => { revertDialogSnapshot(); setShowFontDialog(false) }}
         />
       )}
 
@@ -3441,11 +3501,9 @@ export default function JpgTemplateMapper({
       {showColorDialog && selectedMapping && selectedMapping.type === "text" && (
         <ColorPickerDialog
           initialColor={selectedMapping.fontColor || "#000000"}
-          onOk={(color: string) => {
-            updateMapping(selectedMapping.id, { fontColor: color })
-            setShowColorDialog(false)
-          }}
-          onCancel={() => setShowColorDialog(false)}
+          onChange={(color: string) => updateMapping(selectedMapping.id, { fontColor: color })}
+          onOk={() => { clearDialogSnapshot(); setShowColorDialog(false) }}
+          onCancel={() => { revertDialogSnapshot(); setShowColorDialog(false) }}
         />
       )}
 
@@ -3464,11 +3522,9 @@ export default function JpgTemplateMapper({
       {showPhotoSizeDialog && selectedMapping && selectedMapping.type === "photo" && (
         <PhotoSizeDialog
           initial={{ keepAspect: true, width: selectedMapping.width, height: selectedMapping.height }}
-          onOk={(cfg: PhotoSizeConfig) => {
-            updateMapping(selectedMapping.id, { width: cfg.width, height: cfg.height })
-            setShowPhotoSizeDialog(false)
-          }}
-          onCancel={() => setShowPhotoSizeDialog(false)}
+          onChange={(cfg: PhotoSizeConfig) => updateMapping(selectedMapping.id, { width: cfg.width, height: cfg.height })}
+          onOk={() => { clearDialogSnapshot(); setShowPhotoSizeDialog(false) }}
+          onCancel={() => { revertDialogSnapshot(); setShowPhotoSizeDialog(false) }}
         />
       )}
 
@@ -3480,15 +3536,15 @@ export default function JpgTemplateMapper({
             borderColor: selectedMapping.photoBorderColor || "#000000",
             borderRadius: selectedMapping.photoBorderRadius || 0,
           }}
-          onOk={(cfg: PhotoBorderConfig) => {
+          onChange={(cfg: PhotoBorderConfig) => {
             updateMapping(selectedMapping.id, {
               photoBorderWidth: cfg.borderWidth,
               photoBorderColor: cfg.borderColor,
               photoBorderRadius: cfg.borderRadius,
             })
-            setShowPhotoBorderDialog(false)
           }}
-          onCancel={() => setShowPhotoBorderDialog(false)}
+          onOk={() => { clearDialogSnapshot(); setShowPhotoBorderDialog(false) }}
+          onCancel={() => { revertDialogSnapshot(); setShowPhotoBorderDialog(false) }}
         />
       )}
 
@@ -3502,11 +3558,11 @@ export default function JpgTemplateMapper({
             y={contextMenu.y}
             fieldType={field.type === "photo" ? "photo" : "text"}
             onAction={(action) => {
-              if (action === "font") setShowFontDialog(true)
-              else if (action === "color") setShowColorDialog(true)
-              else if (action === "wrapBitmapReduceFontSize") setShowWrapDialog(true)
-              else if (action === "setPhotoSize") setShowPhotoSizeDialog(true)
-              else if (action === "photoBorderRoundedCorner") setShowPhotoBorderDialog(true)
+              if (action === "font") openDialogWithSnapshot(() => setShowFontDialog(true))
+              else if (action === "color") openDialogWithSnapshot(() => setShowColorDialog(true))
+              else if (action === "wrapBitmapReduceFontSize") openDialogWithSnapshot(() => setShowWrapDialog(true))
+              else if (action === "setPhotoSize") openDialogWithSnapshot(() => setShowPhotoSizeDialog(true))
+              else if (action === "photoBorderRoundedCorner") openDialogWithSnapshot(() => setShowPhotoBorderDialog(true))
             }}
             onClose={() => setContextMenu(null)}
           />

@@ -418,10 +418,12 @@ export function FontDialog({
   initial,
   onOk,
   onCancel,
+  onChange,
 }: {
   initial: FontConfig
   onOk: (cfg: FontConfig) => void
   onCancel: () => void
+  onChange?: (cfg: FontConfig) => void
 }) {
   const [fontFamily, setFontFamily] = useState(initial.fontFamily)
   const [fontStyle, setFontStyle] = useState(initial.fontStyle || "Regular")
@@ -429,6 +431,13 @@ export function FontDialog({
   const [sizeInput, setSizeInput] = useState(String(initial.fontSize))
   const [strikeout, setStrikeout] = useState(initial.strikeout || false)
   const [underline, setUnderline] = useState(initial.underline || false)
+
+  // ✨ Live preview
+  const isFirstRender = useRef(true)
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return }
+    onChange?.({ fontFamily, fontStyle, fontSize, strikeout, underline })
+  }, [fontFamily, fontStyle, fontSize, strikeout, underline, onChange])
 
   const previewStyle: React.CSSProperties = {
     fontFamily,
@@ -583,14 +592,23 @@ export function PhotoSizeDialog({
   initial,
   onOk,
   onCancel,
+  onChange,
 }: {
   initial: PhotoSizeConfig
   onOk: (cfg: PhotoSizeConfig) => void
   onCancel: () => void
+  onChange?: (cfg: PhotoSizeConfig) => void
 }) {
   const [keepAspect, setKeepAspect] = useState(initial.keepAspect)
   const [width, setWidth] = useState(initial.width)
   const [height, setHeight] = useState(initial.height)
+
+  // ✨ Live preview
+  const isFirstRender = useRef(true)
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return }
+    onChange?.({ keepAspect, width, height })
+  }, [keepAspect, width, height, onChange])
   const aspectRatio = initial.width / initial.height
 
   const handleWidthChange = (v: string) => {
@@ -644,14 +662,23 @@ export function PhotoBorderDialog({
   initial,
   onOk,
   onCancel,
+  onChange,
 }: {
   initial: PhotoBorderConfig
   onOk: (cfg: PhotoBorderConfig) => void
   onCancel: () => void
+  onChange?: (cfg: PhotoBorderConfig) => void
 }) {
   const [borderWidth, setBorderWidth] = useState(initial.borderWidth)
   const [borderColor, setBorderColor] = useState(initial.borderColor)
   const [borderRadius, setBorderRadius] = useState(initial.borderRadius)
+
+  // ✨ Live preview: push every change up to parent so canvas updates in real-time
+  const isFirstRender = useRef(true)
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return }
+    onChange?.({ borderWidth, borderColor, borderRadius })
+  }, [borderWidth, borderColor, borderRadius, onChange])
 
   return (
     <DialogShell title="Photo Border & Rounded Corner" onClose={onCancel} width={320}>
@@ -737,33 +764,56 @@ export function ColorPickerDialog({
   initialColor,
   onOk,
   onCancel,
+  onChange,
 }: {
   initialColor: string
   onOk: (color: string) => void
   onCancel: () => void
+  onChange?: (color: string) => void
 }) {
   const [selected, setSelected] = useState(initialColor)
   const [custom, setCustom] = useState(initialColor)
+
+  // ✨ Live preview
+  const isFirstRender = useRef(true)
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return }
+    onChange?.(selected)
+  }, [selected, onChange])
 
   return (
     <DialogShell title="Color" onClose={onCancel} width={340}>
       {/* Basic colors */}
       <div style={{ marginBottom: 12 }}>
         <label style={{ fontSize: 11, fontWeight: 700, display: "block", marginBottom: 6 }}>Basic colors:</label>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(18px, 1fr))", gap: 2 }}>
-          {BASIC_COLORS.map((c, i) => (
-            <div
-              key={i}
-              onClick={() => { setSelected(c); setCustom(c) }}
-              role="button"
-              aria-label={`Select color ${c}`}
-              style={{
-                width: 18, height: 18, background: c,
-                border: selected === c ? "2px solid #000" : "1px solid #808080",
-                cursor: "pointer", boxSizing: "border-box",
-              }}
-            />
-          ))}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(20px, 1fr))", gap: 3 }}>
+          {BASIC_COLORS.map((c, i) => {
+            const isSel = selected.toUpperCase() === c.toUpperCase()
+            // Auto-pick contrasting checkmark color
+            const lum = parseInt(c.slice(1, 3), 16) * 0.299 + parseInt(c.slice(3, 5), 16) * 0.587 + parseInt(c.slice(5, 7), 16) * 0.114
+            const checkColor = lum > 140 ? "#000" : "#fff"
+            return (
+              <button
+                key={i}
+                onClick={() => { setSelected(c); setCustom(c) }}
+                aria-label={`Select color ${c}`}
+                aria-pressed={isSel}
+                style={{
+                  width: 20, height: 20, background: c, padding: 0,
+                  border: isSel ? "2px solid #000080" : "1px solid #808080",
+                  outline: isSel ? "2px solid #ffeb00" : "none",
+                  outlineOffset: isSel ? -1 : 0,
+                  cursor: "pointer", boxSizing: "border-box",
+                  transform: isSel ? "scale(1.15)" : "scale(1)",
+                  transition: "transform .12s ease, outline .12s ease",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  zIndex: isSel ? 2 : 1, position: "relative",
+                }}
+              >
+                {isSel && <span style={{ color: checkColor, fontSize: 12, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+              </button>
+            )
+          })}
         </div>
       </div>
 
