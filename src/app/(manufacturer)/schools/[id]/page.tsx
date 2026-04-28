@@ -1,7 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
-import Link from "next/link"
 import { toast } from "sonner"
 import dynamic from "next/dynamic"
 
@@ -1757,22 +1756,7 @@ export default function SchoolDetailPage() {
               />
             </div>
 
-            {/* Divider */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0' }}>
-              <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>or use advanced designer</span>
-              <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-            </div>
 
-            {/* Open Studio Button */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', justifyContent: 'center', padding: 40, background: 'white', borderRadius: 16, border: '1px solid #e2e8f0' }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="21" y2="9"/></svg>
-              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>Advanced Template Studio</h3>
-              <p style={{ color: '#94a3b8', maxWidth: 380, textAlign: 'center', fontSize: 14 }}>For designing a card from scratch using drag-and-drop elements.</p>
-              <Link href={`/schools/${schoolId}/template`} className="btn btn-primary" style={{ marginTop: 8, padding: '12px 28px', fontSize: 15 }}>
-                Open Template Studio →
-              </Link>
-            </div>
           </div>
         )}
 
