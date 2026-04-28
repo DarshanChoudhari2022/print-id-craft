@@ -24,6 +24,33 @@ type FieldMapping = {
   fontWeight: "normal" | "bold"
   fontFamily: string
   textAlign?: "left" | "center" | "right"
+  // New properties for enhanced text formatting
+  fontStyle?: "normal" | "italic" // italic support
+  textDecoration?: "none" | "underline" | "line-through" // underline/strikethrough
+  textWrap?: "nowrap" | "wrap" // text wrapping
+  letterSpacing?: number // letter spacing in px
+  lineHeight?: number // line height multiplier
+  textTransform?: "none" | "uppercase" | "lowercase" | "capitalize"
+  // Date format for date fields
+  dateFormat?: string // e.g. "DD/MM/YYYY", "MM-DD-YYYY", "YYYY-MM-DD"
+  // Photo-specific properties
+  photoBorderWidth?: number // border width in px
+  photoBorderColor?: string // border color
+  photoBorderRadius?: number // border radius in px for round corners
+  // Lock field to prevent accidental moves
+  locked?: boolean
+}
+
+type CardSettings = {
+  cardSizePreset: string
+  cardWidth: number
+  cardHeight: number
+  cardOrientation: "landscape" | "portrait"
+  printSides: "front" | "both"
+  cardDpi: number
+  bleedMargin: number
+  backImageUrl?: string | null
+  backMappings?: FieldMapping[]
 }
 
 type JpgTemplateMapperProps = {
@@ -31,10 +58,67 @@ type JpgTemplateMapperProps = {
   templateImageUrl: string | null
   fieldMappings: FieldMapping[]
   fieldConfig: { key: string; label: string; type: string; required: boolean }[]
-  onSave: (templateImageUrl: string, fieldMappings: FieldMapping[], photoBgColor?: string) => Promise<void>
+  onSave: (templateImageUrl: string, fieldMappings: FieldMapping[], photoBgColor?: string, cardSettings?: CardSettings) => Promise<void>
   onUploadImage: (file: File) => Promise<string>
   initialPhotoBgColor?: string
+  initialCardSettings?: CardSettings
 }
+
+const DATE_FORMATS = [
+  { value: "DD/MM/YYYY", label: "DD/MM/YYYY", example: "15/08/2022" },
+  { value: "MM/DD/YYYY", label: "MM/DD/YYYY", example: "08/15/2022" },
+  { value: "YYYY-MM-DD", label: "YYYY-MM-DD", example: "2022-08-15" },
+  { value: "DD-MM-YYYY", label: "DD-MM-YYYY", example: "15-08-2022" },
+  { value: "DD.MM.YYYY", label: "DD.MM.YYYY", example: "15.08.2022" },
+  { value: "DD MMM YYYY", label: "DD MMM YYYY", example: "15 Aug 2022" },
+  { value: "MMMM DD, YYYY", label: "MMMM DD, YYYY", example: "August 15, 2022" },
+]
+
+/** Convert a date string to the specified format for display preview */
+const formatDateValue = (value: string, format: string): string => {
+  // Try to parse common date formats
+  const datePatterns = [
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, // DD/MM/YYYY or MM/DD/YYYY
+    /^(\d{4})-(\d{1,2})-(\d{1,2})$/, // YYYY-MM-DD
+    /^(\d{1,2})-(\d{1,2})-(\d{4})$/, // DD-MM-YYYY
+  ]
+  
+  let day = "15", month = "08", year = "2022"
+  
+  for (const pattern of datePatterns) {
+    const match = value.match(pattern)
+    if (match) {
+      if (pattern === datePatterns[1]) {
+        // YYYY-MM-DD
+        year = match[1]; month = match[2]; day = match[3]
+      } else {
+        day = match[1]; month = match[2]; year = match[3]
+      }
+      break
+    }
+  }
+  
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+  const monthShort = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+  const mIdx = parseInt(month, 10) - 1
+  
+  switch (format) {
+    case "DD/MM/YYYY": return `${day.padStart(2,"0")}/${month.padStart(2,"0")}/${year}`
+    case "MM/DD/YYYY": return `${month.padStart(2,"0")}/${day.padStart(2,"0")}/${year}`
+    case "YYYY-MM-DD": return `${year}-${month.padStart(2,"0")}-${day.padStart(2,"0")}`
+    case "DD-MM-YYYY": return `${day.padStart(2,"0")}-${month.padStart(2,"0")}-${year}`
+    case "DD.MM.YYYY": return `${day.padStart(2,"0")}.${month.padStart(2,"0")}.${year}`
+    case "DD MMM YYYY": return `${day.padStart(2,"0")} ${monthShort[mIdx] || "Aug"} ${year}`
+    case "MMMM DD, YYYY": return `${months[mIdx] || "August"} ${day}, ${year}`
+    default: return value
+  }
+}
+
+const FONT_FAMILIES = [
+  "Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana",
+  "Courier New", "Impact", "Trebuchet MS", "Tahoma", "Palatino",
+  "Lucida Console", "Comic Sans MS", "Garamond", "Book Antiqua",
+]
 
 const SAMPLE_DATA: Record<string, string> = {
   name: "Avneesh Abhishek Awachat",
@@ -69,6 +153,7 @@ export default function JpgTemplateMapper({
   onSave,
   onUploadImage,
   initialPhotoBgColor,
+  initialCardSettings,
 }: JpgTemplateMapperProps) {
   const [imageUrl, setImageUrl] = useState(initialImageUrl || "")
   const [mappings, setMappings] = useState<FieldMapping[]>(
@@ -98,12 +183,168 @@ export default function JpgTemplateMapper({
   } | null>(null)
   const [imageDragOver, setImageDragOver] = useState(false)
 
+  // ── Professional Features State ──
+  const [zoomLevel, setZoomLevel] = useState(100) // percentage
+  const [showGrid, setShowGrid] = useState(false)
+  const [snapToGrid, setSnapToGrid] = useState(false)
+  const [gridSize, setGridSize] = useState(5) // percentage
+  const [showRulers, setShowRulers] = useState(false)
+  const [showCoordinates, setShowCoordinates] = useState(true)
+
+  // ── Undo/Redo History ──
+  const MAX_HISTORY = 50
+  const [undoStack, setUndoStack] = useState<FieldMapping[][]>([])
+  const [redoStack, setRedoStack] = useState<FieldMapping[][]>([])
+
+  const pushToHistory = useCallback((currentMappings: FieldMapping[]) => {
+    setUndoStack(prev => {
+      const next = [...prev, JSON.parse(JSON.stringify(currentMappings))]
+      if (next.length > MAX_HISTORY) next.shift()
+      return next
+    })
+    setRedoStack([])
+  }, [])
+
+  const undo = useCallback(() => {
+    if (undoStack.length === 0) return
+    const prev = [...undoStack]
+    const lastState = prev.pop()!
+    setUndoStack(prev)
+    setRedoStack(r => [...r, JSON.parse(JSON.stringify(mappings))])
+    setMappings(lastState)
+  }, [undoStack, mappings])
+
+  const redo = useCallback(() => {
+    if (redoStack.length === 0) return
+    const next = [...redoStack]
+    const nextState = next.pop()!
+    setRedoStack(next)
+    setUndoStack(u => [...u, JSON.parse(JSON.stringify(mappings))])
+    setMappings(nextState)
+  }, [redoStack, mappings])
+
+  // ── Layer Ordering ──
+  const bringToFront = useCallback((id: string) => {
+    pushToHistory(mappings)
+    setMappings(prev => {
+      const idx = prev.findIndex(m => m.id === id)
+      if (idx < 0 || idx === prev.length - 1) return prev
+      const next = [...prev]
+      const [item] = next.splice(idx, 1)
+      next.push(item)
+      return next
+    })
+  }, [mappings, pushToHistory])
+
+  const sendToBack = useCallback((id: string) => {
+    pushToHistory(mappings)
+    setMappings(prev => {
+      const idx = prev.findIndex(m => m.id === id)
+      if (idx <= 0) return prev
+      const next = [...prev]
+      const [item] = next.splice(idx, 1)
+      next.unshift(item)
+      return next
+    })
+  }, [mappings, pushToHistory])
+
+  const moveLayerUp = useCallback((id: string) => {
+    pushToHistory(mappings)
+    setMappings(prev => {
+      const idx = prev.findIndex(m => m.id === id)
+      if (idx < 0 || idx === prev.length - 1) return prev
+      const next = [...prev]
+      ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
+      return next
+    })
+  }, [mappings, pushToHistory])
+
+  const moveLayerDown = useCallback((id: string) => {
+    pushToHistory(mappings)
+    setMappings(prev => {
+      const idx = prev.findIndex(m => m.id === id)
+      if (idx <= 0) return prev
+      const next = [...prev]
+      ;[next[idx], next[idx - 1]] = [next[idx - 1], next[idx]]
+      return next
+    })
+  }, [mappings, pushToHistory])
+
+  // ── Duplicate Field ──
+  const duplicateField = useCallback((id: string) => {
+    const source = mappings.find(m => m.id === id)
+    if (!source) return
+    pushToHistory(mappings)
+    const clone: FieldMapping = {
+      ...source,
+      id: `field-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      x: Math.min(95, source.x + 3),
+      y: Math.min(95, source.y + 3),
+      fieldKey: `${source.fieldKey}_copy`,
+      label: `${source.label} (copy)`,
+    }
+    setMappings(prev => [...prev, clone])
+    setSelectedId(clone.id)
+  }, [mappings, pushToHistory])
+
+  // ── Snap helper ──
+  const snapValue = useCallback((val: number) => {
+    if (!snapToGrid) return val
+    return Math.round(val / gridSize) * gridSize
+  }, [snapToGrid, gridSize])
+
   // Custom field creation
   const [newFieldLabel, setNewFieldLabel] = useState("")
   const [newFieldType, setNewFieldType] = useState<"text" | "tel">("text")
 
   const containerRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
+
+  // ── Card Settings State ──
+  const CARD_SIZE_PRESETS = [
+    { id: "cr80", label: "CR-80 (Standard)", width: 85.6, height: 53.98, desc: "ISO/IEC 7810 ID-1 — most common" },
+    { id: "cr79", label: "CR-79 (Adhesive)", width: 83.9, height: 51.4, desc: "For adhesive-backed overlays" },
+    { id: "cr100", label: "CR-100 (Large)", width: 104, height: 66, desc: "Military CAC / oversized" },
+    { id: "a4third", label: "A4 Third", width: 99, height: 55, desc: "1/3 A4 size badge" },
+    { id: "custom", label: "Custom Size", width: 85.6, height: 53.98, desc: "Enter your own dimensions" },
+  ]
+
+  const [cardSizePreset, setCardSizePreset] = useState(initialCardSettings?.cardSizePreset || "cr80")
+  const [cardWidth, setCardWidth] = useState(initialCardSettings?.cardWidth || 85.6)   // mm
+  const [cardHeight, setCardHeight] = useState(initialCardSettings?.cardHeight || 53.98) // mm
+  const [cardOrientation, setCardOrientation] = useState<"landscape" | "portrait">(initialCardSettings?.cardOrientation || "landscape")
+  const [printSides, setPrintSides] = useState<"front" | "both">(initialCardSettings?.printSides || "front")
+  const [cardDpi, setCardDpi] = useState(initialCardSettings?.cardDpi || 300)
+  const [bleedMargin, setBleedMargin] = useState(initialCardSettings?.bleedMargin ?? 1) // mm
+  const [backImageUrl, setBackImageUrl] = useState<string | null>(initialCardSettings?.backImageUrl || null)
+  const [backMappings, setBackMappings] = useState<FieldMapping[]>(initialCardSettings?.backMappings || [])
+  const [activeCardSide, setActiveCardSide] = useState<"front" | "back">("front")
+
+  // Handle card size preset change
+  const handleCardSizeChange = (presetId: string) => {
+    setCardSizePreset(presetId)
+    const preset = CARD_SIZE_PRESETS.find(p => p.id === presetId)
+    if (preset && presetId !== "custom") {
+      if (cardOrientation === "landscape") {
+        setCardWidth(preset.width)
+        setCardHeight(preset.height)
+      } else {
+        setCardWidth(preset.height)
+        setCardHeight(preset.width)
+      }
+    }
+  }
+
+  // Handle orientation change
+  const handleOrientationChange = (orient: "landscape" | "portrait") => {
+    setCardOrientation(orient)
+    // Swap width and height
+    if ((orient === "portrait" && cardWidth > cardHeight) ||
+        (orient === "landscape" && cardHeight > cardWidth)) {
+      setCardWidth(cardHeight)
+      setCardHeight(cardWidth)
+    }
+  }
 
   // ── Target card aspect ratio for PVC printing (56mm × 88mm) ──
   const CARD_RATIO = 56 / 88 // 0.6364
@@ -224,6 +465,8 @@ export default function JpgTemplateMapper({
       return
     }
 
+    pushToHistory(mappings)
+    const isDateField = fieldKey === "dateOfBirth" || fieldKey.toLowerCase().includes("date")
     const newMapping: FieldMapping = {
       id: `field-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       fieldKey,
@@ -238,6 +481,16 @@ export default function JpgTemplateMapper({
       fontWeight: fieldKey === "name" || fieldKey === "fullName" ? "bold" : "normal",
       fontFamily: "Arial",
       textAlign: "left",
+      fontStyle: "normal",
+      textDecoration: "none",
+      textWrap: "nowrap",
+      letterSpacing: 0,
+      lineHeight: 1.2,
+      textTransform: "none",
+      dateFormat: isDateField ? "DD/MM/YYYY" : undefined,
+      photoBorderWidth: type === "photo" ? 0 : undefined,
+      photoBorderColor: type === "photo" ? "#000000" : undefined,
+      photoBorderRadius: type === "photo" ? 0 : undefined,
     }
     setMappings((prev) => [...prev, newMapping])
     setSelectedId(newMapping.id)
@@ -252,6 +505,7 @@ export default function JpgTemplateMapper({
   }
 
   const removeFieldMapping = (id: string) => {
+    pushToHistory(mappings)
     setMappings((prev) => prev.filter((m) => m.id !== id))
     if (selectedId === id) setSelectedId(null)
   }
@@ -273,6 +527,8 @@ export default function JpgTemplateMapper({
     const mapping = mappings.find((m) => m.id === id)
     if (!mapping) return
     setSelectedId(id)
+    // Prevent dragging locked fields
+    if (mapping.locked) return
     setDragState({
       id,
       startX: e.clientX,
@@ -329,19 +585,102 @@ export default function JpgTemplateMapper({
         }
 
         updateMapping(dragState.id, {
-          x: newX,
-          y: newY,
-          width: newW,
-          height: newH,
+          x: snapValue(newX),
+          y: snapValue(newY),
+          width: snapValue(newW),
+          height: snapValue(newH),
         })
       }
     },
-    [dragState, mappings]
+    [dragState, mappings, snapValue]
   )
 
   const handleMouseUp = useCallback(() => {
+    if (dragState) {
+      // Save undo state when drag ends
+      pushToHistory(mappings.map(m => {
+        if (m.id === dragState.id) {
+          return { ...m, x: m.x, y: m.y, width: m.width, height: m.height }
+        }
+        return m
+      }))
+    }
     setDragState(null)
-  }, [])
+  }, [dragState, mappings, pushToHistory])
+
+  // ── Keyboard Shortcuts ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept when typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
+
+      // Ctrl+Z = Undo, Ctrl+Shift+Z / Ctrl+Y = Redo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault()
+        redo()
+        return
+      }
+
+      // Delete/Backspace = remove selected field
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        e.preventDefault()
+        removeFieldMapping(selectedId)
+        return
+      }
+
+      // Ctrl+D = duplicate selected field
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedId) {
+        e.preventDefault()
+        duplicateField(selectedId)
+        return
+      }
+
+      // Arrow keys = nudge selected field (1% or 0.5% with shift for fine-tuning)
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && selectedId) {
+        e.preventDefault()
+        const step = e.shiftKey ? 0.2 : 1
+        const mapping = mappings.find(m => m.id === selectedId)
+        if (!mapping) return
+        const updates: Partial<FieldMapping> = {}
+        if (e.key === 'ArrowUp') updates.y = Math.max(0, mapping.y - step)
+        if (e.key === 'ArrowDown') updates.y = Math.min(95, mapping.y + step)
+        if (e.key === 'ArrowLeft') updates.x = Math.max(0, mapping.x - step)
+        if (e.key === 'ArrowRight') updates.x = Math.min(95, mapping.x + step)
+        updateMapping(selectedId, updates)
+        return
+      }
+
+      // Escape = deselect
+      if (e.key === 'Escape') {
+        setSelectedId(null)
+        return
+      }
+
+      // + / - = zoom
+      if (e.key === '+' || e.key === '=') {
+        setZoomLevel(z => Math.min(300, z + 25))
+        return
+      }
+      if (e.key === '-' || e.key === '_') {
+        setZoomLevel(z => Math.max(25, z - 25))
+        return
+      }
+
+      // G = toggle grid
+      if (e.key === 'g' && !e.ctrlKey) {
+        setShowGrid(g => !g)
+        return
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedId, mappings, undo, redo, removeFieldMapping, duplicateField, updateMapping])
 
   useEffect(() => {
     if (dragState) {
@@ -358,7 +697,18 @@ export default function JpgTemplateMapper({
     if (!imageUrl) return
     setSaving(true)
     try {
-      await onSave(imageUrl, mappings, photoBgColor)
+      const settings: CardSettings = {
+        cardSizePreset,
+        cardWidth,
+        cardHeight,
+        cardOrientation,
+        printSides,
+        cardDpi,
+        bleedMargin,
+        backImageUrl,
+        backMappings,
+      }
+      await onSave(imageUrl, mappings, photoBgColor, settings)
     } finally {
       setSaving(false)
     }
@@ -580,7 +930,7 @@ export default function JpgTemplateMapper({
             Add fields and drag them in front of the printed labels on the template
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button
             className="btn btn-outline"
             onClick={() => setShowPreview(!showPreview)}
@@ -588,6 +938,64 @@ export default function JpgTemplateMapper({
           >
             {showPreview ? "📝 Edit Mode" : "👁 Preview"}
           </button>
+
+          {/* Front/Back Side Toggle — only when dual-sided */}
+          {printSides === "both" && (
+            <div style={{
+              display: "flex", borderRadius: 8, overflow: "hidden",
+              border: "1.5px solid #3b82f6",
+            }}>
+              <button
+                onClick={() => {
+                  if (activeCardSide === "back") {
+                    // Save back state, load front
+                    setBackImageUrl(imageUrl)
+                    setBackMappings(mappings)
+                    setImageUrl(initialImageUrl || "")
+                    setMappings(initialMappings && initialMappings.length > 0 ? initialMappings : [])
+                    setActiveCardSide("front")
+                    setSelectedId(null)
+                  }
+                }}
+                style={{
+                  padding: "8px 16px", border: "none",
+                  background: activeCardSide === "front" ? "#3b82f6" : "white",
+                  color: activeCardSide === "front" ? "white" : "#3b82f6",
+                  fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 4,
+                }}
+              >
+                <span style={{ fontSize: 14 }}>🪪</span> Front
+              </button>
+              <button
+                onClick={() => {
+                  if (activeCardSide === "front") {
+                    // Save front state to props-level, load back
+                    // (front is the "primary" state — already in imageUrl/mappings)
+                    const frontImg = imageUrl
+                    const frontMaps = [...mappings]
+                    setImageUrl(backImageUrl || "")
+                    setMappings(backMappings || [])
+                    // Store front for restore
+                    ;(window as any).__frontImgTemp = frontImg
+                    ;(window as any).__frontMapsTemp = frontMaps
+                    setActiveCardSide("back")
+                    setSelectedId(null)
+                  }
+                }}
+                style={{
+                  padding: "8px 16px", border: "none",
+                  background: activeCardSide === "back" ? "#3b82f6" : "white",
+                  color: activeCardSide === "back" ? "white" : "#3b82f6",
+                  fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 4,
+                }}
+              >
+                <span style={{ fontSize: 14 }}>🔄</span> Back
+              </button>
+            </div>
+          )}
+
           <button
             className="btn btn-outline"
             onClick={() => {
@@ -603,7 +1011,7 @@ export default function JpgTemplateMapper({
               color: "#dc2626",
             }}
           >
-            🗑 Replace Template
+            🗑 Replace {activeCardSide === "back" ? "Back" : "Template"}
           </button>
           <button
             className="btn btn-primary"
@@ -631,21 +1039,185 @@ export default function JpgTemplateMapper({
             flex: "1 1 min(100%, 600px)",
             background: "#0f172a",
             borderRadius: 16,
-            padding: 20,
+            padding: 0,
             overflow: "hidden",
             boxSizing: "border-box",
           }}
         >
+          {/* ── Professional Canvas Toolbar ── */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 12px",
+            background: "linear-gradient(135deg, #1e293b, #0f172a)",
+            borderBottom: "1px solid #334155",
+            flexWrap: "wrap",
+            fontSize: 11,
+          }}>
+            {/* Undo / Redo */}
+            <div style={{ display: "flex", gap: 2, marginRight: 6 }}>
+              <button
+                onClick={undo}
+                disabled={undoStack.length === 0}
+                title="Undo (Ctrl+Z)"
+                style={{
+                  width: 30, height: 28, borderRadius: "6px 0 0 6px", border: "1px solid #475569",
+                  background: undoStack.length > 0 ? "#334155" : "#1e293b",
+                  color: undoStack.length > 0 ? "#f1f5f9" : "#475569",
+                  cursor: undoStack.length > 0 ? "pointer" : "not-allowed",
+                  fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >↶</button>
+              <button
+                onClick={redo}
+                disabled={redoStack.length === 0}
+                title="Redo (Ctrl+Y)"
+                style={{
+                  width: 30, height: 28, borderRadius: "0 6px 6px 0", border: "1px solid #475569", borderLeft: "none",
+                  background: redoStack.length > 0 ? "#334155" : "#1e293b",
+                  color: redoStack.length > 0 ? "#f1f5f9" : "#475569",
+                  cursor: redoStack.length > 0 ? "pointer" : "not-allowed",
+                  fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >↷</button>
+            </div>
+
+            {/* Divider */}
+            <div style={{ width: 1, height: 20, background: "#475569", marginRight: 6 }} />
+
+            {/* Zoom controls */}
+            <div style={{ display: "flex", alignItems: "center", gap: 2, marginRight: 6 }}>
+              <button
+                onClick={() => setZoomLevel(z => Math.max(25, z - 25))}
+                title="Zoom Out (−)"
+                style={{
+                  width: 26, height: 28, borderRadius: "6px 0 0 6px", border: "1px solid #475569",
+                  background: "#334155", color: "#f1f5f9", cursor: "pointer", fontSize: 14,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >−</button>
+              <div style={{
+                padding: "0 8px", height: 28, border: "1px solid #475569", borderLeft: "none", borderRight: "none",
+                background: "#1e293b", color: "#94a3b8", display: "flex", alignItems: "center",
+                fontSize: 11, fontWeight: 600, minWidth: 46, justifyContent: "center", fontFamily: "monospace",
+              }}>
+                {zoomLevel}%
+              </div>
+              <button
+                onClick={() => setZoomLevel(z => Math.min(300, z + 25))}
+                title="Zoom In (+)"
+                style={{
+                  width: 26, height: 28, borderRadius: "0 6px 6px 0", border: "1px solid #475569",
+                  background: "#334155", color: "#f1f5f9", cursor: "pointer", fontSize: 14,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >+</button>
+              <button
+                onClick={() => setZoomLevel(100)}
+                title="Reset Zoom"
+                style={{
+                  marginLeft: 4, padding: "0 8px", height: 28, borderRadius: 6, border: "1px solid #475569",
+                  background: zoomLevel === 100 ? "#1e293b" : "#334155", color: "#94a3b8",
+                  cursor: "pointer", fontSize: 10, fontWeight: 600,
+                }}
+              >FIT</button>
+            </div>
+
+            {/* Divider */}
+            <div style={{ width: 1, height: 20, background: "#475569", marginRight: 6 }} />
+
+            {/* Grid & Snap */}
+            <button
+              onClick={() => setShowGrid(g => !g)}
+              title="Toggle Grid (G)"
+              style={{
+                padding: "0 8px", height: 28, borderRadius: 6, border: `1.5px solid ${showGrid ? "#3b82f6" : "#475569"}`,
+                background: showGrid ? "#1e3a5f" : "#1e293b", color: showGrid ? "#60a5fa" : "#94a3b8",
+                cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4,
+              }}
+            >
+              <span style={{ fontSize: 12 }}>⊞</span> Grid
+            </button>
+            <button
+              onClick={() => setSnapToGrid(s => !s)}
+              title="Snap to Grid"
+              style={{
+                padding: "0 8px", height: 28, borderRadius: 6, border: `1.5px solid ${snapToGrid ? "#22c55e" : "#475569"}`,
+                background: snapToGrid ? "#14532d" : "#1e293b", color: snapToGrid ? "#4ade80" : "#94a3b8",
+                cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4,
+              }}
+            >
+              <span style={{ fontSize: 12 }}>⊕</span> Snap
+            </button>
+            {showGrid && (
+              <select
+                value={gridSize}
+                onChange={(e) => setGridSize(Number(e.target.value))}
+                title="Grid Size"
+                style={{
+                  height: 28, padding: "0 6px", borderRadius: 6, border: "1px solid #475569",
+                  background: "#1e293b", color: "#94a3b8", fontSize: 10,
+                }}
+              >
+                <option value={2}>2%</option>
+                <option value={5}>5%</option>
+                <option value={10}>10%</option>
+                <option value={20}>20%</option>
+              </select>
+            )}
+
+            {/* Divider */}
+            <div style={{ width: 1, height: 20, background: "#475569", marginRight: 6 }} />
+
+            {/* Rulers */}
+            <button
+              onClick={() => setShowRulers(r => !r)}
+              title="Toggle Rulers"
+              style={{
+                padding: "0 8px", height: 28, borderRadius: 6, border: `1.5px solid ${showRulers ? "#f59e0b" : "#475569"}`,
+                background: showRulers ? "#451a03" : "#1e293b", color: showRulers ? "#fbbf24" : "#94a3b8",
+                cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4,
+              }}
+            >
+              <span style={{ fontSize: 12 }}>📏</span> Rulers
+            </button>
+
+            {/* Spacer */}
+            <div style={{ flex: 1 }} />
+
+            {/* Selected field coordinates */}
+            {selectedMapping && showCoordinates && (
+              <div style={{
+                padding: "3px 10px", borderRadius: 6, background: "#1e293b", border: "1px solid #475569",
+                color: "#94a3b8", fontSize: 10, fontFamily: "monospace", display: "flex", gap: 8,
+              }}>
+                <span>X: {selectedMapping.x.toFixed(1)}%</span>
+                <span>Y: {selectedMapping.y.toFixed(1)}%</span>
+                <span>W: {selectedMapping.width.toFixed(1)}%</span>
+                <span>H: {selectedMapping.height.toFixed(1)}%</span>
+              </div>
+            )}
+
+            {/* Keyboard shortcuts hint */}
+            <div style={{ fontSize: 9, color: "#475569", fontStyle: "italic" }}>
+              ↑↓←→ nudge · Del remove · Ctrl+D copy
+            </div>
+          </div>
+
+          {/* Canvas Area with Zoom */}
+          <div style={{ overflow: "auto", padding: 16, maxHeight: "calc(100vh - 200px)" }}>
           <div
             ref={containerRef}
             style={{
               position: "relative",
               display: "inline-block",
-              width: "100%",
+              width: `${zoomLevel}%`,
               background: "#f8fafc",
               border: "1px dashed #cbd5e1",
               borderRadius: 12,
               overflow: "hidden",
+              transformOrigin: "top left",
             }}
             onDragOver={(e) => {
               e.preventDefault()
@@ -659,6 +1231,72 @@ export default function JpgTemplateMapper({
               if (file) handleImageUpload(file)
             }}
           >
+            {/* Ruler overlays */}
+            {showRulers && !showPreview && (
+              <>
+                {/* Top ruler */}
+                <div style={{
+                  position: "absolute", top: 0, left: 0, right: 0, height: 16,
+                  background: "rgba(30,41,59,0.85)", zIndex: 20, display: "flex", pointerEvents: "none",
+                }}>
+                  {Array.from({ length: 11 }).map((_, i) => (
+                    <div key={i} style={{
+                      position: "absolute", left: `${i * 10}%`, top: 0, height: "100%",
+                      borderLeft: "1px solid rgba(148,163,184,0.5)",
+                      display: "flex", alignItems: "flex-end", paddingLeft: 2,
+                    }}>
+                      <span style={{ fontSize: 7, color: "#94a3b8", fontFamily: "monospace" }}>{i * 10}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* Left ruler */}
+                <div style={{
+                  position: "absolute", top: 0, left: 0, bottom: 0, width: 16,
+                  background: "rgba(30,41,59,0.85)", zIndex: 20, pointerEvents: "none",
+                }}>
+                  {Array.from({ length: 11 }).map((_, i) => (
+                    <div key={i} style={{
+                      position: "absolute", top: `${i * 10}%`, left: 0, width: "100%",
+                      borderTop: "1px solid rgba(148,163,184,0.5)",
+                      display: "flex", alignItems: "flex-start", paddingLeft: 2, paddingTop: 1,
+                    }}>
+                      <span style={{ fontSize: 7, color: "#94a3b8", fontFamily: "monospace", writingMode: "vertical-lr" }}>{i * 10}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Grid overlay */}
+            {showGrid && !showPreview && (
+              <div style={{
+                position: "absolute", inset: 0, zIndex: 15, pointerEvents: "none",
+              }}>
+                {/* Vertical lines */}
+                {Array.from({ length: Math.floor(100 / gridSize) }).map((_, i) => (
+                  <div key={`v${i}`} style={{
+                    position: "absolute",
+                    left: `${(i + 1) * gridSize}%`,
+                    top: 0,
+                    bottom: 0,
+                    width: 1,
+                    background: (i + 1) * gridSize === 50 ? "rgba(59,130,246,0.35)" : "rgba(148,163,184,0.2)",
+                  }} />
+                ))}
+                {/* Horizontal lines */}
+                {Array.from({ length: Math.floor(100 / gridSize) }).map((_, i) => (
+                  <div key={`h${i}`} style={{
+                    position: "absolute",
+                    top: `${(i + 1) * gridSize}%`,
+                    left: 0,
+                    right: 0,
+                    height: 1,
+                    background: (i + 1) * gridSize === 50 ? "rgba(59,130,246,0.35)" : "rgba(148,163,184,0.2)",
+                  }} />
+                ))}
+              </div>
+            )}
+
             <img
               ref={imageRef}
               src={imageUrl}
@@ -671,6 +1309,79 @@ export default function JpgTemplateMapper({
               }}
               draggable={false}
             />
+
+            {/* Smart Alignment Guides */}
+            {dragState && !showPreview && (() => {
+              const dragging = mappings.find(m => m.id === dragState.id)
+              if (!dragging) return null
+              const guides: { type: "h" | "v"; pos: number }[] = []
+              const ALIGN_THRESHOLD = 1 // 1% tolerance
+
+              const dLeft = dragging.x
+              const dRight = dragging.x + dragging.width
+              const dCenterX = dragging.x + dragging.width / 2
+              const dTop = dragging.y
+              const dBottom = dragging.y + dragging.height
+              const dCenterY = dragging.y + dragging.height / 2
+
+              mappings.forEach(other => {
+                if (other.id === dragState.id) return
+                const oLeft = other.x
+                const oRight = other.x + other.width
+                const oCenterX = other.x + other.width / 2
+                const oTop = other.y
+                const oBottom = other.y + other.height
+                const oCenterY = other.y + other.height / 2
+
+                // Vertical alignment guides (x-axis matches)
+                const vChecks = [
+                  { a: dLeft, b: oLeft }, { a: dLeft, b: oRight }, { a: dLeft, b: oCenterX },
+                  { a: dRight, b: oLeft }, { a: dRight, b: oRight }, { a: dRight, b: oCenterX },
+                  { a: dCenterX, b: oLeft }, { a: dCenterX, b: oRight }, { a: dCenterX, b: oCenterX },
+                ]
+                vChecks.forEach(({ a, b }) => {
+                  if (Math.abs(a - b) < ALIGN_THRESHOLD) {
+                    guides.push({ type: "v", pos: b })
+                  }
+                })
+
+                // Horizontal alignment guides (y-axis matches)
+                const hChecks = [
+                  { a: dTop, b: oTop }, { a: dTop, b: oBottom }, { a: dTop, b: oCenterY },
+                  { a: dBottom, b: oTop }, { a: dBottom, b: oBottom }, { a: dBottom, b: oCenterY },
+                  { a: dCenterY, b: oTop }, { a: dCenterY, b: oBottom }, { a: dCenterY, b: oCenterY },
+                ]
+                hChecks.forEach(({ a, b }) => {
+                  if (Math.abs(a - b) < ALIGN_THRESHOLD) {
+                    guides.push({ type: "h", pos: b })
+                  }
+                })
+              })
+
+              // Also check 50% center of canvas
+              if (Math.abs(dCenterX - 50) < ALIGN_THRESHOLD) guides.push({ type: "v", pos: 50 })
+              if (Math.abs(dCenterY - 50) < ALIGN_THRESHOLD) guides.push({ type: "h", pos: 50 })
+
+              // Deduplicate
+              const uniqueGuides = guides.filter((g, i, arr) =>
+                arr.findIndex(o => o.type === g.type && Math.abs(o.pos - g.pos) < 0.5) === i
+              )
+
+              return uniqueGuides.map((g, i) => (
+                <div key={`guide-${i}`} style={{
+                  position: "absolute",
+                  ...(g.type === "v" ? {
+                    left: `${g.pos}%`, top: 0, bottom: 0, width: 1,
+                  } : {
+                    top: `${g.pos}%`, left: 0, right: 0, height: 1,
+                  }),
+                  background: "#22c55e",
+                  opacity: 0.7,
+                  zIndex: 25,
+                  pointerEvents: "none",
+                }} />
+              ))
+            })()}
 
             {/* Field overlays */}
             {mappings.map((m) => {
@@ -693,11 +1404,17 @@ export default function JpgTemplateMapper({
                     width: `${m.width}%`,
                     height: `${m.height}%`,
                     border: showPreview
-                      ? "none"
+                      ? m.type === "photo" && (m.photoBorderWidth || 0) > 0
+                        ? `${m.photoBorderWidth}px solid ${m.photoBorderColor || "#000"}`
+                        : "none"
                       : `2px ${isSelected ? "solid" : "dashed"} ${
                           isSelected ? "#3b82f6" : "rgba(255,255,255,0.6)"
                         }`,
-                    borderRadius: m.type === "photo" ? 4 : 2,
+                    borderRadius: m.type === "photo"
+                      ? showPreview
+                        ? `${m.photoBorderRadius || 0}px`
+                        : 4
+                      : 2,
                     background: showPreview
                       ? "transparent"
                       : m.type === "photo"
@@ -707,7 +1424,7 @@ export default function JpgTemplateMapper({
                       : "rgba(255, 255, 255, 0.08)",
                     cursor: showPreview ? "default" : "move",
                     display: "flex",
-                    alignItems: "center",
+                    alignItems: m.textWrap === "wrap" ? "flex-start" : "center",
                     justifyContent: m.type === "photo" ? "center" : "flex-start",
                     padding: m.type === "photo" ? 0 : "0 4px",
                     overflow: "hidden",
@@ -777,16 +1494,25 @@ export default function JpgTemplateMapper({
                         color: showPreview ? m.fontColor : "white",
                         fontWeight: showPreview ? m.fontWeight : 600,
                         fontFamily: showPreview ? m.fontFamily : "inherit",
-                        whiteSpace: "nowrap",
+                        fontStyle: showPreview ? (m.fontStyle || "normal") : "normal",
+                        textDecoration: showPreview ? (m.textDecoration || "none") : "none",
+                        letterSpacing: showPreview ? `${m.letterSpacing || 0}px` : "normal",
+                        lineHeight: showPreview ? (m.lineHeight || 1.2) : 1.2,
+                        textTransform: showPreview ? (m.textTransform || "none") as any : "none",
+                        whiteSpace: (m.textWrap === "wrap" && showPreview) ? "normal" : "nowrap",
+                        wordBreak: (m.textWrap === "wrap" && showPreview) ? "break-word" : "normal",
                         overflow: "hidden",
-                        textOverflow: "ellipsis",
+                        textOverflow: m.textWrap === "wrap" ? "clip" : "ellipsis",
                         textShadow: showPreview ? "none" : "0 1px 2px rgba(0,0,0,0.5)",
                         width: "100%",
+                        height: m.textWrap === "wrap" ? "100%" : "auto",
                         textAlign: showPreview ? (m.textAlign || "left") : "left",
                         display: "block",
                       }}
                     >
-                      {sampleValue}
+                      {m.dateFormat && showPreview
+                        ? formatDateValue(sampleValue, m.dateFormat)
+                        : sampleValue}
                     </span>
                   )}
 
@@ -810,10 +1536,277 @@ export default function JpgTemplateMapper({
               )
             })}
           </div>
+          </div>
         </div>
 
         {/* Right: Sidebar */}
         <div style={{ flex: "1 1 320px", maxWidth: "100%", display: "flex", flexDirection: "column", gap: 16, position: "sticky", top: 20, maxHeight: "calc(100vh - 40px)", overflowY: "auto", paddingRight: 4 }}>
+
+          {/* Card Settings Panel */}
+          {!showPreview && (
+            <div
+              style={{
+                background: "linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 100%)",
+                borderRadius: 14,
+                border: "1px solid #bfdbfe",
+                padding: 16,
+              }}
+            >
+              <h4
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: "#1e40af",
+                  marginBottom: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 16 }}>🪪</span> Card Settings
+              </h4>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* Card Size Preset */}
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "#3b82f6", marginBottom: 4, display: "block" }}>
+                    Card Size Standard
+                  </label>
+                  <select
+                    value={cardSizePreset}
+                    onChange={(e) => handleCardSizeChange(e.target.value)}
+                    style={{
+                      width: "100%",
+                      height: 34,
+                      padding: "0 8px",
+                      border: "1.5px solid #bfdbfe",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      background: "white",
+                    }}
+                  >
+                    {CARD_SIZE_PRESETS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label} ({p.width}×{p.height} mm)
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: 9, color: "#6b7280", marginTop: 2 }}>
+                    {CARD_SIZE_PRESETS.find(p => p.id === cardSizePreset)?.desc}
+                  </div>
+                </div>
+
+                {/* Width × Height Inputs */}
+                <div style={{ display: "flex", gap: 6 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 10, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 2 }}>
+                      Width (mm)
+                    </label>
+                    <input
+                      type="number"
+                      min={20}
+                      max={200}
+                      step={0.1}
+                      value={cardWidth}
+                      onChange={(e) => { setCardWidth(Number(e.target.value)); setCardSizePreset("custom"); }}
+                      style={{
+                        width: "100%",
+                        height: 30,
+                        padding: "0 8px",
+                        border: "1.5px solid #bfdbfe",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        textAlign: "center",
+                        background: "white",
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 6, fontSize: 14, color: "#94a3b8" }}>×</div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 10, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 2 }}>
+                      Height (mm)
+                    </label>
+                    <input
+                      type="number"
+                      min={20}
+                      max={200}
+                      step={0.1}
+                      value={cardHeight}
+                      onChange={(e) => { setCardHeight(Number(e.target.value)); setCardSizePreset("custom"); }}
+                      style={{
+                        width: "100%",
+                        height: 30,
+                        padding: "0 8px",
+                        border: "1.5px solid #bfdbfe",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        textAlign: "center",
+                        background: "white",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Pixel dimensions display */}
+                <div style={{
+                  fontSize: 10,
+                  color: "#6b7280",
+                  background: "rgba(255,255,255,0.7)",
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  textAlign: "center",
+                }}>
+                  {Math.round(cardWidth * cardDpi / 25.4)} × {Math.round(cardHeight * cardDpi / 25.4)} px at {cardDpi} DPI
+                </div>
+
+                {/* Orientation */}
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "#3b82f6", marginBottom: 4, display: "block" }}>
+                    Orientation
+                  </label>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {(["landscape", "portrait"] as const).map((orient) => (
+                      <button
+                        key={orient}
+                        onClick={() => handleOrientationChange(orient)}
+                        style={{
+                          flex: 1,
+                          padding: "6px 10px",
+                          borderRadius: 6,
+                          border: `1.5px solid ${cardOrientation === orient ? "#3b82f6" : "#d1d5db"}`,
+                          background: cardOrientation === orient ? "#dbeafe" : "white",
+                          color: cardOrientation === orient ? "#1e40af" : "#6b7280",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <span style={{
+                          display: "inline-block",
+                          width: orient === "landscape" ? 16 : 10,
+                          height: orient === "landscape" ? 10 : 16,
+                          border: "2px solid currentColor",
+                          borderRadius: 2,
+                        }} />
+                        {orient === "landscape" ? "Landscape" : "Portrait"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Print Sides */}
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "#3b82f6", marginBottom: 4, display: "block" }}>
+                    Print Sides
+                  </label>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {(["front", "both"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setPrintSides(mode)}
+                        style={{
+                          flex: 1,
+                          padding: "6px 10px",
+                          borderRadius: 6,
+                          border: `1.5px solid ${printSides === mode ? "#3b82f6" : "#d1d5db"}`,
+                          background: printSides === mode ? "#dbeafe" : "white",
+                          color: printSides === mode ? "#1e40af" : "#6b7280",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {mode === "front" ? "🔲 Front Only" : "🔳 Front & Back"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Front/Back Side Switcher (when both sides enabled) */}
+                {printSides === "both" && (
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {(["front", "back"] as const).map((side) => (
+                      <button
+                        key={side}
+                        onClick={() => setActiveCardSide(side)}
+                        style={{
+                          flex: 1,
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          border: `2px solid ${activeCardSide === side ? "#2563eb" : "#e2e8f0"}`,
+                          background: activeCardSide === side
+                            ? "linear-gradient(135deg, #3b82f6, #2563eb)"
+                            : "white",
+                          color: activeCardSide === side ? "white" : "#6b7280",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        {side === "front" ? "▶ Front Side" : "◀ Back Side"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* DPI & Bleed */}
+                <div style={{ display: "flex", gap: 6 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 10, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 2 }}>
+                      DPI (Resolution)
+                    </label>
+                    <select
+                      value={cardDpi}
+                      onChange={(e) => setCardDpi(Number(e.target.value))}
+                      style={{
+                        width: "100%",
+                        height: 30,
+                        padding: "0 6px",
+                        border: "1.5px solid #bfdbfe",
+                        borderRadius: 6,
+                        fontSize: 11,
+                        background: "white",
+                      }}
+                    >
+                      <option value={150}>150 DPI (Draft)</option>
+                      <option value={300}>300 DPI (Standard)</option>
+                      <option value={600}>600 DPI (High)</option>
+                      <option value={1200}>1200 DPI (Ultra)</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 10, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 2 }}>
+                      Bleed (mm)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={5}
+                      step={0.5}
+                      value={bleedMargin}
+                      onChange={(e) => setBleedMargin(Number(e.target.value))}
+                      style={{
+                        width: "100%",
+                        height: 30,
+                        padding: "0 8px",
+                        border: "1.5px solid #bfdbfe",
+                        borderRadius: 6,
+                        fontSize: 11,
+                        textAlign: "center",
+                        background: "white",
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Selected Field Properties */}
           {selectedMapping && !showPreview && (
             <div
@@ -829,7 +1822,7 @@ export default function JpgTemplateMapper({
                   fontSize: 14,
                   fontWeight: 700,
                   color: "#0f172a",
-                  marginBottom: 12,
+                  marginBottom: 8,
                   display: "flex",
                   alignItems: "center",
                   gap: 6,
@@ -838,6 +1831,110 @@ export default function JpgTemplateMapper({
                 <span style={{ fontSize: 16 }}>⚙️</span> {selectedMapping.label}{" "}
                 Properties
               </h4>
+
+              {/* Layer & Action Controls */}
+              <div style={{
+                display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap",
+              }}>
+                {/* Layer ordering */}
+                <div style={{
+                  display: "flex", gap: 1, background: "#f1f5f9", borderRadius: 6, padding: 2,
+                }}>
+                  <button
+                    onClick={() => sendToBack(selectedMapping.id)}
+                    title="Send to Back"
+                    style={{
+                      width: 28, height: 24, border: "none", borderRadius: 4,
+                      background: "transparent", color: "#64748b", cursor: "pointer",
+                      fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >⏬</button>
+                  <button
+                    onClick={() => moveLayerDown(selectedMapping.id)}
+                    title="Move Down"
+                    style={{
+                      width: 28, height: 24, border: "none", borderRadius: 4,
+                      background: "transparent", color: "#64748b", cursor: "pointer",
+                      fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >🔽</button>
+                  <button
+                    onClick={() => moveLayerUp(selectedMapping.id)}
+                    title="Move Up"
+                    style={{
+                      width: 28, height: 24, border: "none", borderRadius: 4,
+                      background: "transparent", color: "#64748b", cursor: "pointer",
+                      fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >🔼</button>
+                  <button
+                    onClick={() => bringToFront(selectedMapping.id)}
+                    title="Bring to Front"
+                    style={{
+                      width: 28, height: 24, border: "none", borderRadius: 4,
+                      background: "transparent", color: "#64748b", cursor: "pointer",
+                      fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >⏫</button>
+                </div>
+
+                <div style={{ flex: 1 }} />
+
+                {/* Actions */}
+                <button
+                  onClick={() => duplicateField(selectedMapping.id)}
+                  title="Duplicate (Ctrl+D)"
+                  style={{
+                    padding: "0 8px", height: 28, borderRadius: 6,
+                    border: "1px solid #dbeafe", background: "#eff6ff",
+                    color: "#3b82f6", cursor: "pointer", fontSize: 10, fontWeight: 600,
+                    display: "flex", alignItems: "center", gap: 3,
+                  }}
+                >📋 Duplicate</button>
+                <button
+                  onClick={() => removeFieldMapping(selectedMapping.id)}
+                  title="Delete (Del)"
+                  style={{
+                    padding: "0 8px", height: 28, borderRadius: 6,
+                    border: "1px solid #fecaca", background: "#fef2f2",
+                    color: "#ef4444", cursor: "pointer", fontSize: 10, fontWeight: 600,
+                    display: "flex", alignItems: "center", gap: 3,
+                  }}
+                >🗑 Delete</button>
+              </div>
+
+              {/* Position & Size (precise input) */}
+              <div style={{
+                display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 4,
+                marginBottom: 12, padding: 8, background: "#f8fafc", borderRadius: 8,
+                border: "1px solid #e2e8f0",
+              }}>
+                {[
+                  { label: "X", key: "x" as const },
+                  { label: "Y", key: "y" as const },
+                  { label: "W", key: "width" as const },
+                  { label: "H", key: "height" as const },
+                ].map(({ label, key }) => (
+                  <div key={key}>
+                    <label style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", display: "block", textAlign: "center" }}>
+                      {label} (%)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={Number(selectedMapping[key]).toFixed(1)}
+                      onChange={(e) => updateMapping(selectedMapping.id, { [key]: Number(e.target.value) })}
+                      style={{
+                        width: "100%", height: 26, padding: "0 4px",
+                        border: "1px solid #e2e8f0", borderRadius: 4,
+                        fontSize: 11, textAlign: "center", fontFamily: "monospace",
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
 
               {selectedMapping.type === "text" && (
                 <div
@@ -1075,16 +2172,90 @@ export default function JpgTemplateMapper({
                         border: "1.5px solid #e2e8f0",
                         borderRadius: 8,
                         fontSize: 13,
+                        fontFamily: selectedMapping.fontFamily,
                       }}
                     >
-                      <option value="Arial">Arial</option>
-                      <option value="Helvetica">Helvetica</option>
-                      <option value="Times New Roman">Times New Roman</option>
-                      <option value="Georgia">Georgia</option>
-                      <option value="Verdana">Verdana</option>
-                      <option value="Courier New">Courier New</option>
-                      <option value="Impact">Impact</option>
+                      {FONT_FAMILIES.map((f) => (
+                        <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>
+                      ))}
                     </select>
+                  </div>
+
+                  {/* Font Style (Italic) & Text Decoration (Underline/Strikethrough) */}
+                  <div>
+                    <label
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#64748b",
+                        marginBottom: 4,
+                        display: "block",
+                      }}
+                    >
+                      Font Style
+                    </label>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button
+                        onClick={() =>
+                          updateMapping(selectedMapping.id, {
+                            fontStyle: selectedMapping.fontStyle === "italic" ? "normal" : "italic",
+                          })
+                        }
+                        style={{
+                          flex: 1,
+                          padding: "6px 10px",
+                          borderRadius: 6,
+                          border: `1.5px solid ${selectedMapping.fontStyle === "italic" ? "#3b82f6" : "#e2e8f0"}`,
+                          background: selectedMapping.fontStyle === "italic" ? "#eff6ff" : "white",
+                          color: selectedMapping.fontStyle === "italic" ? "#2563eb" : "#64748b",
+                          fontSize: 13,
+                          fontStyle: "italic",
+                          cursor: "pointer",
+                        }}
+                      >
+                        I
+                      </button>
+                      <button
+                        onClick={() =>
+                          updateMapping(selectedMapping.id, {
+                            textDecoration: selectedMapping.textDecoration === "underline" ? "none" : "underline",
+                          })
+                        }
+                        style={{
+                          flex: 1,
+                          padding: "6px 10px",
+                          borderRadius: 6,
+                          border: `1.5px solid ${selectedMapping.textDecoration === "underline" ? "#3b82f6" : "#e2e8f0"}`,
+                          background: selectedMapping.textDecoration === "underline" ? "#eff6ff" : "white",
+                          color: selectedMapping.textDecoration === "underline" ? "#2563eb" : "#64748b",
+                          fontSize: 13,
+                          textDecoration: "underline",
+                          cursor: "pointer",
+                        }}
+                      >
+                        U
+                      </button>
+                      <button
+                        onClick={() =>
+                          updateMapping(selectedMapping.id, {
+                            textDecoration: selectedMapping.textDecoration === "line-through" ? "none" : "line-through",
+                          })
+                        }
+                        style={{
+                          flex: 1,
+                          padding: "6px 10px",
+                          borderRadius: 6,
+                          border: `1.5px solid ${selectedMapping.textDecoration === "line-through" ? "#3b82f6" : "#e2e8f0"}`,
+                          background: selectedMapping.textDecoration === "line-through" ? "#eff6ff" : "white",
+                          color: selectedMapping.textDecoration === "line-through" ? "#2563eb" : "#64748b",
+                          fontSize: 13,
+                          textDecoration: "line-through",
+                          cursor: "pointer",
+                        }}
+                      >
+                        S
+                      </button>
+                    </div>
                   </div>
 
                   {/* Text Alignment */}
@@ -1137,6 +2308,207 @@ export default function JpgTemplateMapper({
                       ))}
                     </div>
                   </div>
+
+                  {/* Text Wrap */}
+                  <div>
+                    <label
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#64748b",
+                        marginBottom: 4,
+                        display: "block",
+                      }}
+                    >
+                      Text Wrap
+                    </label>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {(["nowrap", "wrap"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() =>
+                            updateMapping(selectedMapping.id, { textWrap: mode })
+                          }
+                          style={{
+                            flex: 1,
+                            padding: "6px 12px",
+                            borderRadius: 6,
+                            border: `1.5px solid ${
+                              (selectedMapping.textWrap || "nowrap") === mode
+                                ? "#3b82f6"
+                                : "#e2e8f0"
+                            }`,
+                            background:
+                              (selectedMapping.textWrap || "nowrap") === mode
+                                ? "#eff6ff"
+                                : "white",
+                            color:
+                              (selectedMapping.textWrap || "nowrap") === mode
+                                ? "#2563eb"
+                                : "#64748b",
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {mode === "nowrap" ? "No Wrap" : "↩ Wrap"}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
+                      {(selectedMapping.textWrap || "nowrap") === "wrap"
+                        ? "Text will wrap to multiple lines within the box"
+                        : "Text stays on a single line (overflow hidden)"}
+                    </div>
+                  </div>
+
+                  {/* Text Transform */}
+                  <div>
+                    <label
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#64748b",
+                        marginBottom: 4,
+                        display: "block",
+                      }}
+                    >
+                      Text Transform
+                    </label>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {(["none", "uppercase", "lowercase", "capitalize"] as const).map((t) => (
+                        <button
+                          key={t}
+                          onClick={() =>
+                            updateMapping(selectedMapping.id, { textTransform: t })
+                          }
+                          style={{
+                            flex: 1,
+                            padding: "5px 6px",
+                            borderRadius: 6,
+                            border: `1.5px solid ${
+                              (selectedMapping.textTransform || "none") === t
+                                ? "#3b82f6"
+                                : "#e2e8f0"
+                            }`,
+                            background:
+                              (selectedMapping.textTransform || "none") === t
+                                ? "#eff6ff"
+                                : "white",
+                            color:
+                              (selectedMapping.textTransform || "none") === t
+                                ? "#2563eb"
+                                : "#64748b",
+                            fontSize: 10,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {t === "none" ? "Aa" : t === "uppercase" ? "AA" : t === "lowercase" ? "aa" : "Aa+"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Letter Spacing & Line Height */}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <label
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: "#64748b",
+                          marginBottom: 4,
+                          display: "block",
+                        }}
+                      >
+                        Letter Spacing: {selectedMapping.letterSpacing || 0}px
+                      </label>
+                      <input
+                        type="range"
+                        min="-2"
+                        max="10"
+                        step="0.5"
+                        value={selectedMapping.letterSpacing || 0}
+                        onChange={(e) =>
+                          updateMapping(selectedMapping.id, {
+                            letterSpacing: Number(e.target.value),
+                          })
+                        }
+                        style={{ width: "100%", accentColor: "#3b82f6" }}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: "#64748b",
+                          marginBottom: 4,
+                          display: "block",
+                        }}
+                      >
+                        Line Height: {(selectedMapping.lineHeight || 1.2).toFixed(1)}
+                      </label>
+                      <input
+                        type="range"
+                        min="0.8"
+                        max="3"
+                        step="0.1"
+                        value={selectedMapping.lineHeight || 1.2}
+                        onChange={(e) =>
+                          updateMapping(selectedMapping.id, {
+                            lineHeight: Number(e.target.value),
+                          })
+                        }
+                        style={{ width: "100%", accentColor: "#3b82f6" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Date Format (only for date fields) */}
+                  {(selectedMapping.fieldKey === "dateOfBirth" ||
+                    selectedMapping.fieldKey.toLowerCase().includes("date") ||
+                    selectedMapping.dateFormat) && (
+                    <div>
+                      <label
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: "#64748b",
+                          marginBottom: 4,
+                          display: "block",
+                        }}
+                      >
+                        📅 Date Format
+                      </label>
+                      <select
+                        value={selectedMapping.dateFormat || "DD/MM/YYYY"}
+                        onChange={(e) =>
+                          updateMapping(selectedMapping.id, {
+                            dateFormat: e.target.value,
+                          })
+                        }
+                        style={{
+                          width: "100%",
+                          height: 36,
+                          padding: "0 8px",
+                          border: "1.5px solid #e2e8f0",
+                          borderRadius: 8,
+                          fontSize: 13,
+                        }}
+                      >
+                        {DATE_FORMATS.map((df) => (
+                          <option key={df.value} value={df.value}>
+                            {df.label} → {df.example}
+                          </option>
+                        ))}
+                      </select>
+                      <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
+                        Preview: {formatDateValue("15/08/2022", selectedMapping.dateFormat || "DD/MM/YYYY")}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Position (fine-tune) with numeric inputs */}
                   <div>
@@ -1273,9 +2645,139 @@ export default function JpgTemplateMapper({
                       display: "block",
                     }}
                   >
-                    Adjust photo area size and position using the handles on the
-                    image, or fine-tune below.
+                    📷 Photo Properties
                   </label>
+
+                  {/* Photo Shape Presets */}
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", marginBottom: 4, display: "block" }}>
+                      Shape Preset
+                    </label>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {[
+                        { label: "□ Square", radius: 0 },
+                        { label: "▢ Rounded", radius: 8 },
+                        { label: "⬭ Pill", radius: 16 },
+                        { label: "○ Circle", radius: 999 },
+                      ].map((shape) => (
+                        <button
+                          key={shape.label}
+                          onClick={() =>
+                            updateMapping(selectedMapping.id, {
+                              photoBorderRadius: shape.radius,
+                            })
+                          }
+                          style={{
+                            flex: 1,
+                            padding: "5px 4px",
+                            borderRadius: 6,
+                            border: `1.5px solid ${
+                              (selectedMapping.photoBorderRadius || 0) === shape.radius
+                                ? "#3b82f6"
+                                : "#e2e8f0"
+                            }`,
+                            background:
+                              (selectedMapping.photoBorderRadius || 0) === shape.radius
+                                ? "#eff6ff"
+                                : "white",
+                            color:
+                              (selectedMapping.photoBorderRadius || 0) === shape.radius
+                                ? "#2563eb"
+                                : "#64748b",
+                            fontSize: 10,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {shape.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Border Radius (custom) */}
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", marginBottom: 4, display: "block" }}>
+                      Corner Radius: {selectedMapping.photoBorderRadius || 0}px
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={selectedMapping.photoBorderRadius || 0}
+                      onChange={(e) =>
+                        updateMapping(selectedMapping.id, {
+                          photoBorderRadius: Number(e.target.value),
+                        })
+                      }
+                      style={{ width: "100%", accentColor: "#3b82f6" }}
+                    />
+                  </div>
+
+                  {/* Border Width */}
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", marginBottom: 4, display: "block" }}>
+                      Border Width: {selectedMapping.photoBorderWidth || 0}px
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="10"
+                      step="0.5"
+                      value={selectedMapping.photoBorderWidth || 0}
+                      onChange={(e) =>
+                        updateMapping(selectedMapping.id, {
+                          photoBorderWidth: Number(e.target.value),
+                        })
+                      }
+                      style={{ width: "100%", accentColor: "#3b82f6" }}
+                    />
+                  </div>
+
+                  {/* Border Color */}
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", marginBottom: 4, display: "block" }}>
+                      Border Color
+                    </label>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <input
+                        type="color"
+                        value={selectedMapping.photoBorderColor || "#000000"}
+                        onChange={(e) =>
+                          updateMapping(selectedMapping.id, {
+                            photoBorderColor: e.target.value,
+                          })
+                        }
+                        style={{
+                          width: 32,
+                          height: 32,
+                          border: "2px solid #e2e8f0",
+                          borderRadius: 6,
+                          cursor: "pointer",
+                          padding: 0,
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: 3, flex: 1 }}>
+                        {["#000000", "#ffffff", "#1e3a5f", "#8b0000", "#2e7d32", "#c0c0c0"].map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => updateMapping(selectedMapping.id, { photoBorderColor: c })}
+                            style={{
+                              width: 22,
+                              height: 22,
+                              borderRadius: 4,
+                              background: c,
+                              border: `2px solid ${selectedMapping.photoBorderColor === c ? "#3b82f6" : "#d1d5db"}`,
+                              cursor: "pointer",
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Position & Size */}
                   <div
                     style={{
                       display: "grid",
@@ -1542,7 +3044,10 @@ export default function JpgTemplateMapper({
                 gap: 6,
               }}
             >
-              <span style={{ fontSize: 16 }}>📋</span> Placed Fields ({mappings.length})
+              <span style={{ fontSize: 16 }}>📋</span> Layers ({mappings.length})
+              <span style={{ fontSize: 9, color: "#94a3b8", fontWeight: 400, marginLeft: "auto" }}>
+                top → bottom
+              </span>
             </h4>
 
             {/* Photo Background Color Picker */}
@@ -1629,12 +3134,14 @@ export default function JpgTemplateMapper({
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {mappings.map((m) => (
+              {[...mappings].reverse().map((m, revIdx) => {
+                const layerIdx = mappings.length - revIdx
+                return (
                 <div
                   key={m.id}
                   onClick={() => setSelectedId(m.id)}
                   style={{
-                    padding: "8px 12px",
+                    padding: "6px 10px",
                     borderRadius: 8,
                     border: `1.5px solid ${
                       m.id === selectedId ? "#3b82f6" : "#e2e8f0"
@@ -1643,44 +3150,75 @@ export default function JpgTemplateMapper({
                       m.id === selectedId ? "#eff6ff" : "white",
                     cursor: "pointer",
                     display: "flex",
-                    justifyContent: "space-between",
                     alignItems: "center",
+                    gap: 8,
                     transition: "all 0.15s",
                   }}
                 >
+                  {/* Layer index badge */}
+                  <span style={{
+                    width: 20, height: 20, borderRadius: 4,
+                    background: m.id === selectedId ? "#3b82f6" : "#f1f5f9",
+                    color: m.id === selectedId ? "white" : "#94a3b8",
+                    fontSize: 9, fontWeight: 700, fontFamily: "monospace",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0,
+                  }}>
+                    {layerIdx}
+                  </span>
                   <span
                     style={{
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: 500,
                       color: "#334155",
+                      flex: 1,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    {m.type === "photo" ? "📷 " : ""}
+                    {m.type === "photo" ? "📷 " : "Aa "}
                     {m.label}
                   </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      removeFieldMapping(m.id)
-                    }}
-                    style={{
-                      width: 22,
-                      height: 22,
-                      borderRadius: 4,
-                      border: "none",
-                      background: "#fef2f2",
-                      color: "#ef4444",
-                      cursor: "pointer",
-                      fontSize: 11,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    ✕
-                  </button>
+                  <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        updateMapping(m.id, { locked: !m.locked })
+                      }}
+                      title={m.locked ? "Unlock" : "Lock"}
+                      style={{
+                        width: 20, height: 20, borderRadius: 3,
+                        border: "none", background: m.locked ? "#fef3c7" : "transparent",
+                        color: m.locked ? "#d97706" : "#94a3b8", cursor: "pointer", fontSize: 10,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
+                    >{m.locked ? "🔒" : "🔓"}</button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); duplicateField(m.id) }}
+                      title="Duplicate"
+                      style={{
+                        width: 20, height: 20, borderRadius: 3,
+                        border: "none", background: "transparent",
+                        color: "#94a3b8", cursor: "pointer", fontSize: 10,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
+                    >📋</button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeFieldMapping(m.id)
+                      }}
+                      style={{
+                        width: 20, height: 20, borderRadius: 3,
+                        border: "none", background: "#fef2f2",
+                        color: "#ef4444", cursor: "pointer", fontSize: 10,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
+                    >✕</button>
+                  </div>
                 </div>
-              ))}
+              )})}
               {mappings.length === 0 && (
                 <div
                   style={{

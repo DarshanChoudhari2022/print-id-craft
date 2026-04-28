@@ -976,12 +976,25 @@ export default function TeacherDashboard() {
                 fieldMappings={templateData?.fieldMappings || []}
                 fieldConfig={templateData?.fieldConfig || []}
                 initialPhotoBgColor={(templateData as any)?.photoBgColor || "#FFFFFF"}
-                onSave={async (templateImageUrl, fieldMappings, photoBgColor) => {
+                onSave={async (templateImageUrl, fieldMappings, photoBgColor, cardSettings) => {
                   try {
                     const res = await fetch(`/api/schools/${getSchoolId()}/template`, {
                       method: 'PUT',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ templateImageUrl, fieldMappings, photoBgColor }),
+                      body: JSON.stringify({
+                        templateImageUrl,
+                        fieldMappings,
+                        photoBgColor,
+                        ...(cardSettings ? {
+                          cardWidthMm: cardSettings.cardWidth,
+                          cardHeightMm: cardSettings.cardHeight,
+                          printDpi: cardSettings.cardDpi,
+                          orientation: cardSettings.cardOrientation === "landscape" ? "LANDSCAPE" : "PORTRAIT",
+                          hasBackSide: cardSettings.printSides === "both",
+                          backTemplateImageUrl: cardSettings.backImageUrl,
+                          backFieldMappings: cardSettings.backMappings,
+                        } : {}),
+                      }),
                     })
                     const d = await res.json()
                     if (d.success) {
