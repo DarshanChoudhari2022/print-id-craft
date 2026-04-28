@@ -132,9 +132,22 @@ const formatDateValue = (value: string, format: string): string => {
 }
 
 const FONT_FAMILIES = [
-  "Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana",
-  "Courier New", "Impact", "Trebuchet MS", "Tahoma", "Palatino",
-  "Lucida Console", "Comic Sans MS", "Garamond", "Book Antiqua",
+  // Sans-Serif
+  "Arial", "Helvetica", "Verdana", "Tahoma", "Trebuchet MS",
+  "Calibri", "Segoe UI", "Lucida Sans", "Franklin Gothic Medium",
+  // Serif
+  "Times New Roman", "Georgia", "Palatino", "Garamond",
+  "Book Antiqua", "Cambria", "Constantia", "Didot",
+  // Monospace
+  "Courier New", "Lucida Console", "Consolas", "Monaco",
+  // Display & Fun
+  "Impact", "Comic Sans MS", "Copperplate", "Papyrus",
+  // Google Fonts (loaded via CDN)
+  "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins",
+  "Raleway", "Oswald", "Inter", "Nunito", "Playfair Display",
+  "Merriweather", "Ubuntu", "Rubik", "Outfit", "Mukta",
+  // Indian Language Friendly
+  "Noto Sans Devanagari", "Noto Sans", "Tiro Devanagari Hindi",
 ]
 
 const SAMPLE_DATA: Record<string, string> = {
@@ -2059,30 +2072,35 @@ export default function JpgTemplateMapper({
                           padding: 2,
                         }}
                       />
-                      {["#000000", "#ffffff", "#1e3a5f", "#dc2626", "#16a34a"].map(
-                        (color) => (
-                          <button
-                            key={color}
-                            onClick={() =>
-                              updateMapping(selectedMapping.id, {
-                                fontColor: color,
-                              })
-                            }
-                            style={{
-                              width: 28,
-                              height: 28,
-                              borderRadius: 6,
-                              background: color,
-                              border: `2px solid ${
-                                selectedMapping.fontColor === color
-                                  ? "#3b82f6"
-                                  : "#e2e8f0"
-                              }`,
-                              cursor: "pointer",
-                            }}
-                          />
-                        )
-                      )}
+                      {[
+                        "#000000", "#FFFFFF", "#1e3a5f", "#334155", "#64748b",
+                        "#dc2626", "#ea580c", "#d97706", "#16a34a", "#0891b2",
+                        "#2563eb", "#7c3aed", "#db2777", "#8B4513", "#6B7280",
+                      ].map((color) => (
+                        <button
+                          key={color}
+                          onClick={() =>
+                            updateMapping(selectedMapping.id, {
+                              fontColor: color,
+                            })
+                          }
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: 6,
+                            background: color,
+                            border: `2px solid ${
+                              selectedMapping.fontColor === color
+                                ? "#3b82f6"
+                                : "#d1d5db"
+                            }`,
+                            cursor: "pointer",
+                            transition: "all 0.15s",
+                            transform: selectedMapping.fontColor === color ? "scale(1.15)" : "scale(1)",
+                            boxShadow: selectedMapping.fontColor === color ? "0 0 0 2px rgba(59,130,246,0.3)" : "none",
+                          }}
+                        />
+                      ))}
                     </div>
                   </div>
 
@@ -3101,13 +3119,7 @@ export default function JpgTemplateMapper({
               >
                 AI will auto-replace the photo background with this color during student submission.
               </div>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 6,
-                  flexWrap: "wrap",
-                }}
-              >
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                 {BG_COLOR_PRESETS.map((preset) => (
                   <button
                     key={preset.id}
@@ -3117,16 +3129,15 @@ export default function JpgTemplateMapper({
                       height: 36,
                       borderRadius: 8,
                       background: preset.hex,
-                      border:
-                        photoBgColor === preset.hex
-                          ? "3px solid #7c3aed"
-                          : "2px solid #d1d5db",
+                      border: photoBgColor === preset.hex
+                        ? "3px solid #7c3aed"
+                        : "2px solid #d1d5db",
                       cursor: "pointer",
-                      boxShadow:
-                        photoBgColor === preset.hex
-                          ? "0 0 0 2px rgba(124,58,237,0.3)"
-                          : "none",
-                      transition: "all 0.15s",
+                      boxShadow: photoBgColor === preset.hex
+                        ? "0 0 0 3px rgba(124,58,237,0.35)"
+                        : "none",
+                      transition: "all 0.2s ease",
+                      transform: photoBgColor === preset.hex ? "scale(1.12)" : "scale(1)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -3134,20 +3145,26 @@ export default function JpgTemplateMapper({
                     title={preset.label}
                   >
                     {photoBgColor === preset.hex && (
-                      <span style={{ fontSize: 14, color: preset.textColor }}>✓</span>
+                      <span style={{ fontSize: 16, color: preset.textColor, fontWeight: 800 }}>✓</span>
                     )}
                   </button>
                 ))}
+                {/* Native color picker for custom colors */}
+                <div style={{ position: "relative" }}>
+                  <input
+                    type="color"
+                    value={photoBgColor}
+                    onChange={(e) => setPhotoBgColor(e.target.value)}
+                    style={{
+                      width: 36, height: 36, border: "2px solid #d1d5db",
+                      borderRadius: 8, cursor: "pointer", padding: 2,
+                    }}
+                    title="Pick custom color"
+                  />
+                </div>
               </div>
-              <div
-                style={{
-                  fontSize: 10,
-                  color: "#a78bfa",
-                  marginTop: 6,
-                  textAlign: "center",
-                }}
-              >
-                {BG_COLOR_PRESETS.find((p) => p.hex === photoBgColor)?.label || "Custom"} selected
+              <div style={{ fontSize: 11, color: "#7c3aed", marginTop: 6, fontWeight: 600 }}>
+                {BG_COLOR_PRESETS.find((p) => p.hex === photoBgColor)?.label || photoBgColor} selected
               </div>
             </div>
 

@@ -59,6 +59,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
   const [printSide, setPrintSide] = useState<"both" | "front" | "back">("both")
   const [imageFormat, setImageFormat] = useState<"jpeg" | "png">("png") // PNG for lossless print
   const [pvcMode, setPvcMode] = useState(false) // PVC precision print mode
+  const [activePresetIdx, setActivePresetIdx] = useState(0) // Track active Quick Preset
   const [useCustomPosition, setUseCustomPosition] = useState(false) // ID-Card Position override
   const [cardPosX, setCardPosX] = useState(0) // Horizontal 1st card position (mm)
   const [cardPosY, setCardPosY] = useState(0) // Vertical 1st card position (mm)
@@ -475,12 +476,13 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
             <SettingsSection title="⚡ Quick Presets" subtitle="One-click configurations for common layouts">
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {QUICK_PRESETS.map((preset, idx) => {
-                  const isActive = preset.isPvc ? pvcMode : false
+                  const isActive = activePresetIdx === idx
                   const isPvc = !!preset.isPvc
                   return (
                     <button
                       key={idx}
                       onClick={() => {
+                        setActivePresetIdx(idx)
                         setPvcMode(!!preset.isPvc)
                         setPageSizeKey(preset.pageSizeKey)
                         setCardPresetKey(preset.cardPresetKey)
@@ -496,9 +498,11 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
                       style={{
                         padding: "8px 14px",
                         borderRadius: 10,
-                        border: `1.5px solid ${isActive ? "#16a34a" : isPvc ? "#22c55e" : "#3b82f6"}`,
+                        border: `2px solid ${isActive ? (isPvc ? "#16a34a" : "#2563eb") : isPvc ? "#bbf7d0" : "#bfdbfe"}`,
                         background: isActive
-                          ? "linear-gradient(135deg, #166534, #15803d)"
+                          ? isPvc
+                            ? "linear-gradient(135deg, #166534, #15803d)"
+                            : "linear-gradient(135deg, #1d4ed8, #2563eb)"
                           : isPvc
                             ? "linear-gradient(135deg, #f0fdf4, #dcfce7)"
                             : "linear-gradient(135deg, #eff6ff, #dbeafe)",
@@ -506,16 +510,21 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
                         fontSize: 12,
                         fontWeight: 700,
                         color: isActive ? "#ffffff" : isPvc ? "#166534" : "#1d4ed8",
-                        transition: "all 0.15s",
+                        transition: "all 0.2s ease",
                         textAlign: "left",
                         lineHeight: 1.4,
-                        boxShadow: isActive ? "0 2px 8px rgba(22,163,74,0.3)" : "none",
+                        transform: isActive ? "scale(1.03)" : "scale(1)",
+                        boxShadow: isActive
+                          ? isPvc
+                            ? "0 4px 12px rgba(22,163,74,0.35)"
+                            : "0 4px 12px rgba(37,99,235,0.35)"
+                          : "none",
                       }}
                     >
-                      <div>{preset.label}</div>
+                      <div>{isActive ? "✓ " : ""}{preset.label}</div>
                       <div style={{
                         fontSize: 10, fontWeight: 500, marginTop: 2,
-                        color: isActive ? "#bbf7d0" : isPvc ? "#16a34a" : "#3b82f6",
+                        color: isActive ? "rgba(255,255,255,0.8)" : isPvc ? "#16a34a" : "#3b82f6",
                       }}>
                         {preset.description}
                       </div>
