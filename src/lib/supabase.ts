@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ""
@@ -8,10 +8,36 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 // Falls back to anon key if service key not available
 const serverKey = supabaseServiceKey || supabaseAnonKey
 
-export const supabase = createClient(supabaseUrl, serverKey)
+// Lazy-initialize clients via a Proxy so a missing/invalid env var does NOT
+// throw at module load (which would make API routes return HTML 500s on Vercel).
+// The error only surfaces when the client is actually used, where it can be
+// caught by the route's try/catch and returned as JSON.
+function makeLazyClient(url: string, key: string): SupabaseClient {
+  let instance: SupabaseClient | null = null
+  const get = (): SupabaseClient => {
+    if (instance) return instance
+    if (!url || !key) {
+      throw new Error(
+        "Supabase is not configured. Missing NEXT_PUBLIC_SUPABASE_URL or key. " +
+        "Set these env vars in your deployment (Vercel → Settings → Environment Variables)."
+      )
+    }
+    instance = createClient(url, key)
+    return instance
+  }
+  return new Proxy({} as SupabaseClient, {
+    get(_target, prop) {
+      const client = get() as any
+      const value = client[prop]
+      return typeof value === "function" ? value.bind(client) : value
+    },
+  })
+}
+
+export const supabase: SupabaseClient = makeLazyClient(supabaseUrl, serverKey)
 
 // Client-side supabase for uploads from the browser
-export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
+export const supabaseClient: SupabaseClient = makeLazyClient(supabaseUrl, supabaseAnonKey)
 
 // Track if we've warned about missing service key
 let warnedAboutServiceKey = false

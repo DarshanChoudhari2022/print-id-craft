@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
+import Link from "next/link"
 import { toast } from "sonner"
 import dynamic from "next/dynamic"
 
