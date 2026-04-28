@@ -199,6 +199,8 @@ export function calculateGridLayout(
   marginMm: number,
   gapMm: number,
   totalCards: number,
+  customStartX?: number,
+  customStartY?: number,
 ): GridLayout {
   const printW = pageWidthMm - marginMm * 2
   const printH = pageHeightMm - marginMm * 2
@@ -208,8 +210,13 @@ export function calculateGridLayout(
   const totalPages = Math.ceil(totalCards / cardsPerPage)
   const usedW = cols * cardWidthMm + (cols - 1) * gapMm
   const usedH = rows * cardHeightMm + (rows - 1) * gapMm
-  const startX = marginMm + (printW - usedW) / 2
-  const startY = marginMm + (printH - usedH) / 2
+  // Use custom start positions if provided, otherwise auto-center
+  const startX = customStartX !== undefined && customStartX >= 0
+    ? customStartX
+    : marginMm + (printW - usedW) / 2
+  const startY = customStartY !== undefined && customStartY >= 0
+    ? customStartY
+    : marginMm + (printH - usedH) / 2
   return { cols, rows, cardsPerPage, totalPages, startX, startY, usedW, usedH }
 }
 

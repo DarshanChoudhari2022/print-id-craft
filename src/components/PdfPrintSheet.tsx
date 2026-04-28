@@ -59,6 +59,9 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
   const [printSide, setPrintSide] = useState<"both" | "front" | "back">("both")
   const [imageFormat, setImageFormat] = useState<"jpeg" | "png">("png") // PNG for lossless print
   const [pvcMode, setPvcMode] = useState(false) // PVC precision print mode
+  const [useCustomPosition, setUseCustomPosition] = useState(false) // ID-Card Position override
+  const [cardPosX, setCardPosX] = useState(0) // Horizontal 1st card position (mm)
+  const [cardPosY, setCardPosY] = useState(0) // Vertical 1st card position (mm)
   const [mobileTab, setMobileTab] = useState<MobileTab>("settings")
   const [isMobile, setIsMobile] = useState(false)
 
@@ -87,8 +90,12 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
   const layout = useMemo(
     () => pvcMode
       ? calculatePvcLayout(cards.length)
-      : calculateGridLayout(pageW, pageH, cardW, cardH, marginMm, gapMm, cards.length),
-    [pvcMode, pageW, pageH, cardW, cardH, marginMm, gapMm, cards.length]
+      : calculateGridLayout(
+          pageW, pageH, cardW, cardH, marginMm, gapMm, cards.length,
+          useCustomPosition ? cardPosX : undefined,
+          useCustomPosition ? cardPosY : undefined,
+        ),
+    [pvcMode, pageW, pageH, cardW, cardH, marginMm, gapMm, cards.length, useCustomPosition, cardPosX, cardPosY]
   )
 
   /* ── Live preview canvas ── */
@@ -641,6 +648,114 @@ export default function PdfPrintSheet({ cards, schoolName, onClose }: PdfPrintSh
                     <span style={valueTagStyle}>{gapMm}mm</span>
                   </div>
                 </div>
+              </div>
+            </SettingsSection>
+
+            {/* ID-Card Position (like old ID-Maker software) */}
+            <SettingsSection title="📍 ID-Card Position" subtitle="Set exact starting position of cards on the page (in mm)">
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={useCustomPosition}
+                    onChange={(e) => setUseCustomPosition(e.target.checked)}
+                    style={{ accentColor: "#3b82f6", width: 16, height: 16 }}
+                  />
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#475569" }}>Use Custom Position</span>
+                </label>
+                {!useCustomPosition && (
+                  <span style={{ fontSize: 11, color: "#94a3b8", fontStyle: "italic" }}>Auto-centered</span>
+                )}
+              </div>
+
+              {useCustomPosition && (
+                <div style={{ background: "#f8fafc", borderRadius: 10, padding: 14, border: "1px solid #e2e8f0" }}>
+                  {/* Horizontal */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 8 }}>Horizontal</div>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>1st Card Position</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <input
+                            type="number"
+                            min={0}
+                            max={pageW}
+                            step={0.5}
+                            value={cardPosX}
+                            onChange={(e) => setCardPosX(Number(e.target.value))}
+                            style={{
+                              width: 70, height: 32, padding: "0 8px", border: "1.5px solid #cbd5e1",
+                              borderRadius: 8, fontSize: 13, fontWeight: 600, textAlign: "center",
+                            }}
+                          />
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>(in mm)</span>
+                        </div>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>2nd Position (Card Width)</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <input
+                            type="number"
+                            value={cardW}
+                            readOnly
+                            style={{
+                              width: 70, height: 32, padding: "0 8px", border: "1.5px solid #e2e8f0",
+                              borderRadius: 8, fontSize: 13, fontWeight: 600, textAlign: "center",
+                              background: "#f1f5f9", color: "#64748b",
+                            }}
+                          />
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>(in mm)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Vertical */}
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 8 }}>Vertical</div>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>1st Card Position</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <input
+                            type="number"
+                            min={0}
+                            max={pageH}
+                            step={0.5}
+                            value={cardPosY}
+                            onChange={(e) => setCardPosY(Number(e.target.value))}
+                            style={{
+                              width: 70, height: 32, padding: "0 8px", border: "1.5px solid #cbd5e1",
+                              borderRadius: 8, fontSize: 13, fontWeight: 600, textAlign: "center",
+                            }}
+                          />
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>(in mm)</span>
+                        </div>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>2nd Position (Card Height)</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <input
+                            type="number"
+                            value={cardH}
+                            readOnly
+                            style={{
+                              width: 70, height: 32, padding: "0 8px", border: "1.5px solid #e2e8f0",
+                              borderRadius: 8, fontSize: 13, fontWeight: 600, textAlign: "center",
+                              background: "#f1f5f9", color: "#64748b",
+                            }}
+                          />
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>(in mm)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+                Start: X={layout.startX.toFixed(1)}mm, Y={layout.startY.toFixed(1)}mm
               </div>
             </SettingsSection>
 
