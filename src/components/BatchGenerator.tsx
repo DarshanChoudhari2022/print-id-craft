@@ -3,6 +3,7 @@ import { useState, useCallback } from "react"
 import { toast } from "sonner"
 import dynamic from "next/dynamic"
 import { normalizeKey, resolveFieldValue, FIELD_GROUPS } from "@/lib/field-resolver"
+import { PrintDialog, type PrintConfig } from "./IDMakerDialogs"
 
 const PdfPrintSheet = dynamic(() => import("@/components/PdfPrintSheet"), { ssr: false })
 
@@ -401,7 +402,143 @@ async function downloadAsCdrZip(
   setTimeout(() => URL.revokeObjectURL(url), 5000)
 }
 
-type OutputFormat = "JPEG" | "CDR" | "PDF_PRINT"
+type OutputFormat = "JPEG" | "CDR" | "PDF_PRINT" | "BMP"
+
+/**
+ * Convert a PNG/JPEG data URL to a 24-bit BMP data URL.
+ * BMP format: DIB header (BITMAPINFOHEADER) + pixel data (BGR, bottom-up).
+ */
+function dataUrlToBmp(dataUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const w = img.naturalWidth
+      const h = img.naturalHeight
+      const canvas = document.createElement("canvas")
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return reject(new Error("No canvas ctx"))
+      ctx.drawImage(img, 0, 0)
+      const imageData = ctx.getImageData(0, 0, w, h)
+      const pixels = imageData.data // RGBA, top-down
+
+      // Row size must be multiple of 4 bytes (24bpp = 3 bytes/pixel)
+      const rowSize = Math.ceil((w * 3) / 4) * 4
+      const pixelDataSize = rowSize * h
+      const fileSize = 54 + pixelDataSize // BMP header (14) + DIB header (40) + pixel data
+
+      const buffer = new ArrayBuffer(fileSize)
+      const view = new DataView(buffer)
+
+      // BMP file header
+      view.setUint8(0, 0x42) // 'B'
+      view.setUint8(1, 0x4D) // 'M'
+      view.setUint32(2, fileSize, true)   // file size
+      view.setUint32(6, 0, true)          // reserved
+      view.setUint32(10, 54, true)        // pixel data offset
+
+      // DIB header (BITMAPINFOHEADER)
+      view.setUint32(14, 40, true)        // header size
+      view.setInt32(18, w, true)          // width
+      view.setInt32(22, h, true)          // height (positive = bottom-up)
+      view.setUint16(26, 1, true)         // color planes
+      view.setUint16(28, 24, true)        // bits per pixel
+      view.setUint32(30, 0, true)         // no compression
+      view.setUint32(34, pixelDataSize, true)
+      view.setInt32(38, 2835, true)       // X pixels per meter (~72 DPI)
+      view.setInt32(42, 2835, true)       // Y pixels per meter
+      view.setUint32(46, 0, true)         // colors in table
+      view.setUint32(50, 0, true)         // important colors
+
+      // Pixel data — BMP stores rows bottom-up, BGR order
+      let offset = 54
+      for (let row = h - 1; row >= 0; row--) {
+        for (let col = 0; col < w; col++) {
+          const i = (row * w + col) * 4
+          view.setUint8(offset++, pixels[i + 2]) // B
+          view.setUint8(offset++, pixels[i + 1]) // G
+          view.setUint8(offset++, pixels[i + 0]) // R
+        }
+        // Padding to align row to 4 bytes
+        for (let p = 0; p < rowSize - w * 3; p++) view.setUint8(offset++, 0)
+      }
+
+      const blob = new Blob([buffer], { type: "image/bmp" })
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    }
+    img.onerror = reject
+    img.src = dataUrl
+  })
+}
+
+/** Prompt user to pick a folder (via <input webkitdirectory>) and save BMP files into it */
+async function saveBmpFilesToFolder(
+  cards: { serialNumber: string; frontDataUrl: string; backDataUrl?: string }[],
+  onProgress: (current: number, total: number) => void,
+): Promise<void> {
+  // Use the File System Access API if available (Chromium/Electron)
+  if ((window as any).showDirectoryPicker) {
+    let dirHandle: FileSystemDirectoryHandle
+    try {
+      dirHandle = await (window as any).showDirectoryPicker()
+    } catch {
+      return // user cancelled
+    }
+    let done = 0
+    const total = cards.reduce((acc, c) => acc + 1 + (c.backDataUrl ? 1 : 0), 0)
+    for (const card of cards) {
+      const frontBmp = await dataUrlToBmp(card.frontDataUrl)
+      const frontBase64 = frontBmp.split(",")[1]
+      const frontBytes = Uint8Array.from(atob(frontBase64), c => c.charCodeAt(0))
+      const frontFile = await dirHandle.getFileHandle(`${card.serialNumber}_front.bmp`, { create: true })
+      const frontWritable = await (frontFile as any).createWritable()
+      await frontWritable.write(frontBytes)
+      await frontWritable.close()
+      done++
+      onProgress(done, total)
+
+      if (card.backDataUrl) {
+        const backBmp = await dataUrlToBmp(card.backDataUrl)
+        const backBase64 = backBmp.split(",")[1]
+        const backBytes = Uint8Array.from(atob(backBase64), c => c.charCodeAt(0))
+        const backFile = await dirHandle.getFileHandle(`${card.serialNumber}_back.bmp`, { create: true })
+        const backWritable = await (backFile as any).createWritable()
+        await backWritable.write(backBytes)
+        await backWritable.close()
+        done++
+        onProgress(done, total)
+      }
+    }
+  } else {
+    // Fallback: download BMP files one by one as individual downloads
+    const { default: JSZip } = await import("jszip")
+    const zip = new JSZip()
+    let done = 0
+    const total = cards.reduce((acc, c) => acc + 1 + (c.backDataUrl ? 1 : 0), 0)
+    for (const card of cards) {
+      const frontBmp = await dataUrlToBmp(card.frontDataUrl)
+      zip.file(`${card.serialNumber}_front.bmp`, frontBmp.split(",")[1], { base64: true })
+      done++
+      onProgress(done, total)
+      if (card.backDataUrl) {
+        const backBmp = await dataUrlToBmp(card.backDataUrl)
+        zip.file(`${card.serialNumber}_back.bmp`, backBmp.split(",")[1], { base64: true })
+        done++
+        onProgress(done, total)
+      }
+    }
+    const blob = await zip.generateAsync({ type: "blob" })
+    const a = document.createElement("a")
+    a.href = URL.createObjectURL(blob)
+    a.download = "IDCards-BMP.zip"
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+}
 
 export default function BatchGenerator({ schoolId, schoolName, classes }: BatchGeneratorProps) {
   const [selectedClassId, setSelectedClassId] = useState("")
@@ -412,6 +549,11 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
   const [previewCards, setPreviewCards] = useState<{ serialNumber: string; frontDataUrl: string; backDataUrl?: string }[]>([])
   const [pdfPrintCards, setPdfPrintCards] = useState<{ serialNumber: string; frontDataUrl: string; backDataUrl?: string }[]>([])
   const [showPdfPrint, setShowPdfPrint] = useState(false)
+  const [showPrintDialog, setShowPrintDialog] = useState(false)
+  const [printConfig, setPrintConfig] = useState<PrintConfig>({
+    paper: "A4 Horizontal", paperWidth: 297, paperHeight: 210,
+    h1stPosition: 0, h2ndPosition: 0, v1stPosition: 0, v2ndPosition: 0,
+  })
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true)
@@ -553,6 +695,54 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
 
         setProgress({ current: totalCount, total: totalCount, status: "Done! ✅" })
         toast.success(`${svgCards.length} SVG files + CorelDRAW converter script exported!`)
+
+      // ──── BMP PATH ────
+      } else if (outputFormat === "BMP") {
+        const renderedCards: { serialNumber: string; frontDataUrl: string; backDataUrl?: string; id: string }[] = []
+        const CHUNK_SIZE = 4
+
+        for (let i = 0; i < students.length; i += CHUNK_SIZE) {
+          const chunk = students.slice(i, i + CHUNK_SIZE)
+          const promises = chunk.map(async (student: any) => {
+            try {
+              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student)
+              let backDataUrl: string | undefined
+              if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
+                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student)
+              }
+              return { serialNumber: student.serialNumber, frontDataUrl, backDataUrl, id: student.id }
+            } catch (err) {
+              console.error(`Error rendering ${student.serialNumber}`, err)
+              return null
+            }
+          })
+          const results = await Promise.all(promises)
+          results.forEach(c => { if (c) renderedCards.push(c) })
+          const currentProgress = Math.min(i + CHUNK_SIZE, totalCount)
+          setProgress({ current: currentProgress, total: totalCount, status: `Rendered ${currentProgress}/${totalCount} cards...` })
+          await new Promise(r => setTimeout(r, 0))
+        }
+
+        setPreviewCards(renderedCards.slice(0, 8).map(c => ({
+          serialNumber: c.serialNumber,
+          frontDataUrl: c.frontDataUrl,
+          backDataUrl: c.backDataUrl,
+        })))
+
+        setProgress({ current: 0, total: renderedCards.length, status: "Converting to BMP & saving..." })
+        await saveBmpFilesToFolder(renderedCards, (done, total) => {
+          setProgress({ current: done, total, status: `Saving BMP ${done}/${total}...` })
+        })
+
+        const studentIds = renderedCards.map(c => c.id)
+        await fetch(`/api/schools/${schoolId}/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ studentIds }),
+        })
+
+        setProgress({ current: renderedCards.length, total: renderedCards.length, status: "Done! ✅" })
+        toast.success(`${renderedCards.length} ID cards saved as BMP files!`)
 
       // ──── JPEG PATH (existing) ────
       } else {
@@ -728,15 +918,16 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 width: "100%",
                 height: 42,
                 padding: "0 12px",
-                border: outputFormat === "CDR" ? "1.5px solid #8b5cf6" : outputFormat === "PDF_PRINT" ? "1.5px solid #fca5a5" : "1.5px solid #e2e8f0",
+                border: outputFormat === "CDR" ? "1.5px solid #8b5cf6" : outputFormat === "PDF_PRINT" ? "1.5px solid #fca5a5" : outputFormat === "BMP" ? "1.5px solid #86efac" : "1.5px solid #e2e8f0",
                 borderRadius: 10,
                 fontSize: 14,
-                background: outputFormat === "CDR" ? "#f5f3ff" : outputFormat === "PDF_PRINT" ? "#fef2f2" : "white",
+                background: outputFormat === "CDR" ? "#f5f3ff" : outputFormat === "PDF_PRINT" ? "#fef2f2" : outputFormat === "BMP" ? "#f0fdf4" : "white",
               }}
             >
               <option value="JPEG">📷 JPEG (Print-Ready Images)</option>
               <option value="CDR">📐 CDR (CorelDRAW Vector)</option>
               <option value="PDF_PRINT">📄 PDF Print (Best for Printing)</option>
+              <option value="BMP">🖼️ BMP (Save Locally per Person)</option>
             </select>
           </div>
         </div>
@@ -756,6 +947,25 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             <strong>📐 CDR Export:</strong> Downloads SVG files with vector text + a one-click
             <strong> convert_to_cdr.vbs</strong> script. Double-click the script and CorelDRAW
             will automatically convert all SVGs to .cdr files.
+          </div>
+        )}
+
+        {/* BMP format info banner */}
+        {outputFormat === "BMP" && (
+          <div style={{
+            background: "linear-gradient(135deg, #f0fdf4, #dcfce7)",
+            borderRadius: 10,
+            padding: 14,
+            marginBottom: 16,
+            border: "1px solid #86efac",
+            fontSize: 12,
+            color: "#14532d",
+            lineHeight: 1.5,
+          }}>
+            <strong>🖼️ BMP Save — Save Locally per Person:</strong> Renders each ID card and saves individual
+            <strong> .bmp files</strong> to a folder you choose on your computer. Each file is named
+            by the student&apos;s serial number. Requires a modern browser (Chrome/Edge/Electron).
+            On unsupported browsers, downloads a ZIP of BMP files instead.
           </div>
         )}
 
@@ -779,6 +989,26 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         )}
 
         <button
+          onClick={() => setShowPrintDialog(true)}
+          style={{
+            padding: "12px 24px",
+            fontSize: 14,
+            border: "2px solid #000080",
+            borderRadius: 8,
+            background: "#d4d0c8",
+            color: "#000080",
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: "Tahoma, Arial, sans-serif",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          🖨️ Print Setup...
+        </button>
+
+        <button
           className="btn btn-primary"
           onClick={handleGenerate}
           disabled={generating}
@@ -792,7 +1022,9 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
               ? "linear-gradient(135deg, #8b5cf6, #6d28d9)"
               : outputFormat === "PDF_PRINT"
                 ? "linear-gradient(135deg, #dc2626, #b91c1c)"
-                : undefined,
+                : outputFormat === "BMP"
+                  ? "linear-gradient(135deg, #34c759, #2ecc71)"
+                  : undefined,
           }}
         >
           {generating ? (
@@ -809,7 +1041,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
               Generating...
             </>
           ) : (
-            <>{outputFormat === "CDR" ? "📐 Generate CorelDRAW Files (ZIP)" : outputFormat === "PDF_PRINT" ? "📄 Generate PDF Print" : "🖨️ Generate & Download ID Cards (ZIP)"}</>
+            <>{outputFormat === "CDR" ? "📐 Generate CorelDRAW Files (ZIP)" : outputFormat === "PDF_PRINT" ? "📄 Generate PDF Print" : outputFormat === "BMP" ? "🖼️ Generate & Save as BMP" : "🖨️ Generate & Download ID Cards (ZIP)"}</>
           )}
         </button>
       </div>
@@ -960,6 +1192,19 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           cards={pdfPrintCards}
           schoolName={schoolName}
           onClose={() => setShowPdfPrint(false)}
+        />
+      )}
+
+      {/* ── Print Setup Dialog ── */}
+      {showPrintDialog && (
+        <PrintDialog
+          initial={printConfig}
+          onOk={(cfg: PrintConfig) => {
+            setPrintConfig(cfg)
+            setShowPrintDialog(false)
+            toast.success(`Print setup saved: ${cfg.paper} (${cfg.paperWidth}×${cfg.paperHeight} mm)`)
+          }}
+          onCancel={() => setShowPrintDialog(false)}
         />
       )}
     </div>

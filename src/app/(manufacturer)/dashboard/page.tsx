@@ -15,42 +15,74 @@ type DashboardData = {
 export default function ManufacturerDashboard() {
   const router = useRouter()
   const [data, setData] = useState<DashboardData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [statsLoaded, setStatsLoaded] = useState(false)
+  const [schoolsLoaded, setSchoolsLoaded] = useState(false)
 
   useEffect(() => {
-    async function fetchDashboard() {
-      try {
-        // Bust browser and Next.js client router cache entirely
-        const res = await fetch(`/api/schools?limit=5&_t=${Date.now()}`, {
-          cache: "no-store",
-          headers: { "Cache-Control": "no-cache" }
-        })
-        // If unauthorized, redirect to login
-        if (res.status === 401) {
-          signOut({ callbackUrl: "/login?mode=admin" })
-          return
+    let cancelled = false
+
+    // ── Hydrate from sessionStorage cache for instant first paint ──
+    try {
+      const cached = sessionStorage.getItem("dashboard-data")
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (parsed && Date.now() - parsed.t < 60_000) {
+          setData(parsed.data)
+          setStatsLoaded(true)
+          setSchoolsLoaded(true)
         }
-        const json = await res.json()
-        if (json.success) {
-          const schools = json.data
-          // Use DB-aggregated stats from API (no client-side counting)
-          const s = json.stats || {}
-          setData({
-            totalSchools: s.totalSchools ?? schools.length,
-            totalStudents: s.totalStudents ?? 0,
-            pendingBatches: s.totalBatches ?? 0,
-            studentsThisMonth: s.totalStudents ?? 0,
-            recentSchools: schools.slice(0, 5),
-          })
-        }
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setLoading(false)
       }
-    }
-    fetchDashboard()
+    } catch {}
+
+    // ── Fetch stats (fast: only 4 counts) ──
+    fetch("/api/dashboard/stats", { cache: "no-store" })
+      .then(async (res) => {
+        if (res.status === 401) { signOut({ callbackUrl: "/login?mode=admin" }); return null }
+        return res.ok ? res.json() : null
+      })
+      .then((json) => {
+        if (cancelled || !json?.success) return
+        const s = json.stats
+        setData((prev) => ({
+          totalSchools: s.totalSchools ?? 0,
+          totalStudents: s.totalStudents ?? 0,
+          pendingBatches: s.totalBatches ?? 0,
+          studentsThisMonth: s.totalStudents ?? 0,
+          recentSchools: prev?.recentSchools ?? [],
+        }))
+        setStatsLoaded(true)
+      })
+      .catch(() => setStatsLoaded(true))
+
+    // ── Fetch recent schools (slower: includes per-school counts) ──
+    fetch("/api/schools?limit=5", { cache: "no-store" })
+      .then(async (res) => {
+        if (res.status === 401) return null
+        return res.ok ? res.json() : null
+      })
+      .then((json) => {
+        if (cancelled || !json?.success) return
+        const schools = json.data || []
+        setData((prev) => {
+          const next = {
+            totalSchools: prev?.totalSchools ?? schools.length,
+            totalStudents: prev?.totalStudents ?? 0,
+            pendingBatches: prev?.pendingBatches ?? 0,
+            studentsThisMonth: prev?.studentsThisMonth ?? 0,
+            recentSchools: schools.slice(0, 5),
+          }
+          try { sessionStorage.setItem("dashboard-data", JSON.stringify({ data: next, t: Date.now() })) } catch {}
+          return next
+        })
+        setSchoolsLoaded(true)
+      })
+      .catch(() => setSchoolsLoaded(true))
+
+    return () => { cancelled = true }
   }, [])
+
+  // Only show full skeleton if NOTHING has loaded yet
+  const loading = !statsLoaded && !schoolsLoaded && !data
 
   if (loading) {
     return (

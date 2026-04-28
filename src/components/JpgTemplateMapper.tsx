@@ -1,5 +1,11 @@
 "use client"
 import { useState, useRef, useEffect, useCallback } from "react"
+import {
+  IdSizeDialog, FontDialog, PhotoSizeDialog, PhotoBorderDialog,
+  ColorPickerDialog, WrapTextDialog, FieldContextMenu,
+  type IdSizeConfig, type FontConfig, type PhotoSizeConfig,
+  type PhotoBorderConfig, type WrapTextConfig,
+} from "./IDMakerDialogs"
 
 const BG_COLOR_PRESETS = [
   // Neutrals
@@ -212,6 +218,15 @@ export default function JpgTemplateMapper({
     mode: "move" | "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw"
   } | null>(null)
   const [imageDragOver, setImageDragOver] = useState(false)
+
+  // ── ID Maker Dialog State ──
+  const [showIdSizeDialog, setShowIdSizeDialog] = useState(true)
+  const [showFontDialog, setShowFontDialog] = useState(false)
+  const [showPhotoSizeDialog, setShowPhotoSizeDialog] = useState(false)
+  const [showPhotoBorderDialog, setShowPhotoBorderDialog] = useState(false)
+  const [showColorDialog, setShowColorDialog] = useState(false)
+  const [showWrapDialog, setShowWrapDialog] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; fieldId: string } | null>(null)
 
   // ── Professional Features State ──
   const [zoomLevel, setZoomLevel] = useState(100) // percentage
@@ -752,6 +767,29 @@ export default function JpgTemplateMapper({
   if (!imageUrl) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      {/* ID Size Dialog shown on first load */}
+      {showIdSizeDialog && (
+        <IdSizeDialog
+          initial={{ preset: cardSizePreset, width: cardWidth, height: cardHeight, orientation: cardOrientation === "landscape" ? "horizontal" : "vertical", sides: printSides === "both" ? "both" : "one" }}
+          onOk={(cfg: IdSizeConfig) => {
+            setCardWidth(cfg.width)
+            setCardHeight(cfg.height)
+            setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
+            setPrintSides(cfg.sides === "both" ? "both" : "front")
+            setCardSizePreset(cfg.preset)
+            setShowIdSizeDialog(false)
+          }}
+          onLoadTemplate={(cfg: IdSizeConfig) => {
+            setCardWidth(cfg.width)
+            setCardHeight(cfg.height)
+            setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
+            setPrintSides(cfg.sides === "both" ? "both" : "front")
+            setCardSizePreset(cfg.preset)
+            setShowIdSizeDialog(false)
+          }}
+          onClose={() => setShowIdSizeDialog(false)}
+        />
+      )}
         <div
           style={{
             background: "white",
@@ -961,6 +999,17 @@ export default function JpgTemplateMapper({
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            onClick={() => setShowIdSizeDialog(true)}
+            style={{
+              fontSize: 13, padding: "8px 16px", borderRadius: 8,
+              border: "2px solid #000080", background: "#d4d0c8",
+              color: "#000080", fontWeight: 700, cursor: "pointer",
+              fontFamily: "Tahoma, Arial, sans-serif",
+            }}
+          >
+            📐 ID Size...
+          </button>
           <button
             className="btn btn-outline"
             onClick={() => setShowPreview(!showPreview)}
@@ -1427,6 +1476,12 @@ export default function JpgTemplateMapper({
                 <div
                   key={m.id}
                   onMouseDown={(e) => handleMouseDown(e, m.id, "move")}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setSelectedId(m.id)
+                    setContextMenu({ x: e.clientX, y: e.clientY, fieldId: m.id })
+                  }}
                   style={{
                     position: "absolute",
                     left: `${m.x}%`,
@@ -2217,6 +2272,41 @@ export default function JpgTemplateMapper({
                     </select>
                   </div>
 
+                  {/* Quick Dialog Buttons */}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button
+                      onClick={() => setShowFontDialog(true)}
+                      style={{
+                        flex: 1, padding: "6px 10px", borderRadius: 6,
+                        border: "1.5px solid #3b82f6", background: "#eff6ff",
+                        color: "#2563eb", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                        fontFamily: "Tahoma, Arial, sans-serif",
+                      }}
+                    >
+                      A Font...
+                    </button>
+                    <button
+                      onClick={() => setShowColorDialog(true)}
+                      style={{
+                        flex: 1, padding: "6px 10px", borderRadius: 6,
+                        border: "1.5px solid #e2e8f0", background: "white",
+                        color: "#334155", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                      }}
+                    >
+                      🎨 Color...
+                    </button>
+                    <button
+                      onClick={() => setShowWrapDialog(true)}
+                      style={{
+                        flex: 1, padding: "6px 10px", borderRadius: 6,
+                        border: "1.5px solid #e2e8f0", background: "white",
+                        color: "#334155", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                      }}
+                    >
+                      ↩ Wrap...
+                    </button>
+                  </div>
+
                   {/* Font Style (Italic) & Text Decoration (Underline/Strikethrough) */}
                   <div>
                     <label
@@ -2683,6 +2773,31 @@ export default function JpgTemplateMapper({
                   >
                     📷 Photo Properties
                   </label>
+
+                  {/* Photo action buttons */}
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      onClick={() => setShowPhotoSizeDialog(true)}
+                      style={{
+                        flex: 1, padding: "6px 10px", borderRadius: 6,
+                        border: "1.5px solid #3b82f6", background: "#eff6ff",
+                        color: "#2563eb", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                        fontFamily: "Tahoma, Arial, sans-serif",
+                      }}
+                    >
+                      📐 Photo Size...
+                    </button>
+                    <button
+                      onClick={() => setShowPhotoBorderDialog(true)}
+                      style={{
+                        flex: 1, padding: "6px 10px", borderRadius: 6,
+                        border: "1.5px solid #e2e8f0", background: "white",
+                        color: "#334155", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                      }}
+                    >
+                      ◻ Border & Corner...
+                    </button>
+                  </div>
 
                   {/* Photo Shape Presets */}
                   <div>
@@ -3273,6 +3388,130 @@ export default function JpgTemplateMapper({
 
         </div>
       </div>
+
+      {/* ── ID Size Dialog ── */}
+      {showIdSizeDialog && (
+        <IdSizeDialog
+          initial={{ preset: cardSizePreset, width: cardWidth, height: cardHeight, orientation: cardOrientation === "landscape" ? "horizontal" : "vertical", sides: printSides === "both" ? "both" : "one" }}
+          onOk={(cfg: IdSizeConfig) => {
+            setCardWidth(cfg.width)
+            setCardHeight(cfg.height)
+            setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
+            setPrintSides(cfg.sides === "both" ? "both" : "front")
+            setCardSizePreset(cfg.preset)
+            setShowIdSizeDialog(false)
+          }}
+          onLoadTemplate={(cfg: IdSizeConfig) => {
+            setCardWidth(cfg.width)
+            setCardHeight(cfg.height)
+            setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
+            setPrintSides(cfg.sides === "both" ? "both" : "front")
+            setCardSizePreset(cfg.preset)
+            setShowIdSizeDialog(false)
+          }}
+          onClose={() => setShowIdSizeDialog(false)}
+        />
+      )}
+
+      {/* ── Font Dialog ── */}
+      {showFontDialog && selectedMapping && selectedMapping.type === "text" && (
+        <FontDialog
+          initial={{
+            fontFamily: selectedMapping.fontFamily || "Arial",
+            fontStyle: selectedMapping.fontStyle === "italic" ? (selectedMapping.fontWeight === "bold" ? "Bold Italic" : "Italic") : (selectedMapping.fontWeight === "bold" ? "Bold" : "Regular"),
+            fontSize: selectedMapping.fontSize,
+            strikeout: selectedMapping.textDecoration === "line-through",
+            underline: selectedMapping.textDecoration === "underline",
+          }}
+          onOk={(cfg: FontConfig) => {
+            updateMapping(selectedMapping.id, {
+              fontFamily: cfg.fontFamily,
+              fontWeight: cfg.fontStyle.toLowerCase().includes("bold") ? "bold" : "normal",
+              fontStyle: cfg.fontStyle.toLowerCase().includes("italic") ? "italic" : "normal",
+              fontSize: cfg.fontSize,
+              textDecoration: cfg.strikeout ? "line-through" : cfg.underline ? "underline" : "none",
+            })
+            setShowFontDialog(false)
+          }}
+          onCancel={() => setShowFontDialog(false)}
+        />
+      )}
+
+      {/* ── Color Dialog ── */}
+      {showColorDialog && selectedMapping && selectedMapping.type === "text" && (
+        <ColorPickerDialog
+          initialColor={selectedMapping.fontColor || "#000000"}
+          onOk={(color: string) => {
+            updateMapping(selectedMapping.id, { fontColor: color })
+            setShowColorDialog(false)
+          }}
+          onCancel={() => setShowColorDialog(false)}
+        />
+      )}
+
+      {/* ── Wrap Text Dialog ── */}
+      {showWrapDialog && selectedMapping && selectedMapping.type === "text" && (
+        <WrapTextDialog
+          initial={{ wrap: (selectedMapping.textWrap || "nowrap") === "wrap", rowsPerField: 2 }}
+          onSave={(cfg: WrapTextConfig) => {
+            updateMapping(selectedMapping.id, { textWrap: cfg.wrap ? "wrap" : "nowrap" })
+          }}
+          onClose={() => setShowWrapDialog(false)}
+        />
+      )}
+
+      {/* ── Photo Size Dialog ── */}
+      {showPhotoSizeDialog && selectedMapping && selectedMapping.type === "photo" && (
+        <PhotoSizeDialog
+          initial={{ keepAspect: true, width: selectedMapping.width, height: selectedMapping.height }}
+          onOk={(cfg: PhotoSizeConfig) => {
+            updateMapping(selectedMapping.id, { width: cfg.width, height: cfg.height })
+            setShowPhotoSizeDialog(false)
+          }}
+          onCancel={() => setShowPhotoSizeDialog(false)}
+        />
+      )}
+
+      {/* ── Photo Border & Rounded Corner Dialog ── */}
+      {showPhotoBorderDialog && selectedMapping && selectedMapping.type === "photo" && (
+        <PhotoBorderDialog
+          initial={{
+            borderWidth: selectedMapping.photoBorderWidth || 0,
+            borderColor: selectedMapping.photoBorderColor || "#000000",
+            borderRadius: selectedMapping.photoBorderRadius || 0,
+          }}
+          onOk={(cfg: PhotoBorderConfig) => {
+            updateMapping(selectedMapping.id, {
+              photoBorderWidth: cfg.borderWidth,
+              photoBorderColor: cfg.borderColor,
+              photoBorderRadius: cfg.borderRadius,
+            })
+            setShowPhotoBorderDialog(false)
+          }}
+          onCancel={() => setShowPhotoBorderDialog(false)}
+        />
+      )}
+
+      {/* ── Right-Click Context Menu ── */}
+      {contextMenu && (() => {
+        const field = mappings.find(m => m.id === contextMenu.fieldId)
+        if (!field) return null
+        return (
+          <FieldContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            fieldType={field.type === "photo" ? "photo" : "text"}
+            onAction={(action) => {
+              if (action === "font") setShowFontDialog(true)
+              else if (action === "color") setShowColorDialog(true)
+              else if (action === "wrapBitmapReduceFontSize") setShowWrapDialog(true)
+              else if (action === "setPhotoSize") setShowPhotoSizeDialog(true)
+              else if (action === "photoBorderRoundedCorner") setShowPhotoBorderDialog(true)
+            }}
+            onClose={() => setContextMenu(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

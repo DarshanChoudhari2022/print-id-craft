@@ -35,9 +35,6 @@ export async function GET(req: Request) {
       ]
     }
 
-    // Warm the DB connection to prevent cold-start pool exhaustion
-    await prisma.$connect()
-
     const safeCount = async (fn: () => Promise<number>): Promise<number> => {
       try { return await fn() } catch (e) { console.error("Stats query failed:", e); return 0 }
     }
