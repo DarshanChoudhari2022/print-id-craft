@@ -697,8 +697,8 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         })
 
         // Generate PDF directly using Print Setup values — no modal
-        const cw = cardWidthMm || 85.6
-        const ch = cardHeightMm || 54
+        const cw = printConfig.h2ndPosition > 0 ? printConfig.h2ndPosition : cardWidthMm || 85.6
+        const ch = printConfig.v2ndPosition > 0 ? printConfig.v2ndPosition : cardHeightMm || 54
         setLastCardDims({ w: cw, h: ch })
         await generateDirectPdf({
           cards: allCards,
@@ -1201,8 +1201,8 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                     schoolName,
                     paperWidth: printConfig.paperWidth,
                     paperHeight: printConfig.paperHeight,
-                    cardWidth: lastCardDims.w,
-                    cardHeight: lastCardDims.h,
+                    cardWidth: printConfig.h2ndPosition > 0 ? printConfig.h2ndPosition : lastCardDims.w,
+                    cardHeight: printConfig.v2ndPosition > 0 ? printConfig.v2ndPosition : lastCardDims.h,
                     h1stPosition: printConfig.h1stPosition,
                     v1stPosition: printConfig.v1stPosition,
                   })
