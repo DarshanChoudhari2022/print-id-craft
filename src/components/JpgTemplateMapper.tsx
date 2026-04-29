@@ -220,7 +220,7 @@ export default function JpgTemplateMapper({
   const [imageDragOver, setImageDragOver] = useState(false)
 
   // ── ID Maker Dialog State ──
-  const [showIdSizeDialog, setShowIdSizeDialog] = useState(true)
+  const [showIdSizeDialog, setShowIdSizeDialog] = useState(!initialImageUrl)
   const [showFontDialog, setShowFontDialog] = useState(false)
   const [showPhotoSizeDialog, setShowPhotoSizeDialog] = useState(false)
   const [showPhotoBorderDialog, setShowPhotoBorderDialog] = useState(false)
