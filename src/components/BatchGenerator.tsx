@@ -283,7 +283,7 @@ async function renderIdCardSvg(
                    field.fieldKey === "serialNumber" ? student.serialNumber : "")
       const value = String(val || "").trim()
       if (value) {
-        const fontSize = Math.round(fh * 0.78)
+        let fontSize = Math.round(fh * 0.78)
         const textAnchor = field.textAlign === "center" ? "middle" : field.textAlign === "right" ? "end" : "start"
         const padding = 4
         const textX = field.textAlign === "center" ? fx + fw / 2 : field.textAlign === "right" ? fx + fw - padding : fx + padding
@@ -292,6 +292,24 @@ async function renderIdCardSvg(
         const fontFamily = field.fontFamily || "Arial"
         const fill = field.fontColor || "#0f172a"
         const escaped = value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+        // Auto-fit when "wrap" mode is enabled — measure with a canvas and shrink
+        // the font-size so the full string always fits inside the box.
+        if ((field as any).textWrap === "wrap") {
+          const maxWidth = Math.max(1, fw - padding * 2)
+          const measureCanvas = document.createElement("canvas")
+          const mctx = measureCanvas.getContext("2d")
+          if (mctx) {
+            const fontPrefix = fontWeight === "bold" ? "bold " : ""
+            mctx.font = `${fontPrefix}${fontSize}px ${fontFamily}`
+            let w = mctx.measureText(value).width
+            const minFs = Math.max(8, fh * 0.3)
+            while (w > maxWidth && fontSize > minFs) {
+              fontSize -= 0.5
+              mctx.font = `${fontPrefix}${fontSize}px ${fontFamily}`
+              w = mctx.measureText(value).width
+            }
+          }
+        }
         lines.push(`  <text x="${textX.toFixed(1)}" y="${textY.toFixed(1)}" font-family="${fontFamily}" font-size="${fontSize}" fill="${fill}" font-weight="${fontWeight}" text-anchor="${textAnchor}" dominant-baseline="central">${escaped}</text>`)
       }
     }

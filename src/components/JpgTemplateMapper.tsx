@@ -181,6 +181,69 @@ const SAMPLE_DATA: Record<string, string> = {
   serialNumber: "PLAY-B1-0001",
 }
 
+/**
+ * AutoFitText — renders text on a single line and auto-shrinks the font
+ * (via horizontal scaling) so the entire string is always visible inside
+ * the parent box. Used when the user enables the "Wrap" option, meaning:
+ * "make sure the full name fits inside the ID card, don't truncate with ...".
+ */
+function AutoFitText({
+  text,
+  style,
+  align = "left",
+}: {
+  text: string
+  style: React.CSSProperties
+  align?: "left" | "center" | "right"
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const spanRef = useRef<HTMLSpanElement | null>(null)
+  const [scale, setScale] = useState(1)
+
+  useEffect(() => {
+    const fit = () => {
+      const c = containerRef.current
+      const s = spanRef.current
+      if (!c || !s) return
+      const cw = c.clientWidth
+      // Reset scale to measure natural width
+      s.style.transform = "scaleX(1)"
+      const sw = s.scrollWidth
+      if (sw <= 0 || cw <= 0) return
+      const next = sw > cw ? cw / sw : 1
+      setScale(next)
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    if (containerRef.current) ro.observe(containerRef.current)
+    if (spanRef.current) ro.observe(spanRef.current)
+    return () => ro.disconnect()
+  }, [text, style.fontSize, style.fontFamily, style.fontWeight, style.fontStyle, style.letterSpacing])
+
+  const justify = align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start"
+  const origin = align === "center" ? "center" : align === "right" ? "right" : "left"
+
+  return (
+    <div
+      ref={containerRef}
+      style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: justify, overflow: "hidden" }}
+    >
+      <span
+        ref={spanRef}
+        style={{
+          ...style,
+          whiteSpace: "nowrap",
+          display: "inline-block",
+          transform: `scaleX(${scale})`,
+          transformOrigin: `${origin} center`,
+        }}
+      >
+        {text}
+      </span>
+    </div>
+  )
+}
+
 export default function JpgTemplateMapper({
   schoolId,
   templateImageUrl: initialImageUrl,
@@ -1544,7 +1607,7 @@ export default function JpgTemplateMapper({
                       : "rgba(255, 255, 255, 0.08)",
                     cursor: showPreview ? "default" : "move",
                     display: "flex",
-                    alignItems: m.textWrap === "wrap" ? "flex-start" : "center",
+                    alignItems: "center",
                     justifyContent: m.type === "photo" ? "center" : "flex-start",
                     padding: m.type === "photo" ? 0 : "0 4px",
                     overflow: "hidden",
@@ -1608,8 +1671,12 @@ export default function JpgTemplateMapper({
                       </div>
                     )
                   ) : (
-                    <span
-                      style={{
+                    (() => {
+                      const displayText =
+                        m.dateFormat && showPreview
+                          ? formatDateValue(sampleValue, m.dateFormat)
+                          : sampleValue
+                      const baseStyle: React.CSSProperties = {
                         fontSize: m.fontSize * 0.65,
                         color: m.fontColor,
                         fontWeight: m.fontWeight,
@@ -1619,22 +1686,38 @@ export default function JpgTemplateMapper({
                         letterSpacing: `${m.letterSpacing || 0}px`,
                         lineHeight: m.lineHeight || 1.2,
                         textTransform: (m.textTransform || "none") as any,
-                        whiteSpace: m.textWrap === "wrap" ? "normal" : "nowrap",
-                        wordBreak: m.textWrap === "wrap" ? "break-word" : "normal",
-                        overflow: "hidden",
-                        textOverflow: m.textWrap === "wrap" ? "clip" : "ellipsis",
                         textShadow: showPreview ? "none" : `0 0 3px rgba(0,0,0,0.4), 0 0 1px rgba(0,0,0,0.6)`,
                         WebkitTextStroke: !showPreview ? "0.3px rgba(0,0,0,0.2)" : undefined,
-                        width: "100%",
-                        height: m.textWrap === "wrap" ? "100%" : "auto",
                         textAlign: m.textAlign || "left",
-                        display: "block",
-                      }}
-                    >
-                      {m.dateFormat && showPreview
-                        ? formatDateValue(sampleValue, m.dateFormat)
-                        : sampleValue}
-                    </span>
+                      }
+                      // "wrap" mode → auto-shrink text so the full string fits on a single line
+                      // inside the box (never truncated with "...").
+                      if (m.textWrap === "wrap") {
+                        return (
+                          <AutoFitText
+                            text={displayText}
+                            style={baseStyle}
+                            align={(m.textAlign as any) || "left"}
+                          />
+                        )
+                      }
+                      // "nowrap" mode → single line, ellipsis if overflow
+                      return (
+                        <span
+                          style={{
+                            ...baseStyle,
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            width: "100%",
+                            height: "auto",
+                            display: "block",
+                          }}
+                        >
+                          {displayText}
+                        </span>
+                      )
+                    })()
                   )}
 
                   {/* Resize handles */}
@@ -2521,8 +2604,8 @@ export default function JpgTemplateMapper({
                     </div>
                     <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
                       {(selectedMapping.textWrap || "nowrap") === "wrap"
-                        ? "Text will wrap to multiple lines within the box"
-                        : "Text stays on a single line (overflow hidden)"}
+                        ? "Long text auto-shrinks to fit on one line — full name always visible, no \"...\""
+                        : "Text stays on a single line; long text is truncated with \"...\""}
                     </div>
                   </div>
 

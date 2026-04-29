@@ -900,36 +900,32 @@ export function WrapTextDialog({
   onClose: () => void
 }) {
   const [wrap, setWrap] = useState(initial.wrap)
-  const [rowsPerField, setRowsPerField] = useState(initial.rowsPerField || 2)
+  const rowsPerField = initial.rowsPerField || 2
 
   return (
-    <DialogShell title="Text Wrap" onClose={onClose} width={300}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Do you want to use Wrap text?</div>
+    <DialogShell title="Text Wrap" onClose={onClose} width={340}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>How should long text be displayed?</div>
 
       <div style={{ marginBottom: 12, padding: "8px 12px", border: "1px solid #c0c0c0", background: "#ececec" }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, cursor: "pointer" }}>
-          <input type="radio" name="wrap" checked={wrap} onChange={() => setWrap(true)} />
-          Yes - Wrap Text
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8, cursor: "pointer" }}>
+          <input type="radio" name="wrap" checked={wrap} onChange={() => setWrap(true)} style={{ marginTop: 3 }} />
+          <span>
+            <b>Yes - Auto-fit (recommended)</b>
+            <div style={{ fontSize: 11, color: "#555" }}>
+              Long names automatically shrink to fit on a single line — full text is always visible, never truncated with &quot;...&quot;.
+            </div>
+          </span>
         </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-          <input type="radio" name="wrap" checked={!wrap} onChange={() => setWrap(false)} />
-          No - Single Line
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
+          <input type="radio" name="wrap" checked={!wrap} onChange={() => setWrap(false)} style={{ marginTop: 3 }} />
+          <span>
+            <b>No - Single Line</b>
+            <div style={{ fontSize: 11, color: "#555" }}>
+              Keep text at its original size. Long text overflowing the box is truncated with &quot;...&quot;.
+            </div>
+          </span>
         </label>
       </div>
-
-      {wrap && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          <label>No. of Rows per line</label>
-          <WinInput
-            type="number"
-            value={rowsPerField}
-            onChange={(v) => setRowsPerField(Number(v))}
-            style={{ width: 50 }}
-            min={1}
-            max={10}
-          />
-        </div>
-      )}
 
       <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
         <WinButton onClick={() => { onSave({ wrap, rowsPerField }); onClose() }}>Save</WinButton>
