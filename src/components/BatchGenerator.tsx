@@ -1038,62 +1038,65 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           </div>
         )}
 
-        <button
-          onClick={() => setShowPrintDialog(true)}
-          style={{
-            padding: "12px 24px",
-            fontSize: 14,
-            border: "2px solid #000080",
-            borderRadius: 8,
-            background: "#d4d0c8",
-            color: "#000080",
-            fontWeight: 700,
-            cursor: "pointer",
-            fontFamily: "Tahoma, Arial, sans-serif",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          🖨️ Print Setup...
-        </button>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 16 }}>
+          <button
+            className="btn btn-outline"
+            onClick={() => setShowPrintDialog(true)}
+            style={{
+              padding: "13px 24px",
+              fontSize: 14,
+              minHeight: 48,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              flex: "0 1 220px",
+            }}
+          >
+            🖨️ Print Setup...
+          </button>
 
-        <button
-          className="btn btn-primary"
-          onClick={handleGenerate}
-          disabled={generating}
-          style={{
-            padding: "14px 32px",
-            fontSize: 15,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            background: outputFormat === "CDR"
-              ? "linear-gradient(135deg, #8b5cf6, #6d28d9)"
-              : outputFormat === "PDF_PRINT"
-                ? "linear-gradient(135deg, #dc2626, #b91c1c)"
-                : outputFormat === "BMP"
-                  ? "linear-gradient(135deg, #34c759, #2ecc71)"
-                  : undefined,
-          }}
-        >
-          {generating ? (
-            <>
-              <div
-                className="login-spinner"
-                style={{
-                  width: 18,
-                  height: 18,
-                  borderColor: "rgba(255,255,255,0.3)",
-                  borderTopColor: "#fff",
-                }}
-              />
-              Generating...
-            </>
-          ) : (
-            <>{outputFormat === "CDR" ? "📐 Generate CorelDRAW Files (ZIP)" : outputFormat === "PDF_PRINT" ? "📄 Generate PDF Print" : outputFormat === "BMP" ? "🖼️ Generate & Save as BMP" : "🖨️ Generate & Download ID Cards (ZIP)"}</>
-          )}
-        </button>
+          <button
+            className="btn btn-primary"
+            onClick={handleGenerate}
+            disabled={generating}
+            style={{
+              padding: "13px 28px",
+              fontSize: 15,
+              minHeight: 48,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              flex: "1 1 280px",
+              maxWidth: 380,
+              background: outputFormat === "CDR"
+                ? "linear-gradient(135deg, #8b5cf6, #6d28d9)"
+                : outputFormat === "PDF_PRINT"
+                  ? "linear-gradient(135deg, #dc2626, #b91c1c)"
+                  : outputFormat === "BMP"
+                    ? "linear-gradient(135deg, #34c759, #2ecc71)"
+                    : undefined,
+            }}
+          >
+            {generating ? (
+              <>
+                <div
+                  className="login-spinner"
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderColor: "rgba(255,255,255,0.3)",
+                    borderTopColor: "#fff",
+                  }}
+                />
+                Generating...
+              </>
+            ) : (
+              <>{outputFormat === "CDR" ? "📐 Generate CorelDRAW Files (ZIP)" : outputFormat === "PDF_PRINT" ? "📄 Generate PDF Print" : outputFormat === "BMP" ? "🖼️ Generate & Save as BMP" : "🖨️ Generate & Download ID Cards (ZIP)"}</>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Progress */}

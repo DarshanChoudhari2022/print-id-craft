@@ -1505,11 +1505,9 @@ export default function JpgTemplateMapper({
             {mappings.map((m) => {
               const isSelected = m.id === selectedId
               const sampleValue =
-                showPreview
-                  ? m.type === "photo"
-                    ? ""
-                    : SAMPLE_DATA[m.fieldKey] || m.label
-                  : m.label
+                m.type === "photo"
+                  ? ""
+                  : SAMPLE_DATA[m.fieldKey] || m.label
 
               return (
                 <div
@@ -1527,22 +1525,20 @@ export default function JpgTemplateMapper({
                     top: `${m.y}%`,
                     width: `${m.width}%`,
                     height: `${m.height}%`,
-                    border: showPreview
-                      ? m.type === "photo" && (m.photoBorderWidth || 0) > 0
-                        ? `${m.photoBorderWidth}px solid ${m.photoBorderColor || "#000"}`
-                        : "none"
+                    border: m.type === "photo" && (m.photoBorderWidth || 0) > 0
+                      ? `${m.photoBorderWidth}px solid ${m.photoBorderColor || "#000"}`
+                      : showPreview
+                      ? "none"
                       : `2px ${isSelected ? "solid" : "dashed"} ${
                           isSelected ? "#3b82f6" : "rgba(255,255,255,0.6)"
                         }`,
                     borderRadius: m.type === "photo"
-                      ? showPreview
-                        ? `${m.photoBorderRadius || 0}px`
-                        : 4
+                      ? `${m.photoBorderRadius || 0}px`
                       : 2,
-                    background: showPreview
+                    background: m.type === "photo"
+                      ? showPreview ? "transparent" : "rgba(59, 130, 246, 0.15)"
+                      : showPreview
                       ? "transparent"
-                      : m.type === "photo"
-                      ? "rgba(59, 130, 246, 0.15)"
                       : isSelected
                       ? "rgba(59, 130, 246, 0.1)"
                       : "rgba(255, 255, 255, 0.08)",
@@ -3558,11 +3554,12 @@ export default function JpgTemplateMapper({
             y={contextMenu.y}
             fieldType={field.type === "photo" ? "photo" : "text"}
             onAction={(action) => {
-              if (action === "font") openDialogWithSnapshot(() => setShowFontDialog(true))
-              else if (action === "color") openDialogWithSnapshot(() => setShowColorDialog(true))
+              if (action === "font" || action === "textProperties") openDialogWithSnapshot(() => setShowFontDialog(true))
+              else if (action === "color" || action === "backgroundProperties") openDialogWithSnapshot(() => setShowColorDialog(true))
               else if (action === "wrapBitmapReduceFontSize") openDialogWithSnapshot(() => setShowWrapDialog(true))
-              else if (action === "setPhotoSize") openDialogWithSnapshot(() => setShowPhotoSizeDialog(true))
+              else if (action === "imageProperties" || action === "setPhotoSize") openDialogWithSnapshot(() => setShowPhotoSizeDialog(true))
               else if (action === "photoBorderRoundedCorner") openDialogWithSnapshot(() => setShowPhotoBorderDialog(true))
+              else if (action === "gridView") setShowGrid((v) => !v)
             }}
             onClose={() => setContextMenu(null)}
           />

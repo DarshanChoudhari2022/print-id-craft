@@ -43,10 +43,11 @@ function DialogShell({
         inset: 0,
         background: "rgba(0,0,0,0.45)",
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-start",
         justifyContent: "center",
         zIndex: 9999,
-        padding: 12,
+        padding: "clamp(8px, 3vh, 24px) 12px",
+        overflowY: "auto",
         animation: "idm-fadein .15s ease-out",
       }}
       onClick={onClose}
@@ -59,9 +60,10 @@ function DialogShell({
         ref={dialogRef}
         tabIndex={-1}
         style={{
-          width,
+          width: `min(${width}px, 96vw)`,
           maxWidth: "95vw",
-          maxHeight: "92vh",
+          maxHeight: "calc(100dvh - 24px)",
+          margin: "auto 0",
           display: "flex",
           flexDirection: "column",
           background: "#d4d0c8",
@@ -114,7 +116,7 @@ function DialogShell({
           </button>
         </div>
         {/* Body — scrolls on small screens */}
-        <div style={{ padding: "16px 20px 14px", overflowY: "auto", flex: 1 }}>{children}</div>
+        <div style={{ padding: "clamp(12px, 2.5vw, 20px)", overflowY: "auto", flex: 1, minHeight: 0 }}>{children}</div>
       </div>
     </div>
   )
@@ -972,8 +974,16 @@ export function PrintDialog({
     if (p) { setPaperWidth(p.width); setPaperHeight(p.height) }
   }
 
+  const fieldRowStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    marginBottom: 8,
+  }
+
   return (
-    <DialogShell title="Id-Maker" onClose={onCancel} width={420}>
+    <DialogShell title="Print Setup" onClose={onCancel} width={460}>
       {/* Select Paper row */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
         <label style={{ width: 90, fontWeight: 700, flexShrink: 0 }}>Select Paper</label>
@@ -994,7 +1004,7 @@ export function PrintDialog({
       </div>
 
       {/* Paper Setting box */}
-      <div style={{ border: "1px solid #808080", padding: "10px 14px", marginBottom: 14 }}>
+      <div style={{ border: "1px solid #808080", padding: "10px 14px", marginBottom: 14, minWidth: 0 }}>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>Paper Setting</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
           <label style={{ width: 80 }}>Paper Size</label>
@@ -1019,7 +1029,7 @@ export function PrintDialog({
       </div>
 
       {/* ID-Card Position box */}
-      <div style={{ border: "1px solid #808080", padding: "10px 14px", marginBottom: 16 }}>
+      <div style={{ border: "1px solid #808080", padding: "10px 14px", marginBottom: 16, minWidth: 0 }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>ID-Card Position</div>
 
         {/* Horizontal */}
@@ -1057,7 +1067,7 @@ export function PrintDialog({
           />
           <span style={{ fontSize: 11, color: "#555" }}>(in mm)</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={fieldRowStyle}>
           <label style={{ width: 130, fontSize: 11 }}>2nd Position (Card Height)</label>
           <WinInput
             type="number"
@@ -1134,9 +1144,12 @@ export function FieldContextMenu({
   onAction: (action: ContextMenuAction) => void
   onClose: () => void
 }) {
-  // Clamp menu position so it stays on-screen
-  const clampedX = Math.min(x, (typeof window !== "undefined" ? window.innerWidth : 1200) - 220)
-  const clampedY = Math.min(y, (typeof window !== "undefined" ? window.innerHeight : 800) - 300)
+  const menuWidth = 220
+  const menuHeight = fieldType === "text" ? 310 : fieldType === "photo" ? 260 : 210
+  const viewportW = typeof window !== "undefined" ? window.innerWidth : 1200
+  const viewportH = typeof window !== "undefined" ? window.innerHeight : 800
+  const clampedX = Math.min(Math.max(8, x), Math.max(8, viewportW - menuWidth - 8))
+  const clampedY = Math.min(Math.max(8, y), Math.max(8, viewportH - menuHeight - 8))
 
   const menuStyle: React.CSSProperties = {
     position: "fixed",
@@ -1149,7 +1162,9 @@ export function FieldContextMenu({
     zIndex: 9999,
     fontFamily: "Tahoma, Arial, sans-serif",
     fontSize: 12,
-    minWidth: 180,
+    minWidth: menuWidth,
+    maxHeight: "calc(100dvh - 16px)",
+    overflowY: "auto",
     maxWidth: "90vw",
     padding: "2px 0",
     animation: "idm-fadein .1s ease-out",
