@@ -261,30 +261,30 @@ export default function LandingPage() {
           boxShadow: scrolled ? `0 18px 50px -36px ${NAVY}80` : 'none',
         }}
       >
-        <div className="max-w-7xl mx-auto px-5 md:px-8 py-3 flex items-center justify-between gap-5">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="relative" style={{ width: 44, height: 44 }}>
-              <Image src="/wisemelon-icon.png" alt="WiseMelon Ventures" fill sizes="44px" style={{ objectFit: 'contain' }} priority />
+        <div className="max-w-7xl mx-auto px-5 md:px-8 py-2.5 flex items-center justify-between gap-5">
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="relative" style={{ width: 34, height: 34 }}>
+              <Image src="/wisemelon-icon.png" alt="WiseMelon Ventures" fill sizes="34px" style={{ objectFit: 'contain' }} priority />
             </div>
             <div>
-              <div className="font-extrabold leading-none" style={{ color: NAVY, fontSize: 17 }}>WiseMelon</div>
-              <div className="font-semibold uppercase" style={{ color: GOLD_DEEP, fontSize: 9, letterSpacing: '0.19em', marginTop: 4 }}>Ventures Pvt. Ltd.</div>
+              <div className="font-bold leading-none tracking-tight" style={{ color: NAVY, fontSize: 14 }}>WiseMelon</div>
+              <div className="font-semibold uppercase" style={{ color: GOLD_DEEP, fontSize: 8, letterSpacing: '0.16em', marginTop: 3 }}>Ventures Pvt. Ltd.</div>
             </div>
           </Link>
 
-          <div className="hidden md:flex items-center gap-7">
+          <div className="hidden md:flex items-center gap-6">
             {navLinks.map((link) => (
-              <a key={link.label} href={link.href} className="font-semibold transition-opacity hover:opacity-65" style={{ color: NAVY, fontSize: 13 }}>
+              <a key={link.label} href={link.href} className="font-semibold transition-opacity hover:opacity-65" style={{ color: NAVY, fontSize: 12 }}>
                 {link.label}
               </a>
             ))}
           </div>
 
-          <div className="hidden md:flex items-center gap-3">
-            <a href="/wisemelon-catalogue.pdf" download className="rounded-full font-bold inline-flex items-center gap-2 transition-transform hover:scale-[1.03] active:scale-[0.97]" style={{ padding: '11px 18px', background: GOLD, color: NAVY, fontSize: 13 }}>
-              <Download size={15} /> Catalogue
+          <div className="hidden md:flex items-center gap-2.5">
+            <a href="/wisemelon-catalogue.pdf" download className="rounded-full font-bold inline-flex items-center gap-2 transition-transform hover:scale-[1.03] active:scale-[0.97]" style={{ padding: '9px 15px', background: GOLD, color: NAVY, fontSize: 12 }}>
+              <Download size={14} /> Catalogue
             </a>
-            <Link href="/login" className="rounded-full font-bold transition-transform hover:scale-[1.03] active:scale-[0.97]" style={{ padding: '11px 19px', background: NAVY, color: '#fff', fontSize: 13 }}>
+            <Link href="/login" className="rounded-full font-bold transition-transform hover:scale-[1.03] active:scale-[0.97]" style={{ padding: '9px 16px', background: NAVY, color: '#fff', fontSize: 12 }}>
               Login →
             </Link>
           </div>
@@ -478,34 +478,50 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="catalogue" className="px-5 md:px-8 py-20 md:py-28" style={{ background: `linear-gradient(135deg, ${GOLD_LIGHT}, ${GOLD})` }}>
+        <motion.section
+          id="catalogue"
+          className="px-5 md:px-8 py-20 md:py-28"
+          style={{ background: `linear-gradient(135deg, ${GOLD_LIGHT}, ${GOLD})` }}
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true, margin: '-120px' }}
+          transition={{ duration: 0.6 }}
+        >
           <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-            <div className="lg:col-span-7">
-              <SectionLabel>Catalogue</SectionLabel>
-              <h2 className="font-extrabold mt-5" style={{ color: NAVY, fontSize: 'clamp(2.2rem, 5vw, 4rem)', letterSpacing: '-0.06em', lineHeight: 0.98 }}>
-                Share the complete 28-page product catalogue with your team.
-              </h2>
-              <p className="mt-5 max-w-2xl" style={{ color: `${NAVY}cc`, fontSize: 16, lineHeight: 1.75 }}>
-                Download the PDF for your principal, admin team, procurement committee or corporate purchase desk.
-              </p>
-              <div className="flex flex-wrap gap-3 mt-8">
-                <a href="/wisemelon-catalogue.pdf" download className="rounded-full font-bold inline-flex items-center gap-2" style={{ padding: '16px 24px', background: NAVY, color: '#fff', fontSize: 15 }}>
+            <motion.div
+              className="lg:col-span-7"
+              variants={stagger}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: '-100px' }}
+            >
+              <motion.div variants={fadeUp}>
+                <SectionLabel>Catalogue</SectionLabel>
+              </motion.div>
+              <motion.h2 variants={fadeUp} className="font-extrabold mt-5" style={{ color: NAVY, fontSize: 'clamp(2.2rem, 5vw, 4rem)', letterSpacing: '-0.06em', lineHeight: 0.98 }}>
+                Explore the complete WiseMelon product catalogue.
+              </motion.h2>
+              <motion.p variants={fadeUp} className="mt-5 max-w-2xl" style={{ color: `${NAVY}cc`, fontSize: 16, lineHeight: 1.75 }}>
+                Browse our school essentials, identity products and corporate gifting range in one professionally prepared catalogue.
+              </motion.p>
+              <motion.div variants={fadeUp} className="flex flex-wrap gap-3 mt-8">
+                <motion.a href="/wisemelon-catalogue.pdf" download className="rounded-full font-bold inline-flex items-center gap-2" style={{ padding: '16px 24px', background: NAVY, color: '#fff', fontSize: 15 }} whileHover={{ y: -2, scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                   <Download size={17} /> Download PDF
-                </a>
-                <a href="#contact" className="rounded-full font-bold inline-flex items-center gap-2" style={{ padding: '16px 24px', background: 'rgba(255,255,255,0.42)', color: NAVY, fontSize: 15, border: `1px solid ${NAVY}18` }}>
+                </motion.a>
+                <motion.a href="#contact" className="rounded-full font-bold inline-flex items-center gap-2" style={{ padding: '16px 24px', background: 'rgba(255,255,255,0.42)', color: NAVY, fontSize: 15, border: `1px solid ${NAVY}18` }} whileHover={{ y: -2, scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                   Contact sales <ArrowRight size={17} />
-                </a>
-              </div>
-            </div>
+                </motion.a>
+              </motion.div>
+            </motion.div>
             <div className="lg:col-span-5 grid grid-cols-3 gap-3">
               {['/catalogue/page-01.jpg', '/catalogue/page-06.jpg', '/catalogue/page-15.jpg'].map((src, index) => (
-                <motion.div key={src} className="relative aspect-[3/4] rounded-2xl overflow-hidden" style={{ boxShadow: `0 18px 55px -28px ${NAVY}` }} initial={{ opacity: 0, y: 24, rotate: index === 0 ? -5 : index === 1 ? 2 : 6 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.65, delay: index * 0.08 }}>
+                <motion.div key={src} className="relative aspect-[3/4] rounded-2xl overflow-hidden" style={{ boxShadow: `0 18px 55px -28px ${NAVY}` }} initial={{ opacity: 0, y: 28, rotate: index === 0 ? -5 : index === 1 ? 2 : 6 }} whileInView={{ opacity: 1, y: 0 }} whileHover={{ y: -10, rotate: index === 0 ? -7 : index === 1 ? 0 : 8 }} viewport={{ once: true }} transition={{ duration: 0.65, delay: index * 0.08 }}>
                   <Image src={src} alt="WiseMelon catalogue page" fill sizes="(max-width: 768px) 33vw, 180px" style={{ objectFit: 'cover' }} />
                 </motion.div>
               ))}
             </div>
           </div>
-        </section>
+        </motion.section>
       </main>
 
       <footer id="contact" style={{ background: `linear-gradient(180deg, ${NAVY}, ${NAVY_DEEP})`, color: '#fff' }}>
