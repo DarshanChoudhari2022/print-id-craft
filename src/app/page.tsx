@@ -1,26 +1,67 @@
 "use client";
 
 import Link from 'next/link';
-import { useRef, useEffect, useState, useMemo, memo } from 'react';
-import { 
-  motion, 
-  useScroll, 
+import Image from 'next/image';
+import { useRef, useEffect, useState, useMemo } from 'react';
+import {
+  motion,
+  useScroll,
   useInView,
   useSpring,
-  AnimatePresence
+  useTransform,
+  AnimatePresence,
 } from 'framer-motion';
-import { Menu, X } from 'lucide-react';
+import {
+  Menu,
+  X,
+  Download,
+  ArrowRight,
+  Phone,
+  Mail,
+  MapPin,
+  Instagram,
+  Facebook,
+  Sparkles,
+  Crown,
+  Truck,
+  HeartHandshake,
+  GraduationCap,
+  Briefcase,
+  Shirt,
+  Footprints,
+  IdCard,
+  Tag as TagIcon,
+  ShoppingBag,
+  BookOpen,
+  Coffee,
+  Pen,
+  Image as ImageIcon,
+  Camera,
+  type LucideIcon,
+} from 'lucide-react';
 
-/* ─── Design System: "Craft Light" ─── */
+/* ─── WiseMelon Brand System ─── */
+const NAVY = '#0D1238';
+const NAVY_DEEP = '#080B25';
+const GOLD = '#F5B921';
+const GOLD_LIGHT = '#FFD66E';
+const GOLD_DEEP = '#C99514';
+const CREAM = '#FAF7EE';
+const INK = '#0D1238';
+const MUTED = '#3C4358';
 
-// Stagger animation helpers — fixed: hidden state uses opacity: 0
+// Stagger animation helpers
 const staggerContainer = {
   hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { staggerChildren: 0.12, delayChildren: 0.2 } }
+  visible: { opacity: 1, transition: { staggerChildren: 0.1, delayChildren: 0.15 } },
 };
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] as const } }
+  visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] as const } },
+};
+const scaleIn = {
+  hidden: { opacity: 0, scale: 0.92 },
+  visible: { opacity: 1, scale: 1, transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] as const } },
 };
 
 // Animated counter component
@@ -51,15 +92,474 @@ function AnimatedCounter({ value, suffix = "" }: { value: string; suffix?: strin
   return <span ref={ref}>{display}{suffix}</span>;
 }
 
+/* ─── Catalogue data (sourced from WiseMelon Ventures Pvt. Ltd. Product Catalogue) ─── */
+const PRODUCT_CATEGORIES = [
+  { label: 'Uniforms',         Icon: Shirt },
+  { label: 'Footwear',         Icon: Footprints },
+  { label: 'ID Cards',         Icon: IdCard },
+  { label: 'Lanyards',         Icon: TagIcon },
+  { label: 'Office Bags',      Icon: ShoppingBag },
+  { label: 'Notebooks',        Icon: BookOpen },
+  { label: 'Mugs',             Icon: Coffee },
+  { label: 'T-Shirt Printing', Icon: Shirt },
+  { label: 'Caps & Badges',    Icon: Crown },
+  { label: 'Pens & Diaries',   Icon: Pen },
+  { label: 'Photo Frames',     Icon: ImageIcon },
+  { label: 'Photography',      Icon: Camera },
+];
+
+const CATALOGUE_PAGES = [
+  '/catalogue/page-01.jpg',
+  '/catalogue/page-04.jpg',
+  '/catalogue/page-06.jpg',
+  '/catalogue/page-08.jpg',
+  '/catalogue/page-10.jpg',
+  '/catalogue/page-15.jpg',
+  '/catalogue/page-18.jpg',
+];
+
+const SCHOOL_OFFERINGS = [
+  'Complete Uniform Solutions (Regular & PT)',
+  'School Shoes, Socks & Bags',
+  'Customized Notebooks & Student Diaries',
+  'Identity Cards & Multicolor Lanyards',
+  'Pre-primary Customized Books',
+];
+
+const CORPORATE_OFFERINGS = [
+  'Office & Corporate Uniforms',
+  'Branded Diaries, Office Bags & Calendars',
+  'Custom-Printed T-shirts, Caps & Mugs',
+  'Keychains, Bottles, Badges & Accessories',
+  'Logo & Branding Solutions for Merchandise',
+];
+
+const WHY_US = [
+  { title: 'Customization at its Best', desc: 'Personalize everything from material to branding.', Icon: Sparkles },
+  { title: 'Premium Quality',          desc: 'Comfortable fabrics, durable finishes, vivid prints.',  Icon: Crown },
+  { title: 'Bulk + On-time',           desc: 'Hassle-free services for institutions & corporates.',   Icon: Truck },
+  { title: 'Year-round Support',       desc: 'Alterations, new admissions & urgent replacements.',    Icon: HeartHandshake },
+];
+
+/* ─── Reusable presentational components ─── */
+
+type SectionLabelProps = {
+  children: React.ReactNode;
+  center?: boolean;
+  light?: boolean;
+  ink?: string;
+};
+function SectionLabel({ children, center, light, ink }: SectionLabelProps) {
+  const color = ink ?? (light ? GOLD_LIGHT : GOLD_DEEP);
+  return (
+    <div className={center ? 'flex justify-center' : ''}>
+      <div className="inline-flex items-center gap-2.5">
+        <span
+          aria-hidden
+          style={{
+            display: 'inline-block',
+            width: 10,
+            height: 10,
+            background: GOLD,
+            transform: 'rotate(45deg)',
+            borderRadius: 2,
+            boxShadow: `0 0 0 3px ${NAVY}`,
+          }}
+        />
+        <span
+          className="font-bold uppercase"
+          style={{ color, fontSize: 11, letterSpacing: '0.22em' }}
+        >
+          {children}
+        </span>
+        <span
+          aria-hidden
+          style={{
+            width: 32,
+            height: 1,
+            background: light ? `${GOLD_LIGHT}88` : `${GOLD}aa`,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+type DiamondCardProps = {
+  color: string;
+  accent: string;
+  title: string;
+  children: React.ReactNode;
+  inverted?: boolean;
+};
+function DiamondCard({ color, accent, title, children, inverted }: DiamondCardProps) {
+  const ink = inverted ? NAVY : '#fff';
+  const muted = inverted ? `${NAVY}cc` : '#E5E9F5';
+  return (
+    <div className="relative" style={{ paddingBottom: 4 }}>
+      {/* gold accent diamond */}
+      <div
+        aria-hidden
+        className="absolute"
+        style={{
+          left: -10,
+          top: -10,
+          width: 40,
+          height: 40,
+          background: accent,
+          transform: 'rotate(45deg)',
+          borderRadius: 6,
+          opacity: 0.85,
+        }}
+      />
+      <div
+        className="relative rounded-2xl p-7"
+        style={{
+          background: color,
+          boxShadow: `0 16px 38px -16px ${NAVY}40`,
+          border: inverted ? `1px solid ${NAVY}22` : 'none',
+        }}
+      >
+        <h3 className="font-extrabold mb-3" style={{ color: ink, fontSize: 18, letterSpacing: '-0.01em' }}>
+          {title}
+        </h3>
+        <p style={{ color: muted, fontSize: 13.5, lineHeight: 1.65 }}>{children}</p>
+      </div>
+    </div>
+  );
+}
+
+type PillarCardProps = {
+  title: string;
+  subtitle: string;
+  Icon: LucideIcon;
+  items: string[];
+  bgFrom: string;
+  bgTo: string;
+  accent: string;
+  ink: string;
+};
+function PillarCard({ title, subtitle, Icon, items, bgFrom, bgTo, accent, ink }: PillarCardProps) {
+  return (
+    <motion.div
+      className="relative rounded-3xl p-8 md:p-10 overflow-hidden"
+      style={{
+        background: `linear-gradient(135deg, ${bgFrom} 0%, ${bgTo} 100%)`,
+        color: ink,
+        minHeight: 380,
+        boxShadow: `0 24px 56px -28px ${bgFrom}80`,
+      }}
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-50px' }}
+      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+      whileHover={{ y: -4 }}
+    >
+      {/* decorative diamond */}
+      <div
+        aria-hidden
+        className="absolute"
+        style={{
+          right: '-10%',
+          bottom: '-15%',
+          width: 220,
+          height: 220,
+          background: `${accent}22`,
+          transform: 'rotate(45deg)',
+          borderRadius: 20,
+        }}
+      />
+      <div
+        className="relative rounded-xl flex items-center justify-center"
+        style={{
+          width: 56,
+          height: 56,
+          background: accent,
+          color: ink,
+          boxShadow: `0 12px 28px -12px ${accent}88`,
+        }}
+      >
+        <Icon size={28} strokeWidth={2.4} />
+      </div>
+      <div className="mt-5 relative">
+        <div
+          className="font-bold uppercase"
+          style={{ color: accent, fontSize: 11, letterSpacing: '0.18em' }}
+        >
+          {subtitle}
+        </div>
+        <h3
+          className="font-extrabold mt-1.5"
+          style={{ color: ink, fontSize: 'clamp(1.4rem, 2.4vw, 1.75rem)', letterSpacing: '-0.015em', lineHeight: 1.15 }}
+        >
+          {title}
+        </h3>
+      </div>
+      <ul className="mt-6 space-y-3 relative">
+        {items.map((it, i) => (
+          <motion.li
+            key={it}
+            className="flex items-start gap-3"
+            style={{ color: ink === '#fff' ? '#E5E9F5' : `${NAVY}cc`, fontSize: 14, lineHeight: 1.6 }}
+            initial={{ opacity: 0, x: -10 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.1 + i * 0.08, duration: 0.5 }}
+          >
+            <span
+              className="flex-shrink-0 mt-1.5"
+              aria-hidden
+              style={{
+                width: 7,
+                height: 7,
+                background: accent,
+                transform: 'rotate(45deg)',
+                borderRadius: 1,
+              }}
+            />
+            <span>{it}</span>
+          </motion.li>
+        ))}
+      </ul>
+    </motion.div>
+  );
+}
+
+type ProductDiamondProps = {
+  label: string;
+  Icon: LucideIcon;
+};
+function ProductDiamond({ label, Icon }: ProductDiamondProps) {
+  return (
+    <div className="relative group cursor-default" style={{ paddingTop: '100%' }}>
+      <div
+        className="absolute inset-0 flex items-center justify-center"
+        style={{ transform: 'rotate(45deg)' }}
+      >
+        <div
+          className="w-[70%] h-[70%] flex items-center justify-center transition-all duration-500 group-hover:shadow-2xl"
+          style={{
+            background: NAVY,
+            borderRadius: 14,
+            boxShadow: `0 12px 28px -12px ${NAVY}66`,
+          }}
+        >
+          <div
+            style={{ transform: 'rotate(-45deg)', textAlign: 'center', padding: 12 }}
+          >
+            <div
+              className="mx-auto rounded-xl flex items-center justify-center mb-2"
+              style={{
+                width: 44,
+                height: 44,
+                background: `linear-gradient(135deg, ${GOLD_LIGHT}, ${GOLD})`,
+                color: NAVY,
+              }}
+            >
+              <Icon size={22} strokeWidth={2.4} />
+            </div>
+            <div
+              className="font-bold"
+              style={{ color: '#fff', fontSize: 12.5, letterSpacing: '0.01em' }}
+            >
+              {label}
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* gold corner accent */}
+      <div
+        aria-hidden
+        className="absolute transition-transform duration-500 group-hover:scale-110"
+        style={{
+          left: '6%',
+          top: '50%',
+          width: 14,
+          height: 14,
+          background: GOLD,
+          transform: 'translate(-50%, -50%) rotate(45deg)',
+          borderRadius: 2,
+        }}
+      />
+    </div>
+  );
+}
+
+/* ─── HeroFrames: scroll-driven 3D logo frame sequence ─── */
+const HERO_FRAME_COUNT = 60;
+const HERO_FRAME_PATH = (i: number) =>
+  `/hero-frames/frame-${String(i).padStart(3, '0')}.webp`;
+
+function HeroFrames() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const imagesRef = useRef<HTMLImageElement[]>([]);
+  const currentRef = useRef(0);
+  const targetRef = useRef(0);
+  const rafRef = useRef<number | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  // Preload frames
+  useEffect(() => {
+    let cancelled = false;
+    const imgs: HTMLImageElement[] = [];
+    let done = 0;
+    for (let i = 0; i < HERO_FRAME_COUNT; i++) {
+      const img = new window.Image();
+      img.src = HERO_FRAME_PATH(i);
+      img.onload = () => {
+        done++;
+        if (done === HERO_FRAME_COUNT && !cancelled) setLoaded(true);
+      };
+      img.onerror = () => {
+        done++;
+        if (done === HERO_FRAME_COUNT && !cancelled) setLoaded(true);
+      };
+      imgs.push(img);
+    }
+    imagesRef.current = imgs;
+    return () => { cancelled = true; };
+  }, []);
+
+  // Draw the current frame
+  const draw = (idx: number) => {
+    const canvas = canvasRef.current;
+    const img = imagesRef.current[idx];
+    if (!canvas || !img || !img.complete || !img.naturalWidth) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    // Match canvas internal size to its display size (DPR-aware)
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth;
+    const cssH = canvas.clientHeight;
+    const w = Math.round(cssW * dpr);
+    const h = Math.round(cssH * dpr);
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    // Cover-fit: scale image to cover canvas
+    const ir = img.naturalWidth / img.naturalHeight;
+    const cr = w / h;
+    let dw, dh, dx, dy;
+    if (ir > cr) {
+      dh = h;
+      dw = h * ir;
+      dx = (w - dw) / 2;
+      dy = 0;
+    } else {
+      dw = w;
+      dh = w / ir;
+      dx = 0;
+      dy = (h - dh) / 2;
+    }
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(img, dx, dy, dw, dh);
+  };
+
+  // Smooth animation loop toward target frame
+  useEffect(() => {
+    if (!loaded) return;
+    const tick = () => {
+      const cur = currentRef.current;
+      const tgt = targetRef.current;
+      if (cur !== tgt) {
+        // ease toward target
+        const next = cur + (tgt - cur) * 0.18;
+        const idx = Math.abs(tgt - cur) < 0.5 ? tgt : next;
+        currentRef.current = idx;
+        draw(Math.round(idx));
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    // Initial draw
+    draw(0);
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [loaded]);
+
+  // Scroll listener — map wrapper position within viewport to frame index
+  useEffect(() => {
+    const onScroll = () => {
+      const el = wrapperRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const vh = window.innerHeight || 800;
+      // Progress 0..1 as element center moves through viewport
+      const elementHeight = rect.height || 600;
+      const totalRange = elementHeight + vh;
+      const traveled = vh - rect.top;
+      const raw = traveled / totalRange;
+      const p = Math.min(1, Math.max(0, raw));
+      targetRef.current = Math.round(p * (HERO_FRAME_COUNT - 1));
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [loaded]);
+
+  return (
+    <div
+      ref={wrapperRef}
+      className="relative w-full"
+      style={{ aspectRatio: '16 / 9', maxWidth: 880, margin: '0 auto' }}
+    >
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full block"
+        style={{
+          width: '100%',
+          height: '100%',
+          borderRadius: 24,
+          boxShadow: `0 30px 80px -30px ${GOLD}40, 0 0 0 1px ${GOLD}33 inset`,
+        }}
+      />
+      {/* Loading shimmer */}
+      {!loaded && (
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          style={{
+            background: `linear-gradient(135deg, ${NAVY}, ${NAVY_DEEP})`,
+            borderRadius: 24,
+          }}
+        >
+          <Image
+            src="/wisemelon-icon.png"
+            alt="WiseMelon"
+            width={140}
+            height={140}
+            style={{ objectFit: 'contain', opacity: 0.85 }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const heroRef = useRef(null);
+  const heroRef = useRef<HTMLElement | null>(null);
   const { scrollYProgress } = useScroll();
+  const { scrollYProgress: heroProgress } = useScroll({
+    target: heroRef,
+    offset: ['start start', 'end start'],
+  });
   const smoothProgress = useSpring(scrollYProgress, { stiffness: 100, damping: 30 });
+  // Hero parallax transforms
+  const heroLogoY = useTransform(heroProgress, [0, 1], [0, -80]);
+  const heroLogoScale = useTransform(heroProgress, [0, 1], [1, 0.85]);
+  const heroTextY = useTransform(heroProgress, [0, 1], [0, 60]);
+  const heroTextOpacity = useTransform(heroProgress, [0, 0.7], [1, 0]);
 
-  // Memoize year to avoid hydration mismatch  
+  // Memoize year to avoid hydration mismatch
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   
   useEffect(() => {
@@ -71,53 +571,137 @@ export default function LandingPage() {
 
   return (
     <>
-      <div className="landing-page relative min-h-screen" style={{ fontFamily: "var(--font-poppins), 'Poppins', sans-serif", backgroundColor: '#ffffff', color: '#1b1c1c' }}>
-
+      <div
+        className="landing-page relative min-h-screen overflow-x-hidden"
+        style={{
+          fontFamily: "var(--font-poppins), 'Poppins', sans-serif",
+          backgroundColor: '#ffffff',
+          color: INK,
+        }}
+      >
         {/* ═══ SCROLL PROGRESS BAR ═══ */}
         <motion.div
           className="fixed top-0 left-0 right-0 z-[60]"
           style={{
             height: 3,
-            background: 'linear-gradient(90deg, #3b82f6, #60a5fa)',
+            background: `linear-gradient(90deg, ${GOLD_DEEP}, ${GOLD}, ${GOLD_LIGHT})`,
             scaleX: smoothProgress,
             transformOrigin: '0%',
           }}
         />
 
         {/* ═══ NAVIGATION ═══ */}
-        <nav 
+        <nav
           className="sticky top-0 z-50 transition-all duration-300"
-          style={{ 
-            backgroundColor: scrolled ? 'rgba(255,255,255,0.92)' : '#ffffff',
-            backdropFilter: scrolled ? 'blur(12px)' : 'none',
-            boxShadow: scrolled ? '0 32px 48px -4px rgba(27,28,28,0.04)' : 'none'
+          style={{
+            backgroundColor: scrolled ? 'rgba(255, 255, 255, 0.94)' : 'rgba(255, 255, 255, 0.85)',
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
+            boxShadow: scrolled ? '0 12px 32px -16px rgba(13, 18, 56, 0.18)' : 'none',
+            borderBottom: scrolled ? `1px solid rgba(245, 185, 33, 0.18)` : '1px solid transparent',
           }}
         >
-          <div className="landing-nav-inner flex justify-between items-center w-full px-8 py-5 max-w-7xl mx-auto">
-            <div className="text-xl font-black tracking-tight uppercase" style={{ color: '#181837', letterSpacing: '-0.02em' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 14, fontWeight: 800 }}>P</span>
-                PRINT ID CRAFT
-              </span>
-            </div>
-            <div className="landing-nav-links hidden md:flex items-center gap-8">
-              <Link 
-                href="/login" 
-                className="px-6 py-2.5 gradient-primary text-white rounded-xl font-semibold text-sm hover:scale-[0.97] active:scale-[0.93] transition-all duration-200 shadow-lg shadow-blue-200"
-                style={{ fontSize: '13px', letterSpacing: '0.02em' }}
+          <div className="landing-nav-inner flex justify-between items-center w-full px-6 md:px-8 py-3 max-w-7xl mx-auto">
+            {/* Brand */}
+            <Link href="/" className="flex items-center gap-3 group">
+              <motion.div
+                className="relative flex-shrink-0"
+                style={{ width: 44, height: 44 }}
+                whileHover={{ rotate: [0, -8, 8, 0] }}
+                transition={{ duration: 0.6 }}
               >
-                Teacher Login →
+                <Image
+                  src="/wisemelon-icon.png"
+                  alt="WiseMelon Ventures"
+                  width={44}
+                  height={44}
+                  priority
+                  style={{ objectFit: 'contain' }}
+                />
+              </motion.div>
+              <div className="flex flex-col">
+                <span className="font-extrabold tracking-tight leading-none" style={{ color: NAVY, fontSize: 16 }}>
+                  WiseMelon
+                </span>
+                <span className="font-medium tracking-[0.2em] uppercase leading-none" style={{ color: GOLD_DEEP, fontSize: 9, marginTop: 3 }}>
+                  Ventures Pvt. Ltd.
+                </span>
+              </div>
+            </Link>
+
+            {/* Center links */}
+            <div className="landing-nav-links hidden md:flex items-center gap-7">
+              {[
+                { label: 'About',     href: '#about' },
+                { label: 'Services',  href: '#services' },
+                { label: 'Products',  href: '#products' },
+                { label: 'Catalogue', href: '#catalogue' },
+                { label: 'Contact',   href: '#contact' },
+              ].map((link) => (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  className="relative font-semibold transition-colors"
+                  style={{ color: NAVY, fontSize: 13.5, letterSpacing: '0.02em' }}
+                >
+                  <span className="hover:opacity-70 transition-opacity">{link.label}</span>
+                </a>
+              ))}
+            </div>
+
+            {/* Right CTAs */}
+            <div className="landing-nav-links hidden md:flex items-center gap-3">
+              <a
+                href="/wisemelon-catalogue.pdf"
+                download
+                className="rounded-full font-semibold flex items-center gap-2 transition-transform hover:scale-[1.03] active:scale-[0.97]"
+                style={{
+                  padding: '10px 18px',
+                  fontSize: 13,
+                  background: `linear-gradient(135deg, ${GOLD_LIGHT}, ${GOLD} 60%, ${GOLD_DEEP})`,
+                  color: NAVY,
+                  boxShadow: `0 8px 24px -8px ${GOLD}80`,
+                }}
+              >
+                <Download size={15} strokeWidth={2.6} />
+                Catalogue
+              </a>
+              <Link
+                href="/login"
+                className="rounded-full font-semibold transition-all hover:scale-[1.03] active:scale-[0.97]"
+                style={{
+                  padding: '10px 18px',
+                  fontSize: 13,
+                  background: NAVY,
+                  color: '#fff',
+                  boxShadow: `0 8px 24px -8px ${NAVY}80`,
+                }}
+              >
+                Login →
               </Link>
             </div>
+
             {/* Mobile hamburger */}
             <button
               className="landing-mobile-toggle"
-              style={{ display: 'none', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: 10, border: '1px solid #E0E8F0', background: 'white', cursor: 'pointer' }}
+              style={{
+                display: 'none',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                border: `1px solid ${GOLD}55`,
+                background: 'white',
+                cursor: 'pointer',
+              }}
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
             >
-              {mobileMenuOpen ? <X size={20} color="#181837" /> : <Menu size={20} color="#181837" />}
+              {mobileMenuOpen ? <X size={20} color={NAVY} /> : <Menu size={20} color={NAVY} />}
             </button>
           </div>
+
           {/* Mobile menu dropdown */}
           <AnimatePresence>
             {mobileMenuOpen && (
@@ -126,16 +710,67 @@ export default function LandingPage() {
                 animate={{ height: 'auto', opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                style={{ overflow: 'hidden', borderTop: '1px solid #E0E8F0' }}
+                style={{ overflow: 'hidden', borderTop: `1px solid ${GOLD}33` }}
               >
-                <div style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <Link 
-                    href="/login" 
-                    className="gradient-primary"
-                    style={{ display: 'block', textAlign: 'center', color: 'white', padding: '12px', borderRadius: 12, fontWeight: 600, fontSize: 14, marginTop: 4 }}
+                <div style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {[
+                    { label: 'About',     href: '#about' },
+                    { label: 'Services',  href: '#services' },
+                    { label: 'Products',  href: '#products' },
+                    { label: 'Catalogue', href: '#catalogue' },
+                    { label: 'Contact',   href: '#contact' },
+                  ].map((link) => (
+                    <a
+                      key={link.label}
+                      href={link.href}
+                      onClick={() => setMobileMenuOpen(false)}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 8,
+                        color: NAVY,
+                        fontWeight: 600,
+                        fontSize: 14,
+                      }}
+                    >
+                      {link.label}
+                    </a>
+                  ))}
+                  <a
+                    href="/wisemelon-catalogue.pdf"
+                    download
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      textAlign: 'center',
+                      padding: '12px',
+                      borderRadius: 12,
+                      fontWeight: 700,
+                      fontSize: 14,
+                      marginTop: 4,
+                      background: `linear-gradient(135deg, ${GOLD_LIGHT}, ${GOLD}, ${GOLD_DEEP})`,
+                      color: NAVY,
+                    }}
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    Teacher Login →
+                    <Download size={15} /> Download Catalogue
+                  </a>
+                  <Link
+                    href="/login"
+                    style={{
+                      display: 'block',
+                      textAlign: 'center',
+                      color: 'white',
+                      padding: '12px',
+                      borderRadius: 12,
+                      fontWeight: 600,
+                      fontSize: 14,
+                      background: NAVY,
+                    }}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Login →
                   </Link>
                 </div>
               </motion.div>
@@ -143,421 +778,703 @@ export default function LandingPage() {
           </AnimatePresence>
         </nav>
 
-        {/* ═══ MAIN CONTENT ═══ */}
-        <main className="landing-section max-w-7xl mx-auto px-8 py-12 lg:py-20 space-y-24">
+        {/* ═══ HERO ═══ */}
+        <section
+          ref={heroRef}
+          id="home"
+          className="relative w-full overflow-hidden"
+          style={{
+            background: `radial-gradient(1200px 700px at 50% 10%, #1a2050 0%, ${NAVY} 45%, ${NAVY_DEEP} 100%)`,
+            color: '#fff',
+            paddingTop: 'clamp(60px, 9vw, 110px)',
+            paddingBottom: 'clamp(80px, 12vw, 160px)',
+          }}
+        >
+          {/* Decorative gold rings */}
+          <motion.div
+            aria-hidden
+            className="absolute"
+            style={{
+              left: '50%', top: '20%', transform: 'translate(-50%,-50%)',
+              width: 720, height: 720, borderRadius: '50%',
+              border: `1px solid ${GOLD}33`,
+              filter: 'blur(0.5px)',
+              pointerEvents: 'none',
+            }}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 60, repeat: Infinity, ease: 'linear' }}
+          />
+          <motion.div
+            aria-hidden
+            className="absolute"
+            style={{
+              left: '50%', top: '20%', transform: 'translate(-50%,-50%)',
+              width: 540, height: 540, borderRadius: '50%',
+              border: `1px dashed ${GOLD}55`,
+              pointerEvents: 'none',
+            }}
+            animate={{ rotate: -360 }}
+            transition={{ duration: 80, repeat: Infinity, ease: 'linear' }}
+          />
 
-          {/* ═══ HERO SECTION ═══ */}
-          <motion.section 
-            ref={heroRef}
-            className="landing-hero-grid grid grid-cols-1 lg:grid-cols-10 gap-8 items-start"
-            variants={staggerContainer}
-            initial="hidden"
-            animate={mounted ? "visible" : "hidden"}
-          >
-            {/* LEFT: Main Focus Card */}
-            <motion.div 
-              variants={fadeUp}
-              className="landing-hero-main lg:col-span-6 bg-white hero-card-border rounded-2xl p-12 lg:p-20 flex flex-col items-center text-center justify-center min-h-[500px] lg:min-h-[600px] relative overflow-hidden"
-              style={{ boxShadow: '0 2px 16px -4px rgba(27,28,28,0.04)' }}
+          {/* Floating diamonds */}
+          {[
+            { left: '8%',  top: '15%', size: 22, delay: 0 },
+            { left: '88%', top: '20%', size: 16, delay: 0.6 },
+            { left: '15%', top: '70%', size: 18, delay: 1.2 },
+            { left: '82%', top: '60%', size: 24, delay: 0.3 },
+            { left: '50%', top: '85%', size: 14, delay: 1.5 },
+          ].map((d, i) => (
+            <motion.div
+              key={i}
+              aria-hidden
+              className="absolute"
+              style={{
+                left: d.left, top: d.top,
+                width: d.size, height: d.size,
+                background: `linear-gradient(135deg, ${GOLD_LIGHT}, ${GOLD_DEEP})`,
+                transform: 'rotate(45deg)',
+                borderRadius: 3,
+                opacity: 0.55,
+              }}
+              animate={{ y: [0, -14, 0], rotate: [45, 60, 45] }}
+              transition={{ duration: 6, delay: d.delay, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          ))}
+
+          <div className="max-w-7xl mx-auto px-6 md:px-8 relative">
+            {/* Scroll-driven 3D logo reveal */}
+            <motion.div
+              className="relative"
+              style={{ y: heroLogoY, scale: heroLogoScale, marginBottom: 28 }}
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={mounted ? { opacity: 1, scale: 1 } : { opacity: 0 }}
+              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
             >
-              {/* Subtle background pattern */}
-              <div style={{
-                position: 'absolute', inset: 0, opacity: 0.03,
-                backgroundImage: 'radial-gradient(circle at 1px 1px, #3b82f6 1px, transparent 0)',
-                backgroundSize: '24px 24px'
-              }} />
+              {/* Soft gold halo behind the canvas */}
+              <div
+                aria-hidden
+                className="absolute"
+                style={{
+                  left: '50%',
+                  top: '50%',
+                  transform: 'translate(-50%,-50%)',
+                  width: '70%',
+                  height: '70%',
+                  background: `radial-gradient(circle, ${GOLD}33 0%, transparent 70%)`,
+                  filter: 'blur(40px)',
+                  pointerEvents: 'none',
+                }}
+              />
+              <HeroFrames />
+              {/* Scroll hint */}
               <motion.div
-                className="mb-6 text-xs font-bold tracking-[0.15em] uppercase px-5 py-2 rounded-full relative"
-                style={{ backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.2)' }}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={mounted ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.9 }}
-                transition={{ delay: 0.1 }}
+                aria-hidden
+                className="absolute left-1/2 -translate-x-1/2 hidden md:flex flex-col items-center gap-2"
+                style={{ bottom: -36, color: '#C7CCEA', fontSize: 10, letterSpacing: '0.22em', fontWeight: 600 }}
+                animate={{ y: [0, 6, 0] }}
+                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
               >
-                <span style={{ fontSize: '11px', letterSpacing: '0.15em' }}>PRINT ID CRAFT</span>
-              </motion.div>
-              <h1 
-                className="font-bold leading-tight mb-8 max-w-2xl relative"
-                style={{ color: '#181837', letterSpacing: '-0.03em', fontSize: 'clamp(2rem, 5vw, 3.5rem)', lineHeight: 1.1 }}
-              >
-                We build powerful
-                <br />
-                <span style={{ background: 'linear-gradient(135deg, #3b82f6, #60a5fa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                  ID Card systems.
-                </span>
-              </h1>
-              <p 
-                className="leading-relaxed max-w-xl relative"
-                style={{ color: '#3c4949', fontSize: 'clamp(0.95rem, 1.5vw, 1.18rem)', lineHeight: 1.7 }}
-              >
-                We help schools and institutions with transparent card management, strong support for team structure, and commitment to preserve data accuracy.
-              </p>
-              {/* CTA Buttons */}
-              <motion.div 
-                className="flex flex-wrap gap-4 mt-10 justify-center relative"
-                variants={fadeUp}
-              >
-                <a 
-                  href="#how-it-works"
-                  className="rounded-xl font-semibold transition-all duration-200 hover:bg-gray-50 bg-white"
-                  style={{ padding: '14px 40px', fontSize: '14px', border: '1.5px solid #E0E8F0', color: '#181837', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}
-                >
-                  Explore Solution
-                </a>
-                <Link 
-                  href="/login"
-                  className="rounded-xl font-semibold transition-all duration-200 hover:bg-gray-50 bg-gray-50"
-                  style={{ padding: '14px 40px', fontSize: '14px', border: '1.5px solid transparent', color: '#3c4949' }}
-                >
-                  School Login
-                </Link>
+                <span>SCROLL TO REVEAL</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={GOLD_LIGHT} strokeWidth="2" strokeLinecap="round">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
               </motion.div>
             </motion.div>
 
-            {/* RIGHT: Stacked Cards */}
-            <motion.div 
-              className="landing-hero-cards lg:col-span-4 flex flex-col gap-6"
+            {/* Brand title */}
+            <motion.div
+              className="text-center"
+              style={{ y: heroTextY, opacity: heroTextOpacity }}
               variants={staggerContainer}
               initial="hidden"
-              animate={mounted ? "visible" : "hidden"}
+              animate={mounted ? 'visible' : 'hidden'}
             >
-              {/* Card 1: Difference (teal bg) */}
-              <motion.div 
+              <motion.div
                 variants={fadeUp}
-                className="landing-hero-card-full rounded-2xl p-8 transition-all duration-300 hover:shadow-lg hover:translate-y-[-2px] cursor-default"
-                style={{ backgroundColor: '#3b82f6', color: '#ffffff' }}
-                whileHover={{ scale: 1.02 }}
-              >
-                <h3 className="font-bold mb-3" style={{ fontSize: '18px' }}>The Print ID Craft difference</h3>
-                <p className="leading-relaxed opacity-90" style={{ fontSize: '13px', lineHeight: 1.7 }}>
-                  Precision engineering meets institutional security. We don&apos;t just print; we architect identity ecosystems that scale with your growth.
-                </p>
-              </motion.div>
-
-              {/* Card 2: What we look for */}
-              <motion.div variants={fadeUp} className="bg-white hero-card-border rounded-2xl p-8 transition-all duration-300 hover:shadow-md hover:translate-y-[-2px]" whileHover={{ scale: 1.02 }}>
-                <h3 className="font-bold mb-5" style={{ color: '#181837', fontSize: '15px' }}>What we look for</h3>
-                <div className="flex gap-4">
-                  {[
-                    { tip: 'Verified', svg: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> },
-                    { tip: 'Secure', svg: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> },
-                    { tip: 'Connected', svg: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 16.24a6 6 0 0 1 0-8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14"/></svg> }
-                  ].map((item) => (
-                    <motion.div 
-                      key={item.tip}
-                      className="w-10 h-10 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: '#eff6ff', color: '#3b82f6' }}
-                      title={item.tip}
-                      whileHover={{ scale: 1.15, backgroundColor: '#dbeafe' }}
-                      transition={{ type: 'spring', stiffness: 400 }}
-                    >
-                      {item.svg}
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-
-              {/* Card 3: Deal structure */}
-              <motion.div variants={fadeUp} className="bg-white hero-card-border rounded-2xl p-8 transition-all duration-300 hover:shadow-md hover:translate-y-[-2px]" whileHover={{ scale: 1.02 }}>
-                <h3 className="font-bold mb-5" style={{ color: '#181837', fontSize: '15px' }}>How we structure our deals</h3>
-                <div className="flex gap-4">
-                  {[
-                    <svg key="wallet" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>,
-                    <svg key="handshake" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round"><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88"/><path d="m7.5 10.5 2 2"/><path d="m10.5 7.5-6 6"/><path d="m16 8-1.5-1.5"/></svg>
-                  ].map((svg) => (
-                    <motion.span 
-                      key={svg.key} 
-                      style={{ color: '#3b82f6', display: 'inline-flex' }}
-                      whileHover={{ scale: 1.2 }}
-                      transition={{ type: 'spring', stiffness: 400 }}
-                    >
-                      {svg}
-                    </motion.span>
-                  ))}
-                </div>
-              </motion.div>
-
-              {/* Card 4: Ideal client */}
-              <motion.div variants={fadeUp} className="bg-white hero-card-border rounded-2xl p-8 transition-all duration-300 hover:shadow-md hover:translate-y-[-2px]" whileHover={{ scale: 1.02 }}>
-                <h3 className="font-bold mb-4" style={{ color: '#181837', fontSize: '15px' }}>Here&apos;s what our ideal client looks like</h3>
-                <ul className="space-y-3">
-                  {['Great Brand', 'Strong Systems', 'Growing Revenue'].map((item, i) => (
-                    <motion.li 
-                      key={item} 
-                      className="flex items-center gap-3" 
-                      style={{ color: '#3c4949', fontSize: '13px' }}
-                      initial={{ opacity: 0, x: -10 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: 0.1 * i }}
-                    >
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#3b82f6' }} />
-                      {item}
-                    </motion.li>
-                  ))}
-                </ul>
-              </motion.div>
-            </motion.div>
-          </motion.section>
-
-          {/* ═══ STATS BAR ═══ */}
-          <motion.div
-            className="landing-stats-row"
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: '3rem',
-              padding: '2.5rem 0',
-              borderTop: '1px solid rgba(224,232,240,0.5)',
-              borderBottom: '1px solid rgba(224,232,240,0.5)',
-            }}
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-50px" }}
-            transition={{ duration: 0.7 }}
-          >
-            {[
-              { value: "50", suffix: "+", label: "Schools Managed" },
-              { value: "25000", suffix: "+", label: "Cards Printed" },
-              { value: "99", suffix: ".9%", label: "Match Accuracy" },
-            ].map((stat, i) => (
-              <div 
-                key={stat.label}
-                className="landing-stat-item"
+                className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6"
                 style={{
-                  textAlign: 'center',
-                  borderRight: i < 2 ? '1px solid rgba(224,232,240,0.5)' : 'none',
-                  paddingRight: i < 2 ? '3rem' : 0,
+                  border: `1px solid ${GOLD}55`,
+                  background: 'rgba(245, 185, 33, 0.08)',
+                  color: GOLD_LIGHT,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: '0.18em',
                 }}
               >
-                <div style={{ fontSize: 'clamp(2rem, 3.5vw, 2.75rem)', fontWeight: 900, color: '#181837', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
-                  <AnimatedCounter value={stat.value} suffix={stat.suffix} />
-                </div>
-                <div style={{ fontSize: '13px', color: '#3c4949', marginTop: 6, fontWeight: 500, letterSpacing: '0.02em' }}>{stat.label}</div>
-              </div>
-            ))}
-          </motion.div>
+                <Sparkles size={12} />
+                <span>EST. 2012 · TRUSTED BY 50+ INSTITUTIONS</span>
+              </motion.div>
 
-          {/* ═══ PARTNERSHIP-FIRST SECTION ═══ */}
-          <section id="how-it-works" className="landing-partnership-grid grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-            {/* Left: Text */}
-            <motion.div 
-              className="space-y-8"
+              <motion.h1
+                variants={fadeUp}
+                className="font-extrabold leading-[1.05] tracking-tight"
+                style={{
+                  fontSize: 'clamp(2.4rem, 6.2vw, 5.4rem)',
+                  letterSpacing: '-0.025em',
+                }}
+              >
+                WiseMelon{' '}
+                <span
+                  style={{
+                    background: `linear-gradient(135deg, ${GOLD_LIGHT} 10%, ${GOLD} 50%, ${GOLD_DEEP} 90%)`,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                  }}
+                >
+                  Ventures
+                </span>
+              </motion.h1>
+
+              <motion.p
+                variants={fadeUp}
+                className="mx-auto mt-6 leading-relaxed"
+                style={{
+                  color: '#E0E4F4',
+                  fontSize: 'clamp(1rem, 1.6vw, 1.3rem)',
+                  maxWidth: 760,
+                  lineHeight: 1.65,
+                }}
+              >
+                <span style={{ color: GOLD_LIGHT, fontWeight: 600 }}>
+                  Perfect Solution for School Essentials &amp; Corporate Gifting.
+                </span>
+                <br />
+                Premium uniforms, ID cards, lanyards, branded merchandise &amp; more — crafted with care, delivered on time.
+              </motion.p>
+
+              <motion.div
+                variants={fadeUp}
+                className="flex flex-wrap justify-center items-center gap-4 mt-10"
+              >
+                <a
+                  href="/wisemelon-catalogue.pdf"
+                  download
+                  className="rounded-full font-bold flex items-center gap-2 transition-transform hover:scale-105 active:scale-95"
+                  style={{
+                    padding: '16px 30px',
+                    fontSize: 15,
+                    background: `linear-gradient(135deg, ${GOLD_LIGHT}, ${GOLD} 55%, ${GOLD_DEEP})`,
+                    color: NAVY,
+                    boxShadow: `0 14px 38px -10px ${GOLD}, 0 0 0 1px ${GOLD_LIGHT}55 inset`,
+                  }}
+                >
+                  <Download size={17} strokeWidth={2.6} />
+                  Download Catalogue
+                </a>
+                <a
+                  href="#products"
+                  className="rounded-full font-bold flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+                  style={{
+                    padding: '16px 30px',
+                    fontSize: 15,
+                    background: 'rgba(255,255,255,0.06)',
+                    color: '#fff',
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    backdropFilter: 'blur(10px)',
+                  }}
+                >
+                  Explore Products <ArrowRight size={16} />
+                </a>
+              </motion.div>
+
+              <motion.div
+                variants={fadeUp}
+                className="mt-14 flex flex-wrap items-center justify-center gap-x-10 gap-y-5"
+                style={{ color: '#C7CCEA' }}
+              >
+                {[
+                  { v: '50',  s: '+',  l: 'Schools served' },
+                  { v: '12',  s: '+',  l: 'Years in industry' },
+                  { v: '24',  s: 'hr', l: 'Standard dispatch' },
+                  { v: '100', s: '%',  l: 'Customizable' },
+                ].map((s, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="font-extrabold leading-none" style={{ color: GOLD_LIGHT, fontSize: 26 }}>
+                      <AnimatedCounter value={s.v} suffix={s.s} />
+                    </div>
+                    <div className="text-xs uppercase tracking-[0.18em]" style={{ fontSize: 10.5 }}>
+                      {s.l}
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            </motion.div>
+          </div>
+
+          <svg
+            aria-hidden
+            viewBox="0 0 1440 120"
+            preserveAspectRatio="none"
+            style={{ position: 'absolute', left: 0, right: 0, bottom: -1, width: '100%', height: 60, pointerEvents: 'none' }}
+          >
+            <path d="M0,80 Q360,10 720,60 T1440,40 L1440,120 L0,120 Z" fill={GOLD} opacity="0.95" />
+          </svg>
+        </section>
+
+        {/* ═══ ABOUT ═══ */}
+        <section id="about" className="max-w-7xl mx-auto px-6 md:px-8 py-20 md:py-28">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+            <motion.div
+              className="lg:col-span-7"
               initial={{ opacity: 0, x: -30 }}
               whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, margin: "-80px" }}
+              viewport={{ once: true, margin: '-80px' }}
               transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
             >
-              <h2 className="font-bold" style={{ color: '#181837', fontSize: 'clamp(1.75rem, 3.5vw, 2.75rem)', letterSpacing: '-0.03em', lineHeight: 1.15 }}>
-                A Partnership-First approach.
+              <SectionLabel>About Us</SectionLabel>
+              <h2 className="font-extrabold mt-3" style={{ color: NAVY, fontSize: 'clamp(1.8rem, 3.6vw, 2.8rem)', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                Crafting institutional identity since <span style={{ color: GOLD_DEEP }}>2012</span>.
               </h2>
-              <div className="space-y-6">
-                <p className="leading-relaxed" style={{ color: '#3c4949', fontSize: 'clamp(0.95rem, 1.3vw, 1.1rem)', lineHeight: 1.8 }}>
-                  Managing ID cards for multiple schools can be stressful. Traditional vendors leave you hanging when the pressure is on.
+              <div className="mt-6 space-y-4" style={{ color: MUTED, fontSize: 'clamp(0.95rem, 1.2vw, 1.05rem)', lineHeight: 1.8 }}>
+                <p>
+                  WiseMelon Ventures has been supplying both public and private sectors since
+                  <strong style={{ color: NAVY }}> 2012</strong> — initially as
+                  <strong style={{ color: NAVY }}> 3rd Eye Technovision</strong> — and was reorganised
+                  in <strong style={{ color: NAVY }}>January 2025</strong> as <strong style={{ color: NAVY }}>WiseMelon Ventures Pvt. Ltd.</strong>
                 </p>
-                <ul className="space-y-4">
-                  {[
-                    'What if data gets lost?',
-                    "What if cards don't match?",
-                    'What if the system fails during print season?'
-                  ].map((q, i) => (
-                    <motion.li 
-                      key={i} 
-                      className="flex items-center gap-3 font-medium"
-                      style={{ color: '#ba1a1a', fontSize: '14px' }}
-                      initial={{ opacity: 0, x: -15 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true, margin: "-30px" }}
-                      transition={{ delay: 0.15 * i, duration: 0.5 }}
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
-                      {q}
-                    </motion.li>
-                  ))}
-                </ul>
-                <p className="font-semibold pt-4" style={{ color: '#181837', fontSize: '15px' }}>
-                  You&apos;re left with a lot of unknowns.
+                <p>
+                  We carry vast experience in ID cards, school equipment and corporate
+                  gifting products. We serve <strong style={{ color: NAVY }}>50+ schools</strong> and
+                  corporate organisations and aim to complete most standard orders within
+                  <strong style={{ color: NAVY }}> 24 hours</strong>.
+                </p>
+                <p>
+                  Through many years in this industry we&apos;ve built long-standing relationships with
+                  our clients — and offer an unbeatable selection of merchandise at competitive prices.
                 </p>
               </div>
             </motion.div>
 
-            {/* Right: Submarine illustration */}
-            <motion.div 
-              className="bg-white hero-card-border rounded-2xl p-1 overflow-hidden group"
-              style={{ boxShadow: '0 2px 16px -4px rgba(27,28,28,0.04)' }}
-              initial={{ opacity: 0, x: 30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, margin: "-80px" }}
-              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
+            <motion.div
+              className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-5"
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: '-80px' }}
+              variants={staggerContainer}
             >
-              <div className="relative aspect-square rounded-xl overflow-hidden flex items-center justify-center" style={{ backgroundColor: '#f5f3f3' }}>
-                <svg viewBox="0 0 500 500" className="w-full h-full p-8">
-                  <defs>
-                    <linearGradient id="tealGrad" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#60a5fa" />
-                      <stop offset="100%" stopColor="#2563eb" />
-                    </linearGradient>
-                    <linearGradient id="pinkGrad" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#ff9ec3" />
-                      <stop offset="100%" stopColor="#E91E8C" />
-                    </linearGradient>
-                    <linearGradient id="waterGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#f5f3f3" stopOpacity="0" />
-                      <stop offset="100%" stopColor="#dbeafe" stopOpacity="0.5" />
-                    </linearGradient>
-                  </defs>
-
-                  <rect x="0" y="0" width="500" height="500" fill="url(#waterGrad)" rx="12"/>
-
-                  {/* Bubbles — pure CSS animations, no React re-renders */}
-                  {[
-                    { cx: 100, cy: 130, r: 6, delay: '0s', dur: '3.5s' },
-                    { cx: 140, cy: 200, r: 4, delay: '0.3s', dur: '3.9s' },
-                    { cx: 370, cy: 110, r: 7, delay: '0.6s', dur: '4.3s' },
-                    { cx: 320, cy: 280, r: 5, delay: '0.9s', dur: '4.7s' },
-                    { cx: 200, cy: 90, r: 8, delay: '1.2s', dur: '5.1s' },
-                    { cx: 420, cy: 220, r: 5, delay: '1.5s', dur: '5.5s' },
-                  ].map((b, i) => (
-                    <circle 
-                      key={i} cx={b.cx} cy={b.cy} r={b.r} 
-                      fill="rgba(59, 130, 246, 0.25)"
-                      stroke="rgba(59, 130, 246, 0.4)"
-                      strokeWidth="0.5"
-                      className="svg-bubble"
-                      style={{ animationDuration: b.dur, animationDelay: b.delay }}
-                    />
-                  ))}
-
-                  {/* Coral / Sea plants — static paths (no continuous animation) */}
-                  <path d="M60 480 Q70 400 65 360 Q55 310 78 260 Q85 240 70 210" stroke="#ff9ec3" strokeWidth="4" fill="none" strokeLinecap="round" />
-                  <path d="M85 480 Q95 420 100 380 Q105 330 88 290" stroke="#E91E8C" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.6" />
-                  <ellipse cx="70" cy="210" rx="12" ry="20" fill="#ff9ec3" opacity="0.4" />
-                  <ellipse cx="85" cy="230" rx="10" ry="16" fill="#E91E8C" opacity="0.3" />
-
-                  <path d="M410 480 Q400 420 415 370 Q430 320 405 270" stroke="#ff9ec3" strokeWidth="4" fill="none" strokeLinecap="round" />
-                  <path d="M435 480 Q440 430 430 380 Q420 330 440 290" stroke="#E91E8C" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.5" />
-                  <ellipse cx="405" cy="270" rx="14" ry="22" fill="#ff9ec3" opacity="0.35" />
-
-                  <path d="M230 480 Q235 430 225 390 Q215 350 240 310" stroke="#60a5fa" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.5" />
-                  <path d="M260 480 Q255 440 270 400" stroke="#2563eb" strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.3" />
-
-                  {/* Submarine — CSS animation only */}
-                  <g className="svg-submarine">
-                    <ellipse cx="250" cy="240" rx="120" ry="48" fill="url(#tealGrad)" opacity="0.9" />
-                    <ellipse cx="250" cy="228" rx="100" ry="20" fill="rgba(255,255,255,0.15)" />
-                    <circle cx="300" cy="232" r="18" fill="#f5f3f3" opacity="0.9" />
-                    <circle cx="300" cy="232" r="14" fill="rgba(59, 130, 246, 0.15)" />
-                    <circle cx="300" cy="228" r="5" fill="rgba(59, 130, 246, 0.5)" />
-                    <circle cx="260" cy="232" r="12" fill="#f5f3f3" opacity="0.8" />
-                    <circle cx="260" cy="232" r="9" fill="rgba(59, 130, 246, 0.12)" />
-                    <circle cx="260" cy="229" r="3" fill="rgba(59, 130, 246, 0.4)" />
-                    <rect x="245" y="180" width="7" height="35" rx="3.5" fill="#2563eb" opacity="0.8" />
-                    <rect x="240" y="173" width="17" height="10" rx="5" fill="#2563eb" opacity="0.7" />
-                    <polygon points="130,216 105,195 105,285 130,264" fill="url(#pinkGrad)" opacity="0.75" />
-                    
-                    <g className="svg-propeller">
-                      <ellipse cx="112" cy="226" rx="4" ry="16" fill="#E91E8C" opacity="0.55" />
-                      <ellipse cx="112" cy="254" rx="4" ry="16" fill="#E91E8C" opacity="0.55" />
-                      <ellipse cx="98" cy="240" rx="16" ry="4" fill="#E91E8C" opacity="0.55" />
-                      <ellipse cx="126" cy="240" rx="16" ry="4" fill="#E91E8C" opacity="0.55" />
-                    </g>
-
-                    <polygon points="370,232 460,200 460,280 370,248" fill="rgba(59, 130, 246, 0.06)" />
-                    <line x1="220" y1="192" x2="210" y2="170" stroke="#2563eb" strokeWidth="2" opacity="0.5" />
-                    <circle cx="210" cy="168" r="3" fill="#60a5fa" opacity="0.6" />
-                  </g>
-
-                  {/* Seabed — static */}
-                  <path
-                    d="M0 440 Q60 420 120 435 Q180 450 240 425 Q300 400 360 435 Q420 455 500 430 L500 500 L0 500 Z"
-                    fill="#e4e2e2" opacity="0.5"
-                  />
-                  <path
-                    d="M0 460 Q80 445 160 460 Q240 475 320 455 Q400 440 500 460 L500 500 L0 500 Z"
-                    fill="#bbc9c9" opacity="0.3"
-                  />
-
-                  {/* Small fish — CSS animations */}
-                  <g className="svg-fish1">
-                    <ellipse cx="380" cy="340" rx="12" ry="6" fill="#ff9ec3" opacity="0.5" />
-                    <polygon points="392,340 402,334 402,346" fill="#ff9ec3" opacity="0.4" />
-                    <circle cx="374" cy="338" r="1.5" fill="#E91E8C" opacity="0.6" />
-                  </g>
-                  <g className="svg-fish2">
-                    <ellipse cx="150" cy="370" rx="10" ry="5" fill="#60a5fa" opacity="0.4" />
-                    <polygon points="140,370 130,365 130,375" fill="#60a5fa" opacity="0.3" />
-                    <circle cx="155" cy="368" r="1.5" fill="#2563eb" opacity="0.5" />
-                  </g>
-                </svg>
-                <div 
-                  className="absolute inset-0 transition-colors duration-500"
-                  style={{ backgroundColor: 'rgba(59, 130, 246, 0.05)' }}
-                />
-              </div>
+              <motion.div variants={scaleIn}>
+                <DiamondCard color={NAVY} accent={GOLD} title="Our Mission">
+                  Premium-quality uniforms, accessories &amp; customized gifts —
+                  affordable, tailor-made, and delivered through seamless bulk ordering.
+                </DiamondCard>
+              </motion.div>
+              <motion.div variants={scaleIn} className="sm:mt-12">
+                <DiamondCard color={GOLD} accent={NAVY} title="Our Vision" inverted>
+                  To be a leading provider of school &amp; corporate gifting solutions —
+                  enhancing identity, unity, and professional branding.
+                </DiamondCard>
+              </motion.div>
             </motion.div>
-          </section>
-        </main>
+          </div>
+        </section>
 
-        {/* ═══ BOTTOM BANNER / FOOTER ═══ */}
-        <motion.footer 
-          className="px-4 sm:px-8 mt-24"
-          style={{ backgroundColor: '#181837' }}
+        {/* ═══ TWO PILLARS — SERVICES ═══ */}
+        <section id="services" style={{ background: CREAM }}>
+          <div className="max-w-7xl mx-auto px-6 md:px-8 py-20 md:py-28">
+            <div className="text-center mb-14">
+              <SectionLabel center>What We Offer</SectionLabel>
+              <h2 className="font-extrabold mt-3" style={{ color: NAVY, fontSize: 'clamp(1.8rem, 3.6vw, 2.8rem)', letterSpacing: '-0.02em' }}>
+                Two pillars. <span style={{ color: GOLD_DEEP }}>One promise.</span>
+              </h2>
+              <p className="mt-3 mx-auto" style={{ color: MUTED, fontSize: 15, maxWidth: 640, lineHeight: 1.7 }}>
+                From classroom essentials to corporate gifting — every product carries our quality and customization commitment.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+              <PillarCard
+                title="School Essentials"
+                subtitle="Institutional Attire & Identity"
+                Icon={GraduationCap}
+                items={SCHOOL_OFFERINGS}
+                bgFrom={NAVY}
+                bgTo={NAVY_DEEP}
+                accent={GOLD_LIGHT}
+                ink="#fff"
+              />
+              <PillarCard
+                title="Corporate Gifting"
+                subtitle="Branded Merchandise & Apparel"
+                Icon={Briefcase}
+                items={CORPORATE_OFFERINGS}
+                bgFrom={GOLD}
+                bgTo={GOLD_DEEP}
+                accent={NAVY}
+                ink={NAVY}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* ═══ PRODUCT CATEGORIES ═══ */}
+        <section id="products" className="max-w-7xl mx-auto px-6 md:px-8 py-20 md:py-28">
+          <div className="text-center mb-14">
+            <SectionLabel center>Our Expertise</SectionLabel>
+            <h2 className="font-extrabold mt-3" style={{ color: NAVY, fontSize: 'clamp(1.8rem, 3.6vw, 2.8rem)', letterSpacing: '-0.02em' }}>
+              Twelve product lines. <span style={{ color: GOLD_DEEP }}>One trusted partner.</span>
+            </h2>
+          </div>
+
+          <motion.div
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5 sm:gap-6"
+            variants={staggerContainer}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-50px' }}
+          >
+            {PRODUCT_CATEGORIES.map((cat) => (
+              <motion.div
+                key={cat.label}
+                variants={scaleIn}
+                whileHover={{ y: -6 }}
+                transition={{ type: 'spring', stiffness: 280, damping: 18 }}
+              >
+                <ProductDiamond label={cat.label} Icon={cat.Icon} />
+              </motion.div>
+            ))}
+          </motion.div>
+        </section>
+
+        {/* ═══ CATALOGUE GALLERY ═══ */}
+        <section id="catalogue" className="relative py-20 md:py-28 overflow-hidden" style={{ background: NAVY }}>
+          <div className="max-w-7xl mx-auto px-6 md:px-8 text-center mb-12 relative z-10">
+            <SectionLabel center light>Catalogue Preview</SectionLabel>
+            <h2 className="font-extrabold mt-3" style={{ color: '#fff', fontSize: 'clamp(1.8rem, 3.6vw, 2.8rem)', letterSpacing: '-0.02em' }}>
+              Browse a sneak-peek <span style={{ color: GOLD_LIGHT }}>of our 28-page catalogue.</span>
+            </h2>
+            <p className="mt-3 mx-auto" style={{ color: '#C7CCEA', fontSize: 15, maxWidth: 640, lineHeight: 1.7 }}>
+              Tap any page to download the full PDF and explore our complete range of products.
+            </p>
+          </div>
+
+          <div className="catalogue-marquee">
+            <div className="catalogue-marquee-track">
+              {[...CATALOGUE_PAGES, ...CATALOGUE_PAGES].map((src, i) => (
+                <a
+                  key={i}
+                  href="/wisemelon-catalogue.pdf"
+                  download
+                  className="catalogue-marquee-item"
+                  style={{ boxShadow: `0 22px 50px -22px ${GOLD}55, 0 0 0 1px ${GOLD}33` }}
+                  aria-label="Download full catalogue"
+                >
+                  <Image
+                    src={src}
+                    alt={`Catalogue page preview ${i + 1}`}
+                    width={300}
+                    height={424}
+                    style={{ objectFit: 'cover', display: 'block' }}
+                  />
+                  <div className="catalogue-marquee-overlay">
+                    <Download size={20} />
+                    <span style={{ fontSize: 12, fontWeight: 700, marginTop: 6 }}>Download PDF</span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ═══ WHY US ═══ */}
+        <section className="max-w-7xl mx-auto px-6 md:px-8 py-20 md:py-28">
+          <div className="text-center mb-14">
+            <SectionLabel center>Why WiseMelon</SectionLabel>
+            <h2 className="font-extrabold mt-3" style={{ color: NAVY, fontSize: 'clamp(1.8rem, 3.6vw, 2.8rem)', letterSpacing: '-0.02em' }}>
+              Built on trust. <span style={{ color: GOLD_DEEP }}>Delivered with care.</span>
+            </h2>
+          </div>
+
+          <motion.div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6"
+            variants={staggerContainer}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-50px' }}
+          >
+            {WHY_US.map((w) => (
+              <motion.div
+                key={w.title}
+                variants={fadeUp}
+                whileHover={{ y: -4 }}
+                transition={{ type: 'spring', stiffness: 250, damping: 18 }}
+                className="rounded-2xl p-7"
+                style={{
+                  background: '#fff',
+                  border: `1px solid ${GOLD}33`,
+                  boxShadow: `0 12px 32px -16px ${NAVY}1a`,
+                }}
+              >
+                <div
+                  className="rounded-xl flex items-center justify-center"
+                  style={{
+                    width: 52, height: 52,
+                    background: `linear-gradient(135deg, ${GOLD_LIGHT}, ${GOLD})`,
+                    color: NAVY,
+                  }}
+                >
+                  <w.Icon size={26} strokeWidth={2.4} />
+                </div>
+                <h3 className="font-extrabold mt-4" style={{ color: NAVY, fontSize: 17, letterSpacing: '-0.01em' }}>
+                  {w.title}
+                </h3>
+                <p className="mt-2" style={{ color: MUTED, fontSize: 13.5, lineHeight: 1.65 }}>
+                  {w.desc}
+                </p>
+              </motion.div>
+            ))}
+          </motion.div>
+        </section>
+
+        {/* ═══ CATALOGUE DOWNLOAD BANNER ═══ */}
+        <section className="px-4 sm:px-6 md:px-8 pb-8">
+          <motion.div
+            className="max-w-7xl mx-auto rounded-3xl px-8 md:px-14 py-14 md:py-20 relative overflow-hidden"
+            style={{
+              background: `linear-gradient(135deg, ${GOLD_LIGHT} 0%, ${GOLD} 45%, ${GOLD_DEEP} 100%)`,
+              boxShadow: `0 30px 80px -30px ${GOLD}80`,
+            }}
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div
+              aria-hidden
+              className="absolute"
+              style={{
+                right: '-3%', top: '50%',
+                transform: 'translateY(-50%) rotate(45deg)',
+                width: 280, height: 280,
+                background: `${NAVY}11`, borderRadius: 24,
+              }}
+            />
+            <div
+              aria-hidden
+              className="absolute"
+              style={{
+                right: '6%', top: '50%',
+                transform: 'translateY(-50%) rotate(45deg)',
+                width: 180, height: 180,
+                background: `${NAVY}1a`, borderRadius: 18,
+              }}
+            />
+
+            <div className="relative grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+              <div>
+                <SectionLabel ink={NAVY}>Get the Full Catalogue</SectionLabel>
+                <h2 className="font-extrabold mt-3" style={{ color: NAVY, fontSize: 'clamp(1.8rem, 3.6vw, 2.6rem)', letterSpacing: '-0.025em', lineHeight: 1.1 }}>
+                  All 28 pages. <br />Every product. <br />One download.
+                </h2>
+                <p className="mt-4" style={{ color: NAVY, opacity: 0.78, fontSize: 15, maxWidth: 480, lineHeight: 1.65 }}>
+                  Take the full WiseMelon Ventures product catalogue with you — share it with your purchase committee, principal, or admin team.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center md:justify-end gap-4">
+                <a
+                  href="/wisemelon-catalogue.pdf"
+                  download
+                  className="rounded-full font-bold flex items-center gap-2 transition-transform hover:scale-105 active:scale-95"
+                  style={{
+                    padding: '18px 32px',
+                    fontSize: 16,
+                    background: NAVY,
+                    color: '#fff',
+                    boxShadow: `0 18px 40px -12px ${NAVY}99`,
+                  }}
+                >
+                  <Download size={18} strokeWidth={2.6} />
+                  Download PDF (4.5 MB)
+                </a>
+                <a
+                  href="#contact"
+                  className="rounded-full font-bold flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+                  style={{
+                    padding: '18px 28px',
+                    fontSize: 15,
+                    background: 'rgba(13,18,56,0.08)',
+                    color: NAVY,
+                    border: `1.5px solid ${NAVY}33`,
+                  }}
+                >
+                  Talk to Sales <ArrowRight size={16} />
+                </a>
+              </div>
+            </div>
+          </motion.div>
+        </section>
+
+        {/* ═══ CONTACT / FOOTER ═══ */}
+        <motion.footer
+          id="contact"
+          className="px-4 sm:px-8 mt-12"
+          style={{ background: `linear-gradient(180deg, ${NAVY} 0%, ${NAVY_DEEP} 100%)`, color: '#fff' }}
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-50px" }}
+          viewport={{ once: true, margin: '-50px' }}
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className="landing-footer-inner max-w-7xl mx-auto flex flex-col items-start gap-12 py-24">
-            <motion.h2 
-              className="font-extrabold text-white leading-tight max-w-4xl"
-              style={{ fontSize: 'clamp(1.75rem, 4vw, 3rem)', letterSpacing: '-0.03em', lineHeight: 1.15 }}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.7, delay: 0.1 }}
-            >
-              Print ID Craft is your complete school identity management platform — streamlined, secure, and smart.
-            </motion.h2>
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6, delay: 0.25 }}
-            >
-              <Link 
-                href="/login"
-                className="gradient-primary text-white rounded-xl font-bold hover:scale-105 active:scale-95 transition-all duration-300 flex items-center gap-2 group"
-                style={{ padding: '18px 48px', fontSize: '16px', boxShadow: '0 15px 40px rgba(59,130,246,0.4)' }}
+          <div className="landing-footer-inner max-w-7xl mx-auto pt-24 pb-12">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16">
+              {/* Brand block */}
+              <motion.div
+                className="lg:col-span-5 flex flex-col gap-5"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.7, delay: 0.05 }}
               >
-                 Get Started →
-              </Link>
-            </motion.div>
+                <div className="flex items-center gap-4">
+                  <div className="relative" style={{ width: 64, height: 64 }}>
+                    <Image
+                      src="/wisemelon-icon.png"
+                      alt="WiseMelon Ventures"
+                      fill
+                      sizes="64px"
+                      style={{ objectFit: 'contain' }}
+                    />
+                  </div>
+                  <div>
+                    <div className="font-extrabold tracking-tight leading-none" style={{ fontSize: 22 }}>
+                      WiseMelon
+                    </div>
+                    <div
+                      className="font-medium tracking-[0.2em] uppercase"
+                      style={{ color: GOLD_LIGHT, fontSize: 10, marginTop: 4 }}
+                    >
+                      Ventures Pvt. Ltd.
+                    </div>
+                  </div>
+                </div>
+                <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, lineHeight: 1.7, maxWidth: 420 }}>
+                  Perfect Solution for School Essentials &amp; Corporate Gifting. Premium uniforms, ID cards, branded merchandise &amp; more — trusted by 50+ institutions across India.
+                </p>
+                <a
+                  href="/wisemelon-catalogue.pdf"
+                  download
+                  className="self-start rounded-full font-bold flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 mt-2"
+                  style={{
+                    padding: '12px 22px',
+                    fontSize: 13,
+                    background: `linear-gradient(135deg, ${GOLD_LIGHT}, ${GOLD}, ${GOLD_DEEP})`,
+                    color: NAVY,
+                    boxShadow: `0 12px 30px -10px ${GOLD}80`,
+                  }}
+                >
+                  <Download size={15} strokeWidth={2.6} />
+                  Download Catalogue
+                </a>
+              </motion.div>
+
+              {/* Quick links */}
+              <motion.div
+                className="lg:col-span-3"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.7, delay: 0.15 }}
+              >
+                <div className="font-bold uppercase mb-4" style={{ color: GOLD_LIGHT, fontSize: 11, letterSpacing: '0.18em' }}>
+                  Explore
+                </div>
+                <ul className="space-y-3">
+                  {[
+                    { label: 'About Us',     href: '#about' },
+                    { label: 'Services',     href: '#services' },
+                    { label: 'Products',     href: '#products' },
+                    { label: 'Catalogue',    href: '#catalogue' },
+                    { label: 'School Login', href: '/login' },
+                  ].map((l) => (
+                    <li key={l.label}>
+                      <a
+                        href={l.href}
+                        className="transition-colors hover:text-white"
+                        style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13.5 }}
+                      >
+                        {l.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </motion.div>
+
+              {/* Contact */}
+              <motion.div
+                className="lg:col-span-4"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.7, delay: 0.25 }}
+              >
+                <div className="font-bold uppercase mb-4" style={{ color: GOLD_LIGHT, fontSize: 11, letterSpacing: '0.18em' }}>
+                  Get in Touch
+                </div>
+                <ul className="space-y-4" style={{ color: 'rgba(255,255,255,0.78)', fontSize: 13.5 }}>
+                  <li className="flex items-start gap-3">
+                    <Phone size={16} style={{ color: GOLD_LIGHT, marginTop: 2, flexShrink: 0 }} />
+                    <div>
+                      <a href="tel:+919881877607" className="hover:text-white transition-colors">+91 98818 77607</a>
+                      <span className="opacity-50"> · </span>
+                      <a href="tel:+918888740323" className="hover:text-white transition-colors">+91 88887 40323</a>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Mail size={16} style={{ color: GOLD_LIGHT, marginTop: 2, flexShrink: 0 }} />
+                    <a href="mailto:wisemelonventures@gmail.com" className="hover:text-white transition-colors">
+                      wisemelonventures@gmail.com
+                    </a>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <MapPin size={16} style={{ color: GOLD_LIGHT, marginTop: 2, flexShrink: 0 }} />
+                    <span style={{ lineHeight: 1.6 }}>
+                      Lane No-16/A, Madina Manzil, 1st Floor,<br />
+                      Sayyed Nagar, Hadapsar, Pune-411028
+                    </span>
+                  </li>
+                </ul>
+                {/* Social */}
+                <div className="flex gap-3 mt-6">
+                  {[
+                    { Icon: Instagram, href: 'https://instagram.com/wisemelon_1512_', label: 'Instagram' },
+                    { Icon: Facebook,  href: 'https://facebook.com/',                   label: 'Facebook' },
+                  ].map(({ Icon, href, label }) => (
+                    <a
+                      key={label}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={label}
+                      className="rounded-full flex items-center justify-center transition-all hover:scale-110"
+                      style={{
+                        width: 38,
+                        height: 38,
+                        background: 'rgba(255,255,255,0.06)',
+                        border: `1px solid ${GOLD}33`,
+                        color: GOLD_LIGHT,
+                      }}
+                    >
+                      <Icon size={16} />
+                    </a>
+                  ))}
+                </div>
+              </motion.div>
+            </div>
 
             {/* Footer bottom */}
-            <div className="landing-footer-bottom w-full pt-16 flex flex-col md:flex-row justify-between items-center gap-8" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-              <div className="flex flex-col gap-2">
-                <div className="font-black text-white uppercase tracking-tight" style={{ fontSize: '18px' }}>
-                  <span className="flex items-center gap-2.5">
-                    <span style={{ width: 28, height: 28, borderRadius: 7, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 13, fontWeight: 900 }}>P</span>
-                    PRINT ID CRAFT
-                  </span>
-                </div>
-                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', fontWeight: 500 }}>The Future of Institutional Identity.</p>
+            <div
+              className="landing-footer-bottom w-full mt-16 pt-8 flex flex-col md:flex-row justify-between items-center gap-4"
+              style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div suppressHydrationWarning style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 500 }}>
+                © {currentYear} WiseMelon Ventures Pvt. Ltd. · All rights reserved.
               </div>
-              <div className="flex flex-wrap justify-center gap-10">
-                {['Privacy Policy', 'Terms of Service', 'Support'].map((item) => (
-                  <a 
-                    key={item} 
-                    href="#" 
-                    className="font-semibold transition-all duration-200 hover:text-white"
-                    style={{ color: 'rgba(255,255,255,0.45)', fontSize: '13px', letterSpacing: '0.01em' }}
-                  >
-                    {item}
-                  </a>
-                ))}
-              </div>
-              <div suppressHydrationWarning style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', fontWeight: 500, fontFamily: 'Inter, sans-serif' }}>
-                © {currentYear} Print ID Craft.
+              <div className="flex flex-wrap justify-center gap-6">
+                <a href="#" className="transition-colors hover:text-white" style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Privacy Policy</a>
+                <a href="#" className="transition-colors hover:text-white" style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Terms of Service</a>
+                <a href="https://www.wisemelonventures.com" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-white" style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+                  www.wisemelonventures.com
+                </a>
               </div>
             </div>
           </div>

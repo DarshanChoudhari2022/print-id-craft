@@ -59,3 +59,9 @@ npm_install.log
 error_v.log
 final_error.log
 installer_final.log
+
+# Asset prep working files (regeneratable)
+scripts/catalogue_pages/
+scripts/new_main.md
+public/uploads/
+public/wisemelon-logo.png
