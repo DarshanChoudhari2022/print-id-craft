@@ -338,103 +338,46 @@ function Header() {
   );
 }
 
-function HeroVisual() {
-  return (
-    <div
-      className="animate-slide-up-fade opacity-0 relative mx-auto min-h-[500px] max-w-[560px] lg:min-h-[610px]"
-    >
-      <div className="absolute inset-6 rounded-[2.5rem] bg-gradient-to-br from-[#0B1F3A] via-[#111A46] to-[#050816] shadow-2xl shadow-[#0B1F3A]/25" />
-      <div className="absolute inset-x-12 top-8 h-40 rounded-full bg-[#F7C948]/25 blur-3xl" />
-
-      <div className="absolute left-1/2 top-12 z-10 w-[74%] -translate-x-1/2 overflow-hidden rounded-[2rem] border border-white/15 bg-white shadow-2xl shadow-slate-950/20">
-        <div className="relative aspect-[4/5]">
-          <Image src="/catalogue/page-01.jpg" alt="WiseMelon product catalogue cover" fill sizes="(max-width: 768px) 74vw, 420px" className="object-cover" priority />
-        </div>
-      </div>
-
-      <div
-        className="animate-float absolute bottom-20 left-1/2 z-20 w-[78%] -translate-x-1/2 rounded-[1.8rem] border border-slate-200 bg-white/95 p-5 shadow-2xl shadow-slate-950/20 backdrop-blur"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="inline-flex rounded-full bg-[#0B1F3A]/6 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#0B1F3A]">Print ID Craft</div>
-            <h3 className="mt-3 text-xl font-extrabold tracking-tight text-slate-950">Multi-school ID portal</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Manage students, ID layouts and print-ready batches from one organized workflow.</p>
-          </div>
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#F7C948] text-slate-950">
-            <IdCard size={24} />
-          </div>
-        </div>
-        <div className="mt-5 grid grid-cols-3 gap-2">
-          {['Schools', 'Cards', 'Print'].map((item) => (
-            <div key={item} className="rounded-2xl bg-slate-50 px-3 py-2 text-center text-[11px] font-bold text-slate-600">
-              {item}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {HERO_PRODUCTS.map(({ title, Icon, className }, index) => (
-        <div
-          key={title}
-          style={{ animationDelay: `${0.3 + index * 0.08}s` }}
-          className={cn('animate-slide-up-fade opacity-0 absolute z-30 hidden rounded-2xl border border-white/50 bg-white/90 p-3 shadow-xl shadow-slate-950/10 backdrop-blur sm:block', className)}
-        >
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F7C948]/15 text-[#B7791F]">
-              <Icon size={18} />
-            </span>
-            <span className="text-xs font-extrabold text-slate-900">{title}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function Hero() {
   return (
-    <section className="relative overflow-hidden bg-[radial-gradient(circle_at_15%_20%,rgba(11,31,58,0.10),transparent_28%),radial-gradient(circle_at_90%_5%,rgba(247,201,72,0.18),transparent_24%),linear-gradient(180deg,#F8FAFC_0%,#FFFFFF_100%)]">
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.035)_1px,transparent_1px)] bg-[size:44px_44px]" />
-      <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-5 py-16 md:px-8 md:py-20 lg:grid-cols-12 lg:py-24">
-        <div
-          className="animate-slide-up-fade opacity-0 lg:col-span-6"
-        >
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#0B1F3A]/15 bg-white/80 px-3 py-1.5 text-xs font-bold text-[#0B1F3A] shadow-sm">
-            <Sparkles size={14} className="text-[#F7C948]" />
-            WiseMelon Ventures Pvt. Ltd. · Pune
-          </div>
-          <h1 className="mt-6 max-w-3xl text-5xl font-semibold leading-[0.95] tracking-[-0.065em] text-slate-950 md:text-6xl lg:text-7xl">
-            School essentials, corporate gifting and ID card portals for institutions.
-          </h1>
-          <p className="mt-6 max-w-2xl text-base leading-8 text-slate-600 md:text-lg">
-            Premium, dependable supplies for schools and corporate teams, backed by Print ID Craft for multi-school ID card management and print-ready workflows.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <PrimaryButton href="#contact">
-              Contact sales <ArrowRight size={17} className="transition-transform group-hover:translate-x-0.5" />
-            </PrimaryButton>
-            <SecondaryButton href="/wisemelon-catalogue.pdf" download>
-              <Download size={17} /> Download catalogue
-            </SecondaryButton>
-          </div>
-          <div
-            className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4"
-          >
-            {STATS.map((stat, index) => (
-              <div
-                key={stat.label}
-                style={{ animationDelay: `${0.28 + index * 0.1}s` }}
-                className="animate-slide-up-fade opacity-0 rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm backdrop-blur"
-              >
-                <div className="text-2xl font-black tracking-tight text-slate-950">{stat.value}</div>
-                <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.13em] text-slate-500">{stat.label}</div>
-              </div>
-            ))}
+    <section className="bg-white py-16 text-center">
+      <div className="mx-auto max-w-6xl px-5">
+        <h1 className="font-serif text-5xl md:text-6xl lg:text-[5.5rem] font-bold tracking-tight text-slate-900 mx-auto max-w-5xl leading-[1.1]">
+          School essentials & corporate gifting
+        </h1>
+        <div className="mt-8 flex flex-col md:flex-row items-center justify-center gap-4 text-xl font-medium text-slate-800">
+          <span className="font-bold">WiseMelon Ventures</span>
+          <span className="hidden md:inline text-slate-300">/</span>
+          <span>Institutions Portal</span>
+        </div>
+        
+        <div className="mt-16 relative">
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
+            <div className="text-left w-full lg:w-64 z-10 hidden lg:block">
+               <h3 className="font-serif text-4xl font-bold text-slate-900">44,222+</h3>
+               <p className="mt-3 text-sm text-slate-500 leading-relaxed font-sans">
+                 Our company offers an extensive selection of institutional products available through our reliable supply chain.
+               </p>
+            </div>
+            
+            <div className="relative w-full max-w-2xl mx-auto z-0 animate-slide-up-fade">
+              <Image src="/hero-collage.png" alt="Collage" width={1000} height={750} className="w-full h-auto object-cover hover:scale-[1.02] transition-transform duration-700" priority />
+            </div>
+            
+            <div className="text-left w-full lg:w-64 z-10 hidden lg:block">
+               <h3 className="font-serif text-4xl font-bold text-slate-900">88,555+</h3>
+               <p className="mt-3 text-sm text-slate-500 leading-relaxed font-sans">
+                 With an impressive collection of products, our portal stands as a comprehensive hub for procurement.
+               </p>
+            </div>
           </div>
         </div>
-        <div className="lg:col-span-6">
-          <HeroVisual />
+        
+        <div className="mt-20 grid grid-cols-2 md:grid-cols-4 border-t border-l border-slate-200">
+           <a href="#about" className="p-6 md:p-8 border-b border-r border-slate-200 text-sm font-bold text-slate-800 hover:bg-slate-50 transition-colors flex items-center justify-center text-center">Discover WiseMelon</a>
+           <a href="/wisemelon-catalogue.pdf" download className="p-6 md:p-8 border-b border-r border-slate-200 text-sm font-bold text-slate-800 hover:bg-slate-50 transition-colors flex items-center justify-center text-center">Download Catalogue</a>
+           <a href="#products" className="p-6 md:p-8 border-b border-r border-slate-200 text-sm font-bold text-slate-800 hover:bg-slate-50 transition-colors flex items-center justify-center text-center">Product Range</a>
+           <a href="/login" className="p-6 md:p-8 border-b border-r border-slate-200 text-sm font-bold text-slate-800 hover:bg-slate-50 transition-colors flex items-center justify-center text-center">Login to Portal</a>
         </div>
       </div>
     </section>
@@ -447,7 +390,7 @@ function About() {
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-5 md:px-8 lg:grid-cols-12">
         <Reveal className="lg:col-span-6">
           <SectionKicker>About WiseMelon</SectionKicker>
-          <h2 className="mt-5 max-w-2xl text-4xl font-black leading-tight tracking-[-0.045em] text-slate-950 md:text-5xl">
+          <h2 className="mt-5 max-w-2xl font-serif text-4xl font-bold leading-tight tracking-tight text-slate-900 md:text-5xl">
             Procurement-friendly supply with a cleaner branding process.
           </h2>
           <div className="mt-6 space-y-4 text-base leading-8 text-slate-600">
@@ -476,8 +419,8 @@ function About() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-black uppercase tracking-[0.16em] text-[#B7791F]">0{index + 1}</span>
-                      <h3 className="font-extrabold text-slate-950">{label}</h3>
+                      <span className="text-xs font-bold uppercase tracking-[0.16em] text-[#B7791F]">0{index + 1}</span>
+                      <h3 className="font-bold text-slate-900">{label}</h3>
                     </div>
                     <p className="mt-1 text-sm leading-6 text-slate-600">{value}</p>
                   </div>
@@ -505,8 +448,8 @@ function OfferCard({ title, subtitle, items, Icon, href, dark = false }: { title
         <div className={cn('flex h-14 w-14 items-center justify-center rounded-2xl', dark ? 'bg-[#F7C948] text-slate-950' : 'bg-[#0B1F3A]/6 text-[#0B1F3A]')}>
           <Icon size={26} />
         </div>
-        <div className={cn('mt-6 text-xs font-black uppercase tracking-[0.18em]', dark ? 'text-[#FFD76A]' : 'text-[#B7791F]')}>{subtitle}</div>
-        <h3 className="mt-2 text-2xl font-black tracking-[-0.035em]">{title}</h3>
+        <div className={cn('mt-6 text-xs font-bold uppercase tracking-[0.18em]', dark ? 'text-[#FFD76A]' : 'text-[#B7791F]')}>{subtitle}</div>
+        <h3 className="mt-2 font-serif text-2xl font-bold tracking-tight">{title}</h3>
         <ul className="mt-6 grid gap-3">
           {items.map((item) => (
             <li key={item} className={cn('flex items-start gap-3 text-sm leading-6', dark ? 'text-white/75' : 'text-slate-600')}>
@@ -515,7 +458,7 @@ function OfferCard({ title, subtitle, items, Icon, href, dark = false }: { title
             </li>
           ))}
         </ul>
-        <a href={href} className={cn('mt-7 inline-flex items-center gap-2 text-sm font-extrabold', dark ? 'text-[#FFD76A]' : 'text-[#0B1F3A]')}>
+        <a href={href} className={cn('mt-7 inline-flex items-center gap-2 text-sm font-bold', dark ? 'text-[#FFD76A]' : 'text-[#0B1F3A]')}>
           {dark ? 'View corporate solutions' : 'View school solutions'} <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
         </a>
       </div>
@@ -529,7 +472,7 @@ function Services() {
       <div className="mx-auto max-w-7xl px-5 md:px-8">
         <Reveal className="mx-auto max-w-3xl text-center">
           <SectionKicker center>What we offer</SectionKicker>
-          <h2 className="mt-5 text-4xl font-black leading-tight tracking-[-0.045em] text-slate-950 md:text-5xl">Two core verticals, designed for institutional buyers.</h2>
+          <h2 className="mt-5 font-serif text-4xl font-bold leading-tight tracking-tight text-slate-900 md:text-5xl">Two core verticals, designed for institutional buyers.</h2>
           <p className="mt-5 text-base leading-8 text-slate-600">School essentials and corporate merchandise stay organized under one reliable procurement partner.</p>
         </Reveal>
         <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -552,7 +495,7 @@ function ProductRange() {
         <Reveal className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div className="max-w-3xl">
             <SectionKicker>Product range</SectionKicker>
-            <h2 className="mt-5 text-4xl font-black leading-tight tracking-[-0.045em] text-slate-950 md:text-5xl">A focused catalogue for schools, companies and teams.</h2>
+            <h2 className="mt-5 font-serif text-4xl font-bold leading-tight tracking-tight text-slate-900 md:text-5xl">A focused catalogue for schools, companies and teams.</h2>
           </div>
           <SecondaryButton href="/wisemelon-catalogue.pdf" download>
             <Download size={17} /> Download full product list
@@ -571,7 +514,7 @@ function ProductRange() {
                     </div>
                     <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 shadow-sm transition-colors group-hover:border-[#F7C948]/30 group-hover:text-[#B7791F]">Product</span>
                   </div>
-                  <h3 className="mt-8 text-xl font-black tracking-tight text-slate-950">{name}</h3>
+                  <h3 className="mt-8 font-serif text-xl font-bold tracking-tight text-slate-950">{name}</h3>
                   <p className="mt-3 text-sm leading-6 text-slate-600">{desc}</p>
                 </div>
               </div>
@@ -589,7 +532,7 @@ function UseCases() {
       <div className="mx-auto max-w-7xl px-5 md:px-8">
         <Reveal className="mx-auto max-w-3xl text-center">
           <SectionKicker center>Use cases</SectionKicker>
-          <h2 className="mt-5 text-4xl font-black leading-tight tracking-[-0.045em] text-slate-950 md:text-5xl">Built around how institutions actually buy.</h2>
+          <h2 className="mt-5 font-serif text-4xl font-bold leading-tight tracking-tight text-slate-900 md:text-5xl">Built around how institutions actually buy.</h2>
         </Reveal>
         <div className="mt-12 grid grid-cols-1 gap-5 lg:grid-cols-3">
           {USE_CASES.map(({ label, title, desc, Icon, points }, index) => (
@@ -601,9 +544,9 @@ function UseCases() {
                     <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0B1F3A] text-white shadow-md transition-transform duration-500 group-hover:scale-110">
                       <Icon size={24} />
                     </div>
-                    <div className="text-xs font-black uppercase tracking-[0.18em] text-[#B7791F]">{label}</div>
+                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-[#B7791F]">{label}</div>
                   </div>
-                  <h3 className="mt-8 text-3xl font-black tracking-[-0.035em] text-slate-950">{title}</h3>
+                  <h3 className="mt-8 font-serif text-3xl font-bold tracking-tight text-slate-900">{title}</h3>
                   <p className="mt-4 text-base leading-7 text-slate-600">{desc}</p>
                   <ul className="mt-6 grid gap-3">
                     {points.map((point) => (
@@ -616,7 +559,7 @@ function UseCases() {
                     ))}
                   </ul>
                   <div className="mt-auto pt-8">
-                    <a href="#contact" className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-4 py-2 text-sm font-extrabold text-[#0B1F3A] transition-colors hover:bg-slate-100">
+                    <a href="#contact" className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-4 py-2 text-sm font-bold text-[#0B1F3A] transition-colors hover:bg-slate-100">
                       Talk to us about this <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
                     </a>
                   </div>
@@ -636,7 +579,7 @@ function WhyChooseUs() {
       <div className="mx-auto max-w-7xl px-5 md:px-8">
         <Reveal className="mx-auto max-w-3xl text-center">
           <SectionKicker center>Why choose us</SectionKicker>
-          <h2 className="mt-5 text-4xl font-black leading-tight tracking-[-0.045em] text-slate-950 md:text-5xl">Reliable supply, clean output and support after delivery.</h2>
+          <h2 className="mt-5 font-serif text-4xl font-bold leading-tight tracking-tight text-slate-900 md:text-5xl">Reliable supply, clean output and support after delivery.</h2>
         </Reveal>
         <div className="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {TRUST_POINTS.map(({ title, desc, Icon }, index) => (
@@ -645,7 +588,7 @@ function WhyChooseUs() {
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-[#0B1F3A] shadow-sm ring-1 ring-slate-200/50 transition-colors duration-500 group-hover:bg-[#F7C948] group-hover:text-slate-950 group-hover:ring-[#F7C948]">
                   <Icon size={24} />
                 </div>
-                <h3 className="mt-8 text-xl font-black tracking-tight text-slate-950">{title}</h3>
+                <h3 className="mt-8 font-serif text-xl font-bold tracking-tight text-slate-950">{title}</h3>
                 <p className="mt-3 text-sm leading-6 text-slate-600">{desc}</p>
               </div>
             </Reveal>
@@ -658,36 +601,33 @@ function WhyChooseUs() {
 
 function CatalogueCTA() {
   return (
-    <section id="catalogue" className="relative scroll-mt-24 overflow-hidden bg-[#0B1F3A] py-20 text-white md:py-32">
-      <div className="absolute left-0 top-0 h-full w-full opacity-20" style={{ backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)', backgroundSize: '4rem 4rem' }} />
-      <div className="absolute right-[10%] top-[20%] h-[40rem] w-[40rem] rounded-full bg-[#F7C948]/10 blur-[100px]" />
-      <div className="absolute bottom-[-10%] left-[-10%] h-[30rem] w-[30rem] rounded-full bg-[#4169E1]/20 blur-[100px]" />
-      
-      <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 px-5 md:px-8 lg:grid-cols-12">
-        <Reveal className="lg:col-span-7">
-          <SectionKicker light>Catalogue & demo</SectionKicker>
-          <h2 className="mt-5 text-4xl font-black leading-tight tracking-[-0.045em] md:text-5xl">Explore the full catalogue and discuss your next supply requirement.</h2>
-          <p className="mt-5 max-w-2xl text-base leading-8 text-white/70">
-            Download the product catalogue for a quick overview, or contact sales for school procurement, corporate gifting or a Print ID Craft walkthrough.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <PrimaryButton href="/wisemelon-catalogue.pdf" className="bg-[#F7C948] hover:bg-[#FFD76A]" download>
-              <Download size={17} /> Download catalogue (PDF)
-            </PrimaryButton>
-            <PrimaryButton href="https://wa.me/919881877607" className="bg-white text-[#0B1F3A] shadow-white/10 hover:bg-slate-100" external>
-              <MessageCircle size={17} /> Contact sales
-            </PrimaryButton>
-          </div>
-        </Reveal>
-        <Reveal className="lg:col-span-5" delay={90}>
-          <div className="grid grid-cols-3 gap-3">
-            {['/catalogue/page-04.jpg', '/catalogue/page-10.jpg', '/catalogue/page-18.jpg'].map((src, index) => (
-              <div key={src} className={cn('relative aspect-[3/4] overflow-hidden rounded-3xl border border-white/10 shadow-2xl shadow-slate-950/30', index === 1 && 'translate-y-8')}>
-                <Image src={src} alt="WiseMelon catalogue product preview" fill sizes="(max-width: 768px) 30vw, 180px" className="object-cover" />
-              </div>
-            ))}
-          </div>
-        </Reveal>
+    <section id="catalogue" className="bg-[#0B1F3A] py-24 text-white">
+      <div className="mx-auto max-w-6xl px-5 flex flex-col md:flex-row gap-16">
+        <div className="flex-1">
+          <Reveal>
+            <h2 className="font-serif text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.1] tracking-tight">
+              Want To Partner With WiseMelon?
+            </h2>
+            <div className="mt-12 flex gap-8 items-start">
+              <span className="font-serif text-[8rem] leading-[0.7] text-[#F7C948]">W</span>
+              <p className="text-sm leading-8 text-white/80 max-w-sm mt-3">
+                We cordially invite you to seize the opportunity to partner with WiseMelon Ventures. Our portal is now open, providing you with a chance to streamline your procurement. Whether you are a school administrator or a corporate buyer, we warmly welcome you to join our platform.
+              </p>
+            </div>
+          </Reveal>
+        </div>
+        <div className="flex-1 flex flex-col justify-center">
+          <Reveal delay={80}>
+             <p className="text-2xl md:text-3xl font-light leading-relaxed mb-10 max-w-md">
+               Don't miss this extraordinary chance to be part of WiseMelon! Take the first step towards securing your supply chain by contacting us now.
+             </p>
+             <div>
+               <a href="https://wa.me/919881877607" target="_blank" rel="noopener noreferrer" className="inline-block bg-[#F7C948] text-slate-900 px-8 py-4 font-bold text-sm tracking-wide hover:bg-[#FFD76A] transition-colors">
+                 Become a partner
+               </a>
+             </div>
+          </Reveal>
+        </div>
       </div>
     </section>
   );
@@ -706,7 +646,7 @@ function Footer() {
                 <Image src="/wisemelon-logo-original.png" alt="WiseMelon Ventures Pvt. Ltd." fill sizes="56px" className="object-cover" />
               </div>
               <div>
-                <div className="text-xl font-black tracking-tight">WiseMelon Ventures Pvt. Ltd.</div>
+                <div className="font-serif text-xl font-bold tracking-tight">WiseMelon Ventures Pvt. Ltd.</div>
                 <div className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-[#FFD76A]">Pune, India</div>
               </div>
             </div>
@@ -716,7 +656,7 @@ function Footer() {
           </div>
 
           <div className="lg:col-span-3">
-            <h3 className="text-xs font-black uppercase tracking-[0.18em] text-[#FFD76A]">Quick links</h3>
+            <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-[#FFD76A]">Quick links</h3>
             <div className="mt-5 grid gap-3">
               {NAV_LINKS.map((link) => (
                 <a key={link.href} href={link.href} className="text-sm font-semibold text-white/60 transition-colors hover:text-white">
@@ -730,7 +670,7 @@ function Footer() {
           </div>
 
           <div className="lg:col-span-4">
-            <h3 className="text-xs font-black uppercase tracking-[0.18em] text-[#FFD76A]">Contact details</h3>
+            <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-[#FFD76A]">Contact details</h3>
             <div className="mt-5 grid gap-4 text-sm text-white/70">
               <div className="flex items-start gap-3">
                 <Phone size={17} className="mt-0.5 shrink-0 text-[#FFD76A]" />
