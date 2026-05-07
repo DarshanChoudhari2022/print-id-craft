@@ -6,8 +6,8 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true, 
   },
-  // SWC minify for faster builds and smaller bundles
-  swcMinify: true,
+  // Disable SWC Minify due to SyntaxError in onnxruntime-web pre-compiled code
+  swcMinify: false,
   // Performance: enable React strict mode (catches bugs early)
   reactStrictMode: true,
   // Performance: compress responses
