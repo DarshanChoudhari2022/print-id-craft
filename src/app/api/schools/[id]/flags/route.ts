@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { storageUpload, storagePublicUrl, ensureBucket } from "@/lib/storage"
+import { storageUpload, storagePublicUrl, ensureBucket, storageList } from "@/lib/storage"
 
 const BUCKET = "student-photos"
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB per flag image
@@ -34,31 +34,63 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       select: { formData: true },
     })
 
-    const flagColors = new Set<string>()
+    // Map of safeName -> displayName (preserves original casing from student data)
+    const colorMap = new Map<string, string>()
     for (const s of students) {
       const fd = s.formData as Record<string, string>
       const color = fd?.flagColor || fd?.["Flag Color"] || fd?.["flag_color"] || fd?.["House"] || fd?.["house"] || fd?.["Colour"] || fd?.["colour"] || ""
-      if (color) flagColors.add(color.trim())
+      const trimmed = color.trim()
+      if (trimmed) {
+        const safe = trimmed.toLowerCase().replace(/[^a-z0-9]/g, "_")
+        if (!colorMap.has(safe)) colorMap.set(safe, trimmed)
+      }
     }
 
-    // Build flag URLs by convention: flags/{schoolId}/{colorName}.{ext}
-    const flags: Array<{ color: string; imageUrl: string | null }> = []
-    const EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "bmp"]
-    for (const color of Array.from(flagColors)) {
-      const safeName = color.toLowerCase().replace(/[^a-z0-9]/g, "_")
-      // Try each extension and return the first one that has a URL
-      // Since we store with upsert, only one extension file should exist per color
-      let flagUrl: string | null = null
-      for (const ext of EXTENSIONS) {
-        const path = `flags/${schoolId}/${safeName}.${ext}`
-        const url = storagePublicUrl(BUCKET, path)
-        if (url) {
-          flagUrl = url
-          break
+    // Also list any flag images already uploaded for this school (orphan flags
+    // — uploaded before students were imported). Add them as detected colors so
+    // the UI shows them even when no students exist yet.
+    try {
+      const { data: storedFiles } = await storageList(BUCKET, `flags/${schoolId}`)
+      for (const f of storedFiles || []) {
+        const base = f.name.replace(/\.[^.]+$/, "").trim()
+        if (!base) continue
+        const safe = base.toLowerCase().replace(/[^a-z0-9]/g, "_")
+        if (!colorMap.has(safe)) {
+          // Capitalize first letter for display
+          const display = base.charAt(0).toUpperCase() + base.slice(1)
+          colorMap.set(safe, display)
         }
       }
-      flags.push({ color, imageUrl: flagUrl })
+    } catch (e) {
+      // listing is best-effort
     }
+
+    // Build flag URLs by convention: flags/{schoolId}/{safeName}.{ext}
+    const flags: Array<{ color: string; imageUrl: string | null }> = []
+    const EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "bmp"]
+    const storedNames = new Set<string>()
+    try {
+      const { data: storedFiles } = await storageList(BUCKET, `flags/${schoolId}`)
+      for (const f of storedFiles || []) storedNames.add(f.name)
+    } catch {}
+
+    for (const [safeName, displayName] of Array.from(colorMap.entries())) {
+      let flagUrl: string | null = null
+      for (const ext of EXTENSIONS) {
+        const fileName = `${safeName}.${ext}`
+        if (storedNames.size > 0 ? storedNames.has(fileName) : true) {
+          const path = `flags/${schoolId}/${fileName}`
+          const url = storagePublicUrl(BUCKET, path)
+          if (url && (storedNames.size === 0 || storedNames.has(fileName))) {
+            flagUrl = url
+            break
+          }
+        }
+      }
+      flags.push({ color: displayName, imageUrl: flagUrl })
+    }
+
+    const flagColors = Array.from(colorMap.values())
 
     return NextResponse.json({
       success: true,

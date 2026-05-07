@@ -1416,7 +1416,7 @@ export default function JpgTemplateMapper({
           </div>
 
           {/* Canvas Area with Zoom */}
-          <div style={{ overflow: "auto", padding: 16, maxHeight: "calc(100vh - 200px)", background: "#0f172a", display: "flex", justifyContent: "center", alignItems: "flex-start" }}>
+          <div style={{ overflowX: "auto", overflowY: "visible", padding: 16, background: "#0f172a", display: "flex", justifyContent: "center", alignItems: "flex-start" }}>
           <div
             ref={containerRef}
             style={{

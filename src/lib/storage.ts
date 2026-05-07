@@ -7,7 +7,7 @@
  * All API routes should import from here instead of directly from supabase.ts
  */
 
-import { isOfflineMode, localUpload, localDelete, localPublicUrl } from "./local-storage"
+import { isOfflineMode, localUpload, localDelete, localPublicUrl, localList } from "./local-storage"
 
 // Re-export everything from supabase for backward compatibility
 export { supabase, supabaseClient, validateImageFile } from "./supabase"
@@ -56,6 +56,23 @@ export function storagePublicUrl(bucket: string, filePath: string): string {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
   return `${supabaseUrl}/storage/v1/object/public/${bucket}/${filePath}`
+}
+
+/**
+ * List files in a bucket directory
+ */
+export async function storageList(
+  bucket: string,
+  dirPath: string = ""
+): Promise<{ data: { name: string }[] | null; error: any }> {
+  if (isOfflineMode()) {
+    return localList(bucket, dirPath)
+  }
+
+  const { supabase } = await import("./supabase")
+  const { data, error } = await supabase.storage.from(bucket).list(dirPath, { limit: 1000 })
+  if (error) return { data: null, error }
+  return { data: (data || []).map(d => ({ name: d.name })), error: null }
 }
 
 /**
