@@ -1091,12 +1091,11 @@ export default function JpgTemplateMapper({
       <style>{`
         @media (max-width: 900px) {
           .mapper-sidebar {
-            position: static !important;
-            max-height: none !important;
-            width: 100% !important;
-            padding-right: 0 !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
           }
           .mapper-layout {
+            flex-direction: column !important;
             gap: 12px !important;
           }
         }
@@ -1790,7 +1789,7 @@ export default function JpgTemplateMapper({
         {/* Right: Sidebar */}
         <div
           className="mapper-sidebar"
-          style={{ flex: "1 1 320px", maxWidth: "100%", display: "flex", flexDirection: "column", gap: 16, position: "sticky", top: 20, maxHeight: "calc(100vh - 40px)", overflowY: "auto", paddingRight: 4 }}
+          style={{ flex: "1 1 320px", maxWidth: 340, minWidth: 280, display: "flex", flexDirection: "column", gap: 16 }}
         >
 
           {/* Card Settings Panel */}
