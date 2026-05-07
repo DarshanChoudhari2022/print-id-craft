@@ -1416,18 +1416,19 @@ export default function JpgTemplateMapper({
           </div>
 
           {/* Canvas Area with Zoom */}
-          <div style={{ overflow: "auto", padding: 16, maxHeight: "calc(100vh - 200px)" }}>
+          <div style={{ overflow: "auto", padding: 16, maxHeight: "calc(100vh - 200px)", background: "#0f172a", display: "flex", justifyContent: "center", alignItems: "flex-start" }}>
           <div
             ref={containerRef}
             style={{
               position: "relative",
-              display: "inline-block",
+              display: "block",
               width: `${zoomLevel}%`,
-              background: "#f8fafc",
-              border: "1px dashed #cbd5e1",
-              borderRadius: 12,
+              background: "transparent",
+              border: "none",
+              borderRadius: 8,
               overflow: "hidden",
               transformOrigin: "top left",
+              flexShrink: 0,
             }}
             onDragOver={(e) => {
               e.preventDefault()
