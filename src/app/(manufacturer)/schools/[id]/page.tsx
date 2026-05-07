@@ -572,22 +572,27 @@ export default function SchoolDetailPage() {
     } catch (err) { console.error(err) }
   }
 
-  const handleFlagUpload = async (color: string, file: File) => {
+  const handleFlagUpload = async (color: string, file: File, opts: { silent?: boolean } = {}): Promise<{ ok: boolean; error?: string }> => {
     setFlagUploading(color)
     try {
       const fd = new FormData()
       fd.append("file", file)
       fd.append("color", color)
       const res = await fetch(`/api/schools/${schoolId}/flags`, { method: "POST", body: fd })
-      const data = await res.json()
-      if (data.success) {
-        toast.success(`Flag image uploaded for "${color}"!`)
+      let data: any = null
+      try { data = await res.json() } catch { /* non-JSON response */ }
+      if (res.ok && data?.success) {
+        if (!opts.silent) toast.success(`Flag image uploaded for "${color}"!`)
         setFlagImages(prev => ({ ...prev, [color]: data.data.imageUrl }))
-      } else {
-        toast.error(data.error || "Flag upload failed")
+        return { ok: true }
       }
-    } catch (err) {
-      toast.error("Flag upload failed")
+      const errMsg = data?.error || `Flag upload failed (HTTP ${res.status})`
+      if (!opts.silent) toast.error(errMsg)
+      return { ok: false, error: errMsg }
+    } catch (err: any) {
+      const errMsg = err?.message || "Flag upload failed"
+      if (!opts.silent) toast.error(errMsg)
+      return { ok: false, error: errMsg }
     } finally {
       setFlagUploading('')
     }
@@ -600,6 +605,7 @@ export default function SchoolDetailPage() {
   const handleBulkFlagUpload = async (files: FileList) => {
     if (!files.length) return
     let uploaded = 0, failed = 0
+    const errors: string[] = []
 
     for (const file of Array.from(files)) {
       const baseName = file.name.replace(/\.[^.]+$/, "").trim()
@@ -611,16 +617,20 @@ export default function SchoolDetailPage() {
       // Otherwise create a new color from the filename
       if (!colorName) colorName = baseName.charAt(0).toUpperCase() + baseName.slice(1)
 
-      try {
-        await handleFlagUpload(colorName, file)
+      const result = await handleFlagUpload(colorName, file, { silent: true })
+      if (result.ok) {
         uploaded++
-      } catch {
+      } else {
         failed++
+        if (result.error && !errors.includes(result.error)) errors.push(result.error)
       }
     }
 
     if (uploaded > 0) toast.success(`${uploaded} flag image(s) uploaded!`)
-    if (failed > 0) toast.error(`${failed} file(s) could not be uploaded`)
+    if (failed > 0) {
+      const detail = errors.length > 0 ? ` ${errors[0]}` : ''
+      toast.error(`${failed} file(s) failed.${detail}`)
+    }
     // Refresh to pick up any newly created colors
     await fetchFlags()
   }

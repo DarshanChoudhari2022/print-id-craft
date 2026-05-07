@@ -46,46 +46,46 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       }
     }
 
-    // Also list any flag images already uploaded for this school (orphan flags
-    // — uploaded before students were imported). Add them as detected colors so
-    // the UI shows them even when no students exist yet.
+    // List any flag images already uploaded for this school. This lets the UI
+    // show flags uploaded before students are imported (orphan flags) and also
+    // gives us the canonical filename → URL mapping below.
+    const storedNames = new Set<string>()
     try {
-      const { data: storedFiles } = await storageList(BUCKET, `flags/${schoolId}`)
+      const { data: storedFiles, error: listError } = await storageList(BUCKET, `flags/${schoolId}`)
+      if (listError) console.error("Flag list error:", listError)
       for (const f of storedFiles || []) {
+        storedNames.add(f.name)
         const base = f.name.replace(/\.[^.]+$/, "").trim()
         if (!base) continue
         const safe = base.toLowerCase().replace(/[^a-z0-9]/g, "_")
         if (!colorMap.has(safe)) {
-          // Capitalize first letter for display
           const display = base.charAt(0).toUpperCase() + base.slice(1)
           colorMap.set(safe, display)
         }
       }
     } catch (e) {
-      // listing is best-effort
+      console.error("Flag list exception:", e)
     }
 
     // Build flag URLs by convention: flags/{schoolId}/{safeName}.{ext}
     const flags: Array<{ color: string; imageUrl: string | null }> = []
     const EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "bmp"]
-    const storedNames = new Set<string>()
-    try {
-      const { data: storedFiles } = await storageList(BUCKET, `flags/${schoolId}`)
-      for (const f of storedFiles || []) storedNames.add(f.name)
-    } catch {}
 
     for (const [safeName, displayName] of Array.from(colorMap.entries())) {
       let flagUrl: string | null = null
-      for (const ext of EXTENSIONS) {
-        const fileName = `${safeName}.${ext}`
-        if (storedNames.size > 0 ? storedNames.has(fileName) : true) {
-          const path = `flags/${schoolId}/${fileName}`
-          const url = storagePublicUrl(BUCKET, path)
-          if (url && (storedNames.size === 0 || storedNames.has(fileName))) {
-            flagUrl = url
+      // Prefer an extension we know is on disk; if listing failed, fall back to
+      // returning the .png URL so the public URL still resolves if it exists.
+      if (storedNames.size > 0) {
+        for (const ext of EXTENSIONS) {
+          const fileName = `${safeName}.${ext}`
+          if (storedNames.has(fileName)) {
+            flagUrl = storagePublicUrl(BUCKET, `flags/${schoolId}/${fileName}`)
             break
           }
         }
+      } else {
+        // Listing unavailable — fall back to a guessed PNG URL
+        flagUrl = storagePublicUrl(BUCKET, `flags/${schoolId}/${safeName}.png`)
       }
       flags.push({ color: displayName, imageUrl: flagUrl })
     }
@@ -139,8 +139,20 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: "File too large. Maximum 5MB." }, { status: 400 })
     }
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: "Invalid file type. Allowed: JPEG, PNG, WebP, GIF, BMP" }, { status: 400 })
+    // Some browsers omit the MIME type for certain files. Fall back to deriving
+    // the MIME from the extension, and accept the file if EITHER source matches
+    // an allowed type.
+    const ext = file.name.split(".").pop()?.toLowerCase() || ""
+    const extToMime: Record<string, string> = {
+      jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+      webp: "image/webp", gif: "image/gif", bmp: "image/bmp",
+    }
+    const inferredType = extToMime[ext] || ""
+    const effectiveType = file.type || inferredType
+    if (!ALLOWED_TYPES.includes(effectiveType)) {
+      return NextResponse.json({
+        error: `Invalid file type "${file.type || ext || "unknown"}". Allowed: JPEG, PNG, WebP, GIF, BMP`,
+      }, { status: 400 })
     }
 
     // Ensure bucket
@@ -151,17 +163,20 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
-    const ext = file.name.split(".").pop()?.toLowerCase() || "png"
     const safeName = colorName.toLowerCase().replace(/[^a-z0-9]/g, "_")
-    const filePath = `flags/${schoolId}/${safeName}.${ext}`
+    const finalExt = ext || "png"
+    const filePath = `flags/${schoolId}/${safeName}.${finalExt}`
 
     const { error: uploadError } = await storageUpload(BUCKET, filePath, buffer, {
-      contentType: file.type,
+      contentType: effectiveType,
       upsert: true,
     })
 
     if (uploadError) {
-      return NextResponse.json({ error: `Upload failed: ${uploadError.message}` }, { status: 500 })
+      console.error(`Flag upload to ${filePath} failed:`, uploadError)
+      return NextResponse.json({
+        error: `Upload failed: ${uploadError.message || "storage error"}`,
+      }, { status: 500 })
     }
 
     const publicUrl = storagePublicUrl(BUCKET, filePath)
