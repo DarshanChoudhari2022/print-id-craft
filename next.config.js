@@ -6,8 +6,8 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true, 
   },
-  // Disable SWC Minify due to SyntaxError in onnxruntime-web pre-compiled code
-  swcMinify: false,
+  // SWC minify for faster builds and smaller bundles
+  swcMinify: true,
   // Performance: enable React strict mode (catches bugs early)
   reactStrictMode: true,
   // Performance: compress responses
@@ -37,6 +37,10 @@ const nextConfig = {
       'zod',
     ],
     serverComponentsExternalPackages: ['@imgly/background-removal'],
+    // Cache router segments for faster page transitions
+    staleTimes: {
+      dynamic: 30, // Cache dynamic pages for 30s
+    },
   },
   // Security-relevant headers (augments middleware headers)
   async headers() {

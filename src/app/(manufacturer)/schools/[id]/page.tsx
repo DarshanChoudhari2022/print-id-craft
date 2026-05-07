@@ -172,7 +172,10 @@ export default function SchoolDetailPage() {
   }
 
   useEffect(() => {
-    Promise.all([fetchSchool(), fetchClasses(), fetchTemplate(), fetchStudents(), fetchBatches(), fetchFlags()]).finally(() => setLoading(false))
+    // Load only essential data first (school info, classes, template) for fast initial render
+    Promise.all([fetchSchool(), fetchClasses(), fetchTemplate()]).finally(() => setLoading(false))
+    // Defer heavier data fetches slightly to avoid blocking initial render
+    setTimeout(() => { fetchStudents(); fetchFlags() }, 100)
   }, [schoolId])
 
   // Re-fetch students when filters/search change (but not on initial tab switch)
@@ -183,11 +186,12 @@ export default function SchoolDetailPage() {
       return
     }
     if (tab === "students") {
-      fetchStudents()
+      setTabLoading(true)
+      fetchStudents().finally(() => setTabLoading(false))
     }
   }, [statusFilter, classFilter, searchQuery])
 
-  // Only fetch when switching to a tab if data is empty
+  // Lazy-load tab data when switching tabs
   useEffect(() => {
     if (tab === "students" && students.length === 0 && !loading) {
       setTabLoading(true)

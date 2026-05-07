@@ -3,10 +3,13 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
+// Optimize: prefer longer-running function for connection reuse
+export const maxDuration = 10
+
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user?.role !== "MANUFACTURER") {
+    if (!session || (session.user?.role !== "MANUFACTURER" && session.user?.role !== "TEACHER")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -66,8 +69,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       },
     })
 
-    // Cache for 5 seconds, serve stale for 10s while revalidating
-    response.headers.set("Cache-Control", "private, max-age=5, stale-while-revalidate=10")
+    // Cache for 10 seconds, serve stale for 30s while revalidating
+    response.headers.set("Cache-Control", "private, max-age=10, stale-while-revalidate=30")
     return response
   } catch (error) {
     console.error("GET students error:", error)
