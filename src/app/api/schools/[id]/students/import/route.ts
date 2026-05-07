@@ -134,6 +134,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     labelToKey["sr. no."] = "srNo"
     labelToKey["s.no"] = "srNo"
 
+    // GR No / Registration number aliases
+    labelToKey["gr no"] = "grNo"
+    labelToKey["gr no."] = "grNo"
+    labelToKey["gr. no."] = "grNo"
+    labelToKey["gr number"] = "grNo"
+    labelToKey["grno"] = "grNo"
+    labelToKey["gr_no"] = "grNo"
+    labelToKey["registration no"] = "grNo"
+    labelToKey["registration no."] = "grNo"
+    labelToKey["reg no"] = "grNo"
+    labelToKey["reg no."] = "grNo"
+
     // Flag / House color aliases
     labelToKey["flag"] = "flagColor"
     labelToKey["flag color"] = "flagColor"
@@ -435,6 +447,52 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         chunk.forEach((s) => {
           importErrors.push({ row: s._row.rowNum, error: err?.message || "Batch insert failed" });
         });
+      }
+    }
+
+    // AUTO-SYNC: Update template fieldConfig to match Excel columns
+    // This ensures the template fields reflect exactly what was imported from the Excel sheet
+    if (createdStudents.length > 0 && excelHeaders.length > 0) {
+      try {
+        const newFieldConfig = excelHeaders
+          .filter(h => {
+            const n = h.toLowerCase().trim()
+            // Skip serial/row number columns and photo URL columns
+            return n !== "photo url" && n !== "photourl"
+          })
+          .map(h => {
+            const n = h.toLowerCase().trim()
+            const mappedKey = columnMap[h] || h.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "")
+            let formType = "text"
+            if (mappedKey === "phone" || n.includes("mobile") || n.includes("phone") || n.includes("contact")) {
+              formType = "tel"
+            }
+            return {
+              key: mappedKey,
+              label: h, // Keep original Excel column name as the label
+              type: formType,
+              required: mappedKey === "fullName",
+            }
+          })
+
+        await prisma.template.upsert({
+          where: { schoolId },
+          update: { fieldConfig: newFieldConfig },
+          create: {
+            schoolId,
+            frontLayout: [],
+            backLayout: [],
+            fieldConfig: newFieldConfig,
+            cardWidthMm: 85.6,
+            cardHeightMm: 54.0,
+            printDpi: 300,
+            orientation: "PORTRAIT",
+            fieldMappings: [],
+            photoBgColor: "#FFFFFF",
+          },
+        })
+      } catch (err: any) {
+        console.error("Failed to auto-sync template fieldConfig:", err?.message)
       }
     }
 

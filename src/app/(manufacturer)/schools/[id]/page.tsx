@@ -421,8 +421,9 @@ export default function SchoolDetailPage() {
         setImportStep("result")
         toast.success(`${data.data.imported} students imported!`)
         fetchStudents()
-        fetchSchool()
+        fetchSchool() // Refreshes template.fieldConfig (auto-synced from Excel columns)
         fetchClasses()
+        fetchTemplate() // Refresh template data for dynamic columns
       } else {
         toast.error(data.error || "Import failed")
       }
@@ -1074,89 +1075,120 @@ export default function SchoolDetailPage() {
 
             <div className="data-table-wrapper" style={{ overflowX: 'auto', position: 'relative', opacity: tabLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
               {tabLoading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, background: 'rgba(255,255,255,0.6)', borderRadius: 14 }}><div className="login-spinner" style={{ width: 28, height: 28, borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6' }} /></div>}
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Photo</th>
-                    <th>Serial No.</th>
-                    <th>Name</th>
-                    <th>Father No.</th>
-                    <th>Mother No.</th>
-                    <th>Class</th>
-                    <th>Status</th>
-                    <th>Teacher Comment</th>
-                    <th style={{ textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.map(s => {
-                    const fd = s.formData as any
-                    const studentName = fd.fullName || fd["Full Name"] || fd["Student Name"] || fd.Student_Name || fd.name || "—"
-                    const fatherNo = fd.fatherName || fd["Father"] || fd["Father Name"] || fd.father || fd.fatherPhone || fd.mob_father || fd["Mob.- Father -"] || "—"
-                    const motherNo = fd.motherName || fd["Mother"] || fd["Mother Name"] || fd.mother || fd.motherPhone || "—"
-                    const hasPhoto = !!s.photoUrl
-                    const missingFields = []
-                    if (!hasPhoto) missingFields.push("Photo")
-                    if (studentName === "—") missingFields.push("Name")
+              {(() => {
+                // Dynamic columns from template fieldConfig (synced from Excel import)
+                const fc = (school?.template?.fieldConfig || []) as Array<{ key: string; label: string; type: string; required: boolean }>
+                // Filter out class field (shown separately) and build display columns
+                const dataColumns = fc.filter(f => f.key !== "class" && f.key !== "classSection")
+                const hasDynamicColumns = dataColumns.length > 0
+                // Determine if any column is a photo ID column
+                const photoIdCol = dataColumns.find(f => f.key === "photoId" || f.label.toLowerCase().includes("photo"))
+                // Total columns: Photo + dynamic columns (or fallback) + Class + Status + Actions
+                const totalCols = 1 + (hasDynamicColumns ? dataColumns.length : 2) + 3
 
-                    return (
-                      <tr key={s.id}>
-                        <td>
-                          {s.photoUrl ? (
-                            <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', border: '2px solid #e2e8f0' }}>
-                              <img src={s.photoUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            </div>
-                          ) : (
-                            <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fef2f2', border: '2px dashed #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                              <div style={{ position: 'absolute', top: -2, right: -2, width: 10, height: 10, borderRadius: '50%', background: '#ef4444', border: '1.5px solid white' }} title="Photo missing" />
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: 13 }}>{s.serialNumber}</td>
-                        <td style={{ fontWeight: 500 }}>{studentName}</td>
-                        <td style={{ fontSize: 12, color: '#64748b' }}>{fatherNo}</td>
-                        <td style={{ fontSize: 12, color: '#64748b' }}>{motherNo}</td>
-                        <td>{s.class?.name || "—"}</td>
-                        <td>
-                          <span className={`status-badge ${
-                            s.status === 'APPROVED' ? 'status-approved' :
-                            s.status === 'FLAGGED' ? 'status-flagged' :
-                            s.status === 'PRINTED' ? 'status-review' :
-                            s.status === 'SUBMITTED' ? 'status-submitted' :
-                            'status-pending'
-                          }`}>{s.status}</span>
-                          {missingFields.length > 0 && <div style={{ fontSize: 10, color: '#ef4444', marginTop: 3, fontWeight: 600 }}>⚠ {missingFields.join(', ')}</div>}
-                          {s.flagNote && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>📌 {s.flagNote}</div>}
-                        </td>
-                        <td>
-                          {s.teacherComment ? (
-                            <div style={{ fontSize: 11, color: '#334155', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: '#eff6ff', padding: '4px 8px', borderRadius: 6, border: '1px solid #bfdbfe' }} title={s.teacherComment}>
-                              💬 {s.teacherComment}
-                            </div>
-                          ) : (
-                            <span style={{ fontSize: 11, color: '#cbd5e1' }}>—</span>
-                          )}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                            <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#6366f1', color: '#4f46e5' }} onClick={() => setSelectedStudent(s)}>👁 View</button>
-                            <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#22c55e', color: '#16a34a' }} onClick={() => handleStatusUpdate(s.id, "APPROVED")}>✓</button>
-                            {s.status === "FLAGGED" ? (
-                              <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#3b82f6', color: '#2563eb' }} onClick={() => handleUnflag(s.id)}>Unflag</button>
+                return (
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Photo</th>
+                      {hasDynamicColumns ? (
+                        dataColumns.map(col => <th key={col.key}>{col.label}</th>)
+                      ) : (
+                        <>
+                          <th>Serial No.</th>
+                          <th>Name</th>
+                        </>
+                      )}
+                      <th>Class</th>
+                      <th>Status</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {students.map(s => {
+                      const fd = s.formData as any
+                      const studentName = fd.fullName || fd["Full Name"] || fd["Student Name"] || fd.Student_Name || fd.name || "—"
+                      const hasPhoto = !!s.photoUrl
+                      const missingFields: string[] = []
+                      if (!hasPhoto) missingFields.push("Photo")
+                      if (studentName === "—") missingFields.push("Name")
+
+                      // Helper: get value for a field from formData
+                      const getFieldValue = (col: { key: string; label: string }) => {
+                        // Try mapped key first, then original Excel label, then label variations
+                        return fd[col.key] || fd[col.label] || fd[col.label.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "")] || ""
+                      }
+
+                      return (
+                        <tr key={s.id}>
+                          <td>
+                            {s.photoUrl ? (
+                              <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', border: '2px solid #e2e8f0' }}>
+                                <img src={s.photoUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              </div>
                             ) : (
-                              <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#ef4444', color: '#dc2626' }} onClick={() => handleFlag(s.id)}>🚩</button>
+                              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fef2f2', border: '2px dashed #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                <div style={{ position: 'absolute', top: -2, right: -2, width: 10, height: 10, borderRadius: '50%', background: '#ef4444', border: '1.5px solid white' }} title="Photo missing" />
+                              </div>
                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                  {students.length === 0 && (
-                    <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No students found</td></tr>
-                  )}
-                </tbody>
-              </table>
+                          </td>
+                          {hasDynamicColumns ? (
+                            dataColumns.map(col => {
+                              const val = getFieldValue(col)
+                              // For photoId columns, show the photo name from Excel
+                              const isPhotoIdCol = col.key === "photoId" || col.label.toLowerCase().includes("photo")
+                              return (
+                                <td key={col.key} style={{
+                                  fontSize: isPhotoIdCol ? 11 : 12,
+                                  fontFamily: isPhotoIdCol || col.key === "srNo" || col.key === "rollNo" || col.key === "GR_NO" ? 'monospace' : 'inherit',
+                                  fontWeight: col.key === "fullName" ? 500 : 'normal',
+                                  color: !val ? '#cbd5e1' : isPhotoIdCol ? '#6366f1' : '#334155',
+                                  maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                }}>
+                                  {val || "—"}
+                                </td>
+                              )
+                            })
+                          ) : (
+                            <>
+                              <td style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: 13 }}>{s.serialNumber}</td>
+                              <td style={{ fontWeight: 500 }}>{studentName}</td>
+                            </>
+                          )}
+                          <td>{s.class?.name || "—"}</td>
+                          <td>
+                            <span className={`status-badge ${
+                              s.status === 'APPROVED' ? 'status-approved' :
+                              s.status === 'FLAGGED' ? 'status-flagged' :
+                              s.status === 'PRINTED' ? 'status-review' :
+                              s.status === 'SUBMITTED' ? 'status-submitted' :
+                              'status-pending'
+                            }`}>{s.status}</span>
+                            {missingFields.length > 0 && <div style={{ fontSize: 10, color: '#ef4444', marginTop: 3, fontWeight: 600 }}>⚠ {missingFields.join(', ')}</div>}
+                            {s.flagNote && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>📌 {s.flagNote}</div>}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                              <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#6366f1', color: '#4f46e5' }} onClick={() => setSelectedStudent(s)}>👁 View</button>
+                              <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#22c55e', color: '#16a34a' }} onClick={() => handleStatusUpdate(s.id, "APPROVED")}>✓</button>
+                              {s.status === "FLAGGED" ? (
+                                <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#3b82f6', color: '#2563eb' }} onClick={() => handleUnflag(s.id)}>Unflag</button>
+                              ) : (
+                                <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#ef4444', color: '#dc2626' }} onClick={() => handleFlag(s.id)}>🚩</button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {students.length === 0 && (
+                      <tr><td colSpan={totalCols} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No students found</td></tr>
+                    )}
+                  </tbody>
+                </table>
+                )
+              })()}
             </div>
 
             {/* Pagination */}

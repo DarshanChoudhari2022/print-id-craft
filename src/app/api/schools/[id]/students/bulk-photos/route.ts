@@ -87,6 +87,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         byRollNo[String(rollNo).toLowerCase().trim()] = s
       }
 
+      // GR number match
+      const grNo = fd?.grNo || fd?.["GR NO"] || fd?.["GR No"] || fd?.["GR No."] || fd?.["gr_no"] || ""
+      if (grNo) {
+        byRollNo[String(grNo).toLowerCase().trim()] = s
+      }
+
       // Full name match (multiple keys)
       const name = fd?.fullName || fd?.["Full Name"] || fd?.name || fd?.["Student Name"] || fd?.Student_Name || ""
       if (name) {
