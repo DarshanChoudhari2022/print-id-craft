@@ -3719,9 +3719,15 @@ export default function JpgTemplateMapper({
       {/* ── Wrap Text Dialog ── */}
       {showWrapDialog && selectedMapping && selectedMapping.type === "text" && (
         <WrapTextDialog
-          initial={{ wrap: (selectedMapping.textWrap || "nowrap") === "wrap", rowsPerField: 2 }}
+          initial={{
+            wrap: (selectedMapping.textWrap || "nowrap") !== "nowrap",
+            mode: (selectedMapping.textWrap as any) || "nowrap",
+            rowsPerField: 2,
+          }}
           onSave={(cfg: WrapTextConfig) => {
-            updateMapping(selectedMapping.id, { textWrap: cfg.wrap ? "wrap" : "nowrap" })
+            // Prefer the explicit `mode` field; fall back to the legacy boolean.
+            const next = cfg.mode || (cfg.wrap ? "wrap" : "nowrap")
+            updateMapping(selectedMapping.id, { textWrap: next })
           }}
           onClose={() => setShowWrapDialog(false)}
         />

@@ -885,8 +885,12 @@ export function ColorPickerDialog({
 // ─────────────────────────────────────────────────────────────
 // 6. WRAP TEXT DIALOG  (Do you want to use Wrap text? + rows per field)
 // ─────────────────────────────────────────────────────────────
+export type WrapMode = "nowrap" | "multiline" | "wrap"
 export type WrapTextConfig = {
+  /** @deprecated Use `mode` instead. Kept for backwards compatibility — true == "wrap" (auto-fit), false == "nowrap". */
   wrap: boolean
+  /** Preferred field: explicit wrap mode. */
+  mode?: WrapMode
   rowsPerField: number
 }
 
@@ -899,27 +903,38 @@ export function WrapTextDialog({
   onSave: (cfg: WrapTextConfig) => void
   onClose: () => void
 }) {
-  const [wrap, setWrap] = useState(initial.wrap)
+  // Resolve initial mode from either the new `mode` field or the legacy `wrap` boolean.
+  const initialMode: WrapMode = initial.mode || (initial.wrap ? "wrap" : "nowrap")
+  const [mode, setMode] = useState<WrapMode>(initialMode)
   const rowsPerField = initial.rowsPerField || 2
 
   return (
-    <DialogShell title="Text Wrap" onClose={onClose} width={340}>
+    <DialogShell title="Text Wrap" onClose={onClose} width={360}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>How should long text be displayed?</div>
 
       <div style={{ marginBottom: 12, padding: "8px 12px", border: "1px solid #c0c0c0", background: "#ececec" }}>
         <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8, cursor: "pointer" }}>
-          <input type="radio" name="wrap" checked={wrap} onChange={() => setWrap(true)} style={{ marginTop: 3 }} />
+          <input type="radio" name="wrap" checked={mode === "multiline"} onChange={() => setMode("multiline")} style={{ marginTop: 3 }} />
           <span>
-            <b>Yes - Auto-fit (recommended)</b>
+            <b>Multi-line (best for addresses) ⭐</b>
+            <div style={{ fontSize: 11, color: "#555" }}>
+              Long text wraps onto a new line and keeps your chosen font size. Make the box tall enough for 2–3 lines.
+            </div>
+          </span>
+        </label>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8, cursor: "pointer" }}>
+          <input type="radio" name="wrap" checked={mode === "wrap"} onChange={() => setMode("wrap")} style={{ marginTop: 3 }} />
+          <span>
+            <b>Auto-fit (best for names)</b>
             <div style={{ fontSize: 11, color: "#555" }}>
               Long names automatically shrink to fit on a single line — full text is always visible, never truncated with &quot;...&quot;.
             </div>
           </span>
         </label>
         <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
-          <input type="radio" name="wrap" checked={!wrap} onChange={() => setWrap(false)} style={{ marginTop: 3 }} />
+          <input type="radio" name="wrap" checked={mode === "nowrap"} onChange={() => setMode("nowrap")} style={{ marginTop: 3 }} />
           <span>
-            <b>No - Single Line</b>
+            <b>Single Line (truncate)</b>
             <div style={{ fontSize: 11, color: "#555" }}>
               Keep text at its original size. Long text overflowing the box is truncated with &quot;...&quot;.
             </div>
@@ -928,7 +943,7 @@ export function WrapTextDialog({
       </div>
 
       <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-        <WinButton onClick={() => { onSave({ wrap, rowsPerField }); onClose() }}>Save</WinButton>
+        <WinButton onClick={() => { onSave({ wrap: mode !== "nowrap", mode, rowsPerField }); onClose() }}>Save</WinButton>
         <WinButton onClick={onClose}>Close</WinButton>
       </div>
     </DialogShell>
