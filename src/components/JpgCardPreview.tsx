@@ -16,6 +16,13 @@ type FieldMapping = {
   fontWeight: "normal" | "bold"
   fontFamily: string
   textAlign?: "left" | "center" | "right"
+  // How long text is handled inside the box:
+  //   "nowrap"    → single line, truncated with "…" on overflow.
+  //   "wrap"      → single line, auto-shrunk so the full text fits (default,
+  //                  matches legacy behaviour).
+  //   "multiline" → wraps onto multiple lines AT THE USER'S CHOSEN font size.
+  //                  Used for long addresses where shrinking would be illegible.
+  textWrap?: "nowrap" | "wrap" | "multiline"
   // Photo styling (rounded corners + border) — kept optional so older
   // saved templates without these props still render correctly.
   photoBorderRadius?: number
@@ -106,11 +113,20 @@ export function resolveFieldValue(fd: Record<string, string>, fieldKey: string):
 }
 
 /**
- * Word-wrap + auto-shrink text to fit a fixed box.
- * 1. First tries to fit on a single line by shrinking font down to ~30% of box height.
- * 2. If still too wide, wraps onto multiple lines (word-break) and shrinks
- *    further so all lines fit vertically.
- * Returns { lines, fontSize, lineHeight }.
+ * Word-wrap + (optionally) auto-shrink text to fit a fixed box.
+ *
+ * Honours the field's `textWrap` mode:
+ *   • "wrap"      → legacy auto-fit. Try single line shrinking down to ~30%
+ *                    of box height, otherwise wrap and keep shrinking.
+ *   • "nowrap"    → single line at the user's chosen font size (truncated
+ *                    with "…" if it overflows the box width).
+ *   • "multiline" → wrap onto multiple lines AT THE USER'S CHOSEN font size.
+ *                    Font is NEVER shrunk for width; lines that overflow the
+ *                    box vertically are clipped by the caller's ctx.rect clip.
+ *
+ * `userFontSizeEditorPx` is the value the user set in the side panel (stored
+ * in editor pixels, relative to a ~600 px reference image). We scale it to
+ * canvas pixels here so what they see in the editor matches the preview.
  */
 function fitTextToBox(
   ctx: CanvasRenderingContext2D,
@@ -120,27 +136,18 @@ function fitTextToBox(
   fontFamily: string,
   fontWeight: string,
   scale: number,
+  canvasW: number,
+  userFontSizeEditorPx?: number,
+  wrapMode: "nowrap" | "wrap" | "multiline" = "wrap",
 ): { lines: string[]; fontSize: number; lineHeight: number } {
   const padding = 4 * scale
   const maxW = Math.max(1, boxW - padding * 2)
   const maxH = Math.max(1, boxH - padding * 2)
   const fontPrefix = fontWeight === "bold" ? "bold " : ""
-  const minFont = Math.max(7 * scale, boxH * 0.28)
-  let fontSize = boxH * 0.78
 
   const setFont = (s: number) => { ctx.font = `${fontPrefix}${s}px ${fontFamily}` }
 
-  // Pass 1 — single line, shrink to fit width
-  setFont(fontSize)
-  while (ctx.measureText(text).width > maxW && fontSize > minFont) {
-    fontSize -= 0.5
-    setFont(fontSize)
-  }
-  if (ctx.measureText(text).width <= maxW) {
-    return { lines: [text], fontSize, lineHeight: fontSize * 1.15 }
-  }
-
-  // Pass 2 — wrap onto multiple lines, then shrink so all lines fit vertically
+  // Word-wrap helper used by both nowrap (for ellipsis fallback) and multiline.
   const wrap = (size: number): string[] => {
     setFont(size)
     const words = text.split(/\s+/).filter(Boolean)
@@ -152,7 +159,7 @@ function fitTextToBox(
         current = tentative
       } else {
         if (current) lines.push(current)
-        // If a single word is wider than the box, hard-break it character-by-character
+        // Single word is wider than the box → hard-break char-by-char
         if (ctx.measureText(w).width > maxW) {
           let chunk = ""
           for (const ch of w) {
@@ -168,6 +175,50 @@ function fitTextToBox(
     }
     if (current) lines.push(current)
     return lines
+  }
+
+  // Resolve the user's chosen font size into canvas pixels. We scale by the
+  // canvas width vs the editor reference width so the on-card text looks the
+  // same size as in the editor at any DPI.
+  const userPx =
+    userFontSizeEditorPx && userFontSizeEditorPx > 0
+      ? (userFontSizeEditorPx * canvasW) / MAPPER_REFERENCE_WIDTH
+      : boxH * 0.6
+
+  // ── MULTILINE: preserve the user's font size, wrap to as many lines as needed.
+  if (wrapMode === "multiline") {
+    const lines = wrap(userPx)
+    return { lines, fontSize: userPx, lineHeight: userPx * 1.2 }
+  }
+
+  // ── NO WRAP: single line at the user's font size, truncate with "…".
+  if (wrapMode === "nowrap") {
+    setFont(userPx)
+    if (ctx.measureText(text).width <= maxW) {
+      return { lines: [text], fontSize: userPx, lineHeight: userPx * 1.15 }
+    }
+    // Truncate with ellipsis
+    const ellipsis = "…"
+    let lo = 0, hi = text.length
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1
+      const trial = text.slice(0, mid) + ellipsis
+      if (ctx.measureText(trial).width <= maxW) lo = mid
+      else hi = mid - 1
+    }
+    return { lines: [text.slice(0, lo) + ellipsis], fontSize: userPx, lineHeight: userPx * 1.15 }
+  }
+
+  // ── WRAP (legacy auto-fit): shrink to one line, fall back to wrapped+shrunk.
+  const minFont = Math.max(7 * scale, boxH * 0.28)
+  let fontSize = boxH * 0.78
+  setFont(fontSize)
+  while (ctx.measureText(text).width > maxW && fontSize > minFont) {
+    fontSize -= 0.5
+    setFont(fontSize)
+  }
+  if (ctx.measureText(text).width <= maxW) {
+    return { lines: [text], fontSize, lineHeight: fontSize * 1.15 }
   }
 
   let lines = wrap(fontSize)
@@ -294,6 +345,7 @@ export default function JpgCardPreview({
             const fontWeight = field.fontWeight || "normal"
             const { lines, fontSize, lineHeight } = fitTextToBox(
               ctx, String(value), fw, fh, fontFamily, fontWeight, scale,
+              w, field.fontSize, field.textWrap || "wrap",
             )
 
             ctx.fillStyle = field.fontColor || "#000"
@@ -305,9 +357,15 @@ export default function JpgCardPreview({
             ctx.rect(fx, fy, fw, fh)
             ctx.clip()
             const textX = align === "center" ? fx + fw / 2 : align === "right" ? fx + fw - padding : fx + padding
-            // Vertically center the multi-line block inside the box
+            // Vertically position the text block.
+            //   • multiline → top-align so the first line is always visible
+            //     even if the address overflows the bottom of the box.
+            //   • everything else → centered (legacy behaviour).
             const totalH = lines.length * lineHeight
-            const firstLineY = fy + (fh - totalH) / 2 + lineHeight / 2
+            const isMultiline = (field.textWrap || "wrap") === "multiline"
+            const firstLineY = isMultiline
+              ? fy + padding + lineHeight / 2
+              : fy + (fh - totalH) / 2 + lineHeight / 2
             for (let i = 0; i < lines.length; i++) {
               ctx.fillText(lines[i], textX, firstLineY + i * lineHeight)
             }
@@ -443,6 +501,7 @@ export async function generateJpgCard(
         const fontWeight = field.fontWeight || "normal"
         const { lines, fontSize, lineHeight } = fitTextToBox(
           ctx, String(value), fw, fh, fontFamily, fontWeight, outputScale,
+          w, field.fontSize, field.textWrap || "wrap",
         )
 
         ctx.fillStyle = field.fontColor || "#000"
@@ -455,7 +514,10 @@ export async function generateJpgCard(
         ctx.clip()
         const textX = align === "center" ? fx + fw / 2 : align === "right" ? fx + fw - padding : fx + padding
         const totalH = lines.length * lineHeight
-        const firstLineY = fy + (fh - totalH) / 2 + lineHeight / 2
+        const isMultiline = (field.textWrap || "wrap") === "multiline"
+        const firstLineY = isMultiline
+          ? fy + padding + lineHeight / 2
+          : fy + (fh - totalH) / 2 + lineHeight / 2
         for (let i = 0; i < lines.length; i++) {
           ctx.fillText(lines[i], textX, firstLineY + i * lineHeight)
         }
