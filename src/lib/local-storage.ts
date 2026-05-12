@@ -17,8 +17,14 @@ function ensureDir(dirPath: string) {
   }
 }
 
-// Initialize upload root on module load
-ensureDir(UPLOAD_ROOT)
+// NOTE: Do NOT create the upload root at module import time.
+// This file is statically imported by @/lib/storage, which is used by
+// many serverless API routes (flags, batches, students/import, etc.).
+// On Vercel the runtime filesystem is read-only outside /tmp, so calling
+// fs.mkdirSync at import time throws EROFS and crashes the entire function
+// before any handler can run — causing Vercel to return its generic HTML
+// 500 page instead of a JSON error. Directory creation is handled lazily
+// inside localUpload() only when offline mode is actually active.
 
 /**
  * Upload a file to local storage
