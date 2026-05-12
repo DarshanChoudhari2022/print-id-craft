@@ -580,53 +580,55 @@ export default function SchoolDetailPage() {
       let allMatched: any[] = []
       let allUnmatched: string[] = []
       let allErrors: any[] = []
-      let processed = 0
+      let completed = 0
+      const totalBatches = batches.length
 
-      for (let b = 0; b < batches.length; b++) {
-        const batch = batches[b]
-        const batchNum = b + 1
-        const totalBatches = batches.length
-
-        setPhotoUploadStatus(`Uploading batch ${batchNum} of ${totalBatches} (${processed + batch.length}/${totalFiles} photos)...`)
-        setPhotoUploadProgress(Math.round((processed / totalFiles) * 90))
-
+      // Upload one batch, with robust error handling against Vercel HTML pages.
+      const uploadBatch = async (batch: File[]) => {
         const fd = new FormData()
-        for (const file of batch) {
-          fd.append("photos", file)
-        }
-
-        let data: any = null
+        for (const file of batch) fd.append("photos", file)
         try {
           const res = await fetch(`/api/schools/${schoolId}/students/bulk-photos`, { method: "POST", body: fd })
-          // Guard against HTML error pages (413/502/etc.) — Vercel returns HTML, not JSON
           const ct = res.headers.get("content-type") || ""
-          if (ct.includes("application/json")) {
-            data = await res.json()
-          } else {
-            const text = await res.text().catch(() => "")
-            data = {
-              success: false,
-              error:
-                res.status === 413
-                  ? "Batch too large for server (try smaller photos)"
-                  : `Server error ${res.status}${text ? `: ${text.slice(0, 120)}` : ""}`,
-            }
+          if (ct.includes("application/json")) return await res.json()
+          const text = await res.text().catch(() => "")
+          return {
+            success: false,
+            error:
+              res.status === 413
+                ? "Batch too large for server (try smaller photos)"
+                : `Server error ${res.status}${text ? `: ${text.slice(0, 120)}` : ""}`,
           }
         } catch (netErr: any) {
-          data = { success: false, error: netErr?.message || "Network error" }
+          return { success: false, error: netErr?.message || "Network error" }
         }
-
-        if (data?.success) {
-          if (data.data.matchedFiles) allMatched = [...allMatched, ...data.data.matchedFiles]
-          if (data.data.unmatchedFiles) allUnmatched = [...allUnmatched, ...data.data.unmatchedFiles]
-          if (data.data.errorFiles) allErrors = [...allErrors, ...data.data.errorFiles]
-        } else {
-          for (const file of batch) {
-            allErrors.push({ filename: file.name, error: data?.error || 'Batch upload failed' })
-          }
-        }
-        processed += batch.length
       }
+
+      // Fire N batches in parallel for speed. Each request stays under the
+      // ~4.5 MB Vercel body limit, but we run multiple concurrently so total
+      // wall-clock time stays close to a single big upload.
+      const CONCURRENCY = 4
+      let cursor = 0
+      const worker = async () => {
+        while (cursor < batches.length) {
+          const myIdx = cursor++
+          const batch = batches[myIdx]
+          const data = await uploadBatch(batch)
+          if (data?.success) {
+            if (data.data.matchedFiles) allMatched = allMatched.concat(data.data.matchedFiles)
+            if (data.data.unmatchedFiles) allUnmatched = allUnmatched.concat(data.data.unmatchedFiles)
+            if (data.data.errorFiles) allErrors = allErrors.concat(data.data.errorFiles)
+          } else {
+            for (const file of batch) {
+              allErrors.push({ filename: file.name, error: data?.error || "Batch upload failed" })
+            }
+          }
+          completed++
+          setPhotoUploadStatus(`Uploading ${completed}/${totalBatches} batches (${Math.min(totalFiles, completed * BATCH_MAX_FILES)}/${totalFiles} photos)...`)
+          setPhotoUploadProgress(Math.round((completed / totalBatches) * 90))
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batches.length) }, () => worker()))
 
       setPhotoUploadProgress(100)
       setPhotoUploadStatus('Complete!')
