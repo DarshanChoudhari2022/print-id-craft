@@ -51,7 +51,7 @@ type FieldMapping = {
   // New properties for enhanced text formatting
   fontStyle?: "normal" | "italic" // italic support
   textDecoration?: "none" | "underline" | "line-through" // underline/strikethrough
-  textWrap?: "nowrap" | "wrap" // text wrapping
+  textWrap?: "nowrap" | "wrap" | "multiline" // text wrapping (nowrap=truncate, wrap=auto-shrink to one line, multiline=wrap to next line preserving font size)
   letterSpacing?: number // letter spacing in px
   lineHeight?: number // line height multiplier
   textTransform?: "none" | "uppercase" | "lowercase" | "capitalize"
@@ -1772,6 +1772,28 @@ export default function JpgTemplateMapper({
                         WebkitTextStroke: !showPreview ? "0.3px rgba(0,0,0,0.2)" : undefined,
                         textAlign: m.textAlign || "left",
                       }
+                      // "multiline" mode → wrap to next line while preserving the chosen
+                      // font size. Best for long addresses where shrinking the text would
+                      // make it unreadable. Text that overflows the box vertically is
+                      // clipped (overflow:hidden) rather than truncated with "...".
+                      if (m.textWrap === "multiline") {
+                        return (
+                          <span
+                            style={{
+                              ...baseStyle,
+                              whiteSpace: "normal",
+                              overflowWrap: "break-word",
+                              wordBreak: "break-word",
+                              overflow: "hidden",
+                              width: "100%",
+                              height: "100%",
+                              display: "block",
+                            }}
+                          >
+                            {displayText}
+                          </span>
+                        )
+                      }
                       // "wrap" mode → auto-shrink text so the full string fits on a single line
                       // inside the box (never truncated with "...").
                       if (m.textWrap === "wrap") {
@@ -2652,7 +2674,7 @@ export default function JpgTemplateMapper({
                       Text Wrap
                     </label>
                     <div style={{ display: "flex", gap: 6 }}>
-                      {(["nowrap", "wrap"] as const).map((mode) => (
+                      {(["nowrap", "multiline", "wrap"] as const).map((mode) => (
                         <button
                           key={mode}
                           onClick={() =>
@@ -2660,7 +2682,7 @@ export default function JpgTemplateMapper({
                           }
                           style={{
                             flex: 1,
-                            padding: "6px 12px",
+                            padding: "6px 8px",
                             borderRadius: 6,
                             border: `1.5px solid ${
                               (selectedMapping.textWrap || "nowrap") === mode
@@ -2675,17 +2697,19 @@ export default function JpgTemplateMapper({
                               (selectedMapping.textWrap || "nowrap") === mode
                                 ? "#2563eb"
                                 : "#64748b",
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: 600,
                             cursor: "pointer",
                           }}
                         >
-                          {mode === "nowrap" ? "No Wrap" : "↩ Wrap"}
+                          {mode === "nowrap" ? "No Wrap" : mode === "multiline" ? "↵ Multi-line" : "↔ Auto-fit"}
                         </button>
                       ))}
                     </div>
                     <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
-                      {(selectedMapping.textWrap || "nowrap") === "wrap"
+                      {(selectedMapping.textWrap || "nowrap") === "multiline"
+                        ? "Text wraps to the next line and keeps your chosen font size — best for long addresses."
+                        : (selectedMapping.textWrap || "nowrap") === "wrap"
                         ? "Long text auto-shrinks to fit on one line — full name always visible, no \"...\""
                         : "Text stays on a single line; long text is truncated with \"...\""}
                     </div>
