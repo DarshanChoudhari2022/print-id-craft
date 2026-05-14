@@ -894,9 +894,16 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
     setResult(verificationResult)
     setVerifying(false)
 
-    // STRICT: Only auto-accept if ALL checks pass (valid=true)
-    // Photos with any critical failures (no face, not front-facing, inappropriate) are BLOCKED
-    if (verificationResult.valid) {
+    // Auto-accept whenever NO critical check fails. The heuristic checks
+    // (ID Photo Content, Front-Facing luminance symmetry, blur score) are
+    // flagged as "warning" — they're informational and were producing
+    // false positives on perfectly valid passport photos (orange shirts,
+    // dark backgrounds, denoised phone JPEGs, etc.). Parents still see the
+    // warning banner so they know what could be better, but the photo
+    // proceeds to the next step. Only true critical failures (no face,
+    // multiple faces, face off-centre, file too big, etc.) block.
+    const criticalFails = verificationResult.checks.filter(c => !c.passed && c.severity === "critical")
+    if (criticalFails.length === 0) {
       const bgCheck = verificationResult.checks.find(c => c.label === "Background")
       const bgGood = bgCheck ? bgCheck.passed : false
       onPhotoAccepted(adjustedFile, previewUrl, bgGood)
