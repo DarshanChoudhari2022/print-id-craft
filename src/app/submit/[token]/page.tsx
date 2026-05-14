@@ -250,6 +250,92 @@ export default function SubmitPage() {
   const [photoVerified, setPhotoVerified] = useState(false)
   const [bgSkippable, setBgSkippable] = useState(false)
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // Auto-save / restore form draft per token. Parents on slow networks
+  // accidentally hit Back, refresh, or close the tab — without persistence
+  // they have to fill the form from scratch. We keep everything in
+  // localStorage keyed by the class's linkToken so different classes never
+  // collide. The draft is cleared on successful submit.
+  //
+  // We deliberately use localStorage instead of cookies: cookies are sent
+  // with every request (wasted bandwidth, especially with a base64 photo)
+  // and have a ~4 KB size limit, far too small for the photo data URL.
+  // ───────────────────────────────────────────────────────────────────────────
+  const DRAFT_KEY = `submit-draft:${token}`
+  const [draftRestored, setDraftRestored] = useState(false)
+  const [draftBanner, setDraftBanner] = useState(false)
+
+  // Restore once on mount (before the config fetch overwrites class field).
+  useEffect(() => {
+    if (typeof window === "undefined" || !token) return
+    try {
+      const raw = window.localStorage.getItem(DRAFT_KEY)
+      if (!raw) { setDraftRestored(true); return }
+      const draft = JSON.parse(raw) as {
+        formData?: Record<string, string>
+        photoPreview?: string
+        croppedPhoto?: string
+        bgSkippable?: boolean
+        photoVerified?: boolean
+        step?: typeof step
+        savedAt?: number
+      }
+      // Discard drafts older than 7 days to avoid stale data hanging around.
+      const TTL_MS = 7 * 24 * 60 * 60 * 1000
+      if (draft.savedAt && Date.now() - draft.savedAt > TTL_MS) {
+        window.localStorage.removeItem(DRAFT_KEY)
+        setDraftRestored(true)
+        return
+      }
+      if (draft.formData) setFormData(draft.formData)
+      if (draft.photoPreview) setPhotoPreview(draft.photoPreview)
+      if (draft.croppedPhoto) setCroppedPhoto(draft.croppedPhoto)
+      if (draft.bgSkippable) setBgSkippable(true)
+      if (draft.photoVerified) setPhotoVerified(true)
+      const hasAnyData =
+        (draft.formData && Object.keys(draft.formData).some(k => k !== "class" && (draft.formData?.[k] || "").trim() !== "")) ||
+        !!draft.photoPreview
+      if (hasAnyData) setDraftBanner(true)
+    } catch {
+      // Corrupt draft — ignore and start fresh.
+    } finally {
+      setDraftRestored(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
+
+  // Save whenever the user changes any of the persisted fields. We wait for
+  // the initial restore to complete so we never overwrite an existing draft
+  // with the empty initial state. If localStorage is full (quota exceeded —
+  // e.g. a very large photo data URL on iOS), we drop the photo from the
+  // draft rather than failing entirely.
+  useEffect(() => {
+    if (typeof window === "undefined" || !token || !draftRestored) return
+    if (step === "loading" || step === "error" || step === "success") return
+    const draft = {
+      formData,
+      photoPreview,
+      croppedPhoto,
+      bgSkippable,
+      photoVerified,
+      step,
+      savedAt: Date.now(),
+    }
+    try {
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+    } catch {
+      try {
+        window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...draft, photoPreview: "", croppedPhoto: "" }))
+      } catch { /* give up silently — draft just won't survive this session */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData, photoPreview, croppedPhoto, bgSkippable, photoVerified, step, draftRestored])
+
+  const clearDraft = () => {
+    if (typeof window === "undefined") return
+    try { window.localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
+  }
+
   useEffect(() => {
     fetch(`/api/submit/${token}`)
       .then(r => r.json())
@@ -360,6 +446,9 @@ export default function SubmitPage() {
       if (data.success) {
         setUploadProgress(100)
         setResult(data.data)
+        // Submission succeeded — wipe the saved draft so the next visitor on
+        // this device (or the same parent re-opening the link) starts clean.
+        clearDraft()
         setStep("success")
       } else {
         setAlertMsg(data.error || "Submission failed")
@@ -630,6 +719,45 @@ export default function SubmitPage() {
           {/* FORM STEP */}
           {step === "form" && (
             <form onSubmit={handleFormSubmit}>
+              {/* Draft-restored banner — shown when we successfully restored
+                  the parent's previous progress after an accidental back /
+                  refresh / tab close. They can opt out by clicking "Start fresh". */}
+              {draftBanner && (
+                <div style={{
+                  padding: '10px 14px', background: '#ecfdf5', border: '1px solid #a7f3d0',
+                  borderRadius: 10, fontSize: 13, color: '#065f46', marginBottom: 16,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                }}>
+                  <div>
+                    <strong>✅ We restored your previous answers.</strong>
+                    <div style={{ fontSize: 11, color: '#047857', marginTop: 2 }}>
+                      No need to fill the form again — just continue where you left off.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!confirm("Discard the saved draft and start over?")) return
+                      clearDraft()
+                      setFormData(config?.className ? { class: config.className } : {})
+                      setPhotoFile(null)
+                      setPhotoPreview("")
+                      setCroppedPhoto("")
+                      setPhotoVerified(false)
+                      setBgSkippable(false)
+                      setDraftBanner(false)
+                    }}
+                    style={{
+                      fontSize: 11, padding: '6px 10px',
+                      background: 'transparent', color: '#047857',
+                      border: '1px solid #6ee7b7', borderRadius: 6,
+                      cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Start fresh
+                  </button>
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {/* Auto-filled Class field - read only */}
                 {config?.className && (
