@@ -64,6 +64,34 @@ export async function POST(req: Request, { params }: { params: { token: string }
       }
     }
 
+    // Check for duplicate: same class + same student name (case-insensitive)
+    const NAME_KEYS = ["name", "fullName", "studentName", "Student Name", "student_name", "full_name", "Full Name"]
+    const studentName = NAME_KEYS.map(k => validated.formData[k]).find(v => v && String(v).trim()) || ""
+    if (studentName) {
+      const normalizedName = String(studentName).trim().toLowerCase().replace(/\s+/g, " ")
+      const existingStudents = await prisma.student.findMany({
+        where: {
+          classId: cls.id,
+          status: { not: "FLAGGED" },
+        },
+        select: { formData: true },
+      })
+      const nameMatch = existingStudents.some((s: any) => {
+        const fd = (s.formData as Record<string, string>) || {}
+        for (const k of NAME_KEYS) {
+          const v = (fd[k] || "").trim().toLowerCase().replace(/\s+/g, " ")
+          if (v && v === normalizedName) return true
+        }
+        return false
+      })
+      if (nameMatch) {
+        return NextResponse.json({
+          error: "DUPLICATE_NAME",
+          message: "Details with this name are already registered. If you need to make changes, please contact support.",
+        }, { status: 409 })
+      }
+    }
+
     // Generate serial number: SCHOOLCODE-NNNN
     const schoolCode = cls.school.name
       .replace(/[^A-Za-z]/g, "")

@@ -470,6 +470,30 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
           })
         }
 
+        // ── 16b. Eyes Visible (no dark/reflective sunglasses) ──
+        if (faceResult.detected && faceResult.bounds) {
+          const eyes = analyzeEyesVisible(ctx, img.width, img.height, faceResult.bounds)
+          checks.push({
+            passed: eyes.passed,
+            severity: "critical",
+            label: "Eyes Visible",
+            detail: eyes.detail,
+            tip: eyes.tip || "Remove sunglasses or dark/reflective glasses — eyes must be clearly visible"
+          })
+        }
+
+        // ── 16c. Proper Attire (no bare shoulders / sleeveless) ──
+        if (faceResult.detected && faceResult.bounds) {
+          const attire = analyzeAttire(ctx, img.width, img.height, faceResult.bounds)
+          checks.push({
+            passed: attire.passed,
+            severity: "critical",
+            label: "Proper Attire",
+            detail: attire.detail,
+            tip: attire.tip || "Wear a proper shirt or school uniform — sleeveless / bare-shoulder photos are not accepted"
+          })
+        }
+
         // ── 17. Content Appropriateness Check ──
         // Demoted from "critical" to "warning". This is a pure skin-pixel
         // heuristic that gives lots of false positives — orange/red/yellow
@@ -740,6 +764,165 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
       }
       return { passed: true, detail: "Clear", tip: "" }
     } catch { return { passed: true, detail: "OK", tip: "" } }
+  }
+
+  // ── NEW: Eyes Visible — detect dark/reflective sunglasses covering the eyes ──
+  // Samples two small windows where the left and right eyes should be relative
+  // to the detected face bounds, and compares them to a reference patch on the
+  // forehead (which is typically uncovered skin). Photos with sunglasses show
+  // up as either very dark eye regions, very low colour variance (uniform tint
+  // lenses), or a strongly blue-biased patch (reflective mirrored lenses like
+  // the sample photo). Any one of these flags a failure.
+  const analyzeEyesVisible = (
+    ctx: CanvasRenderingContext2D, w: number, h: number,
+    bounds: { x: number; y: number; width: number; height: number }
+  ): { passed: boolean; detail: string; tip?: string } => {
+    try {
+      const sampleRect = (rx: number, ry: number, rw: number, rh: number) => {
+        const x = Math.max(0, Math.min(w - 1, Math.floor(rx)))
+        const y = Math.max(0, Math.min(h - 1, Math.floor(ry)))
+        const ww = Math.max(1, Math.min(w - x, Math.floor(rw)))
+        const hh = Math.max(1, Math.min(h - y, Math.floor(rh)))
+        const data = ctx.getImageData(x, y, ww, hh).data
+        let r = 0, g = 0, b = 0, n = 0
+        const lums: number[] = []
+        for (let i = 0; i < data.length; i += 4) {
+          r += data[i]; g += data[i + 1]; b += data[i + 2]; n++
+          lums.push(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2])
+        }
+        const avgR = r / n, avgG = g / n, avgB = b / n
+        const avgL = lums.reduce((a, l) => a + l, 0) / lums.length
+        const variance = lums.reduce((s, l) => s + (l - avgL) ** 2, 0) / lums.length
+        return { r: avgR, g: avgG, b: avgB, lum: avgL, stdDev: Math.sqrt(variance) }
+      }
+
+      // Eye band: roughly 28-48% down the face, split into left/right thirds.
+      const eyeY = bounds.y + bounds.height * 0.28
+      const eyeH = bounds.height * 0.20
+      const eyeW = bounds.width * 0.28
+      const leftEye = sampleRect(bounds.x + bounds.width * 0.12, eyeY, eyeW, eyeH)
+      const rightEye = sampleRect(bounds.x + bounds.width * 0.60, eyeY, eyeW, eyeH)
+      // Forehead reference (uncovered skin).
+      const forehead = sampleRect(bounds.x + bounds.width * 0.30, bounds.y + bounds.height * 0.05, bounds.width * 0.40, bounds.height * 0.12)
+
+      const eyeLum = (leftEye.lum + rightEye.lum) / 2
+      const eyeStd = (leftEye.stdDev + rightEye.stdDev) / 2
+
+      // (1) Very dark eye region vs forehead → opaque dark sunglasses.
+      if (forehead.lum - eyeLum > 55 && eyeLum < 70) {
+        return { passed: false, detail: "Dark sunglasses detected" }
+      }
+
+      // (2) Very uniform eye region (low stdDev) → tinted lenses hiding eyes.
+      if (eyeStd < 10 && eyeLum < 110) {
+        return { passed: false, detail: "Eyes not visible" }
+      }
+
+      // (3) Strong blue cast on both eyes → reflective/mirrored lenses.
+      const blueBias = (eye: { r: number; g: number; b: number }) =>
+        eye.b - (eye.r + eye.g) / 2
+      if (blueBias(leftEye) > 25 && blueBias(rightEye) > 25) {
+        return { passed: false, detail: "Reflective sunglasses detected" }
+      }
+
+      return { passed: true, detail: "Eyes visible" }
+    } catch {
+      return { passed: true, detail: "OK" }
+    }
+  }
+
+  // ── NEW: Proper Attire — detect bare shoulders / sleeveless / undershirt ──
+  // Samples a horizontal band just below the face where the shoulders sit and
+  // counts skin-tone pixels. A buttoned shirt / school uniform mostly covers
+  // this band, so a high skin-ratio means the subject is either sleeveless,
+  // wearing a vest/undershirt, or topless — none of which are acceptable for
+  // an ID card.
+  const analyzeAttire = (
+    ctx: CanvasRenderingContext2D, w: number, h: number,
+    bounds: { x: number; y: number; width: number; height: number }
+  ): { passed: boolean; detail: string; tip?: string } => {
+    try {
+      // Shoulder band: starts just below the chin, ~70% the height of the
+      // face, spans 2.2× the face width centred on the face.
+      const bandTop = Math.floor(bounds.y + bounds.height * 1.05)
+      const bandH = Math.floor(bounds.height * 0.70)
+      const bandW = Math.floor(bounds.width * 2.2)
+      const bandX = Math.floor(bounds.x + bounds.width / 2 - bandW / 2)
+
+      const x = Math.max(0, bandX)
+      const y = Math.max(0, bandTop)
+      const ww = Math.min(w - x, bandW)
+      const hh = Math.min(h - y, bandH)
+      // Not enough room below the face (very tight crop) — skip the check
+      // rather than false-flag.
+      if (ww < 20 || hh < 20) return { passed: true, detail: "OK" }
+
+      // Reference skin tone from a forehead patch — adapts to the subject's
+      // actual complexion instead of a fixed RGB range that misfires on dark
+      // or very pale skin.
+      const fhData = ctx.getImageData(
+        Math.max(0, Math.floor(bounds.x + bounds.width * 0.30)),
+        Math.max(0, Math.floor(bounds.y + bounds.height * 0.05)),
+        Math.max(1, Math.floor(bounds.width * 0.40)),
+        Math.max(1, Math.floor(bounds.height * 0.12)),
+      ).data
+      let fr = 0, fg = 0, fb = 0, fn = 0
+      for (let i = 0; i < fhData.length; i += 4) {
+        fr += fhData[i]; fg += fhData[i + 1]; fb += fhData[i + 2]; fn++
+      }
+      const refR = fr / fn, refG = fg / fn, refB = fb / fn
+      // Sanity-check the forehead actually looks like skin (R >= G >= B,
+      // R reasonably above mid). If not, fall back to the classical YCbCr
+      // skin-tone test.
+      const refLooksLikeSkin = refR > refG && refG >= refB && refR > 95 && refR < 245
+
+      const isSkinPixel = (r: number, g: number, b: number): boolean => {
+        if (refLooksLikeSkin) {
+          // Adaptive: pixel is skin if it's close to the forehead tone in
+          // chrominance (allow for shading variation in luminance).
+          // Compare chroma differences (r-g, r-b) which are stable under
+          // shading changes — more robust than raw RGB distance.
+          const refRG = refR - refG, refRB = refR - refB
+          const pixRG = r - g, pixRB = r - b
+          const chromaDist = Math.sqrt((pixRG - refRG) ** 2 + (pixRB - refRB) ** 2)
+          // Also require the pixel to be brighter than ~60 (not pure shadow)
+          // and that R >= G >= B (excludes blue/green clothing entirely).
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b
+          return chromaDist < 28 && lum > 55 && r >= g && g >= b - 8
+        }
+        // Fallback YCbCr skin-tone gate (Kovac et al.) — only used if the
+        // forehead sample failed sanity check.
+        const Y = 0.299 * r + 0.587 * g + 0.114 * b
+        const Cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b
+        const Cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b
+        return Y > 60 && Cb > 77 && Cb < 127 && Cr > 133 && Cr < 173 && r > g && g > b - 10
+      }
+
+      const data = ctx.getImageData(x, y, ww, hh).data
+      let skin = 0, total = 0
+      // Sample every 4th pixel for speed.
+      for (let i = 0; i < data.length; i += 16) {
+        const r = data[i], g = data[i + 1], b = data[i + 2]
+        if (isSkinPixel(r, g, b)) skin++
+        total++
+      }
+      if (total === 0) return { passed: true, detail: "OK" }
+      const skinRatio = skin / total
+
+      // A typical buttoned shirt/uniform leaves only the neck (~5-15% of the
+      // band) showing skin. A sleeveless vest / bare shoulders push this past
+      // ~32%. We use 0.35 as the threshold for comfortable false-positive
+      // margin (long-sleeve white shirts on light skin sit around 15-22%).
+      if (skinRatio > 0.35) {
+        return {
+          passed: false,
+          detail: skinRatio > 0.55 ? "Bare shoulders / topless" : "Sleeveless / vest detected",
+        }
+      }
+      return { passed: true, detail: "OK" }
+    } catch {
+      return { passed: true, detail: "OK" }
+    }
   }
 
   // ── Content Appropriateness: ensures photo is a proper head-and-shoulders portrait ──
