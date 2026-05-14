@@ -64,13 +64,23 @@ const fieldIntent = (field: FieldConfig): FieldIntent => {
 const titleCaseWords = (s: string): string =>
   s.replace(/(^|\s)([a-zA-Z])/g, (_m, sp, ch) => sp + ch.toUpperCase())
 
-// Strip the +91 prefix (with optional spaces / 0 / hyphens) so we can show only
-// the local 10-digit portion in the input while storing the full E.164-ish
-// string in formData.
+// Strip the +91 prefix (with optional spaces / 0 / hyphens) so we can show
+// only the local 10-digit portion in the input while storing the full
+// E.164-ish string in formData. Used ONLY for the initial seed value (e.g.
+// when a draft is restored from localStorage) — live typing uses the
+// separate mobileLocals state instead, so the prefix never round-trips
+// through this function during a keystroke.
 const stripIndianPrefix = (raw: string): string => {
-  const digits = (raw || "").replace(/\D/g, "")
-  if (digits.startsWith("91") && digits.length > 10) return digits.slice(2).slice(-10)
-  return digits.slice(-10)
+  if (!raw) return ""
+  // Recognize a stored value that was clearly written by our own input
+  // ("+91 XXXXXXXXXX" / "+91XXXXXXXXXX") — strip the prefix verbatim.
+  const explicit = raw.match(/^\+?\s*91[\s-]*(\d{0,10})\s*$/)
+  if (explicit) return explicit[1]
+  const digits = raw.replace(/\D/g, "")
+  // 12-digit string starting with 91 → country code + 10 local digits
+  if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2)
+  // Otherwise assume the string is already local. Truncate to 10 digits.
+  return digits.slice(0, 10)
 }
 
 // Count whitespace-delimited words in a string (used for address minimum check).
@@ -249,6 +259,12 @@ export default function SubmitPage() {
   const [alertMsg, setAlertMsg] = useState("")
   const [photoVerified, setPhotoVerified] = useState(false)
   const [bgSkippable, setBgSkippable] = useState(false)
+
+  // Visible 10-digit text for each mobile-intent field, kept separate from
+  // formData so we never round-trip the "+91 " prefix through the input value
+  // (doing so caused digits like "9" to be displayed as "919" because the
+  // stored "+91 9" was re-parsed as "919" → all digits → slice(-10) = "919").
+  const [mobileLocals, setMobileLocals] = useState<Record<string, string>>({})
 
   // ───────────────────────────────────────────────────────────────────────────
   // Auto-save / restore form draft per token. Parents on slow networks
@@ -779,7 +795,12 @@ export default function SubmitPage() {
 
                   // ── Mobile: locked "+91" prefix + 10-digit numeric input ──
                   if (intent === "mobile") {
-                    const local = stripIndianPrefix(value)
+                    // Prefer the explicit local-state value (what the user
+                    // last typed). Fall back to stripping the stored "+91 …"
+                    // form once on initial mount / draft restore.
+                    const local = mobileLocals[field.key] !== undefined
+                      ? mobileLocals[field.key]
+                      : stripIndianPrefix(value)
                     return (
                       <div key={field.key} className="form-group">
                         <label>
@@ -806,6 +827,7 @@ export default function SubmitPage() {
                             value={local}
                             onChange={e => {
                               const onlyDigits = e.target.value.replace(/\D/g, "").slice(0, 10)
+                              setMobileLocals(prev => ({ ...prev, [field.key]: onlyDigits }))
                               handleFieldChange(field.key, onlyDigits ? `+91 ${onlyDigits}` : "")
                             }}
                             placeholder="9876543210"
