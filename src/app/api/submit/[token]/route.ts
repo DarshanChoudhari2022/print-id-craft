@@ -28,26 +28,45 @@ export async function GET(req: Request, { params }: { params: { token: string } 
 
     const template = cls.school.template
 
-    // Collect the unique house/flag colours that have already been used by other
-    // students in this school so the public form can render a dropdown rather
-    // than a free-text input (parents often misspell colour names). We look at
-    // a handful of common keys to be tolerant of varied field configs.
+    // Re-derive fieldConfig from fieldMappings on every read so the public form
+    // always shows exactly the fields placed on the JPG template — no extra/stale
+    // default fields, correct label names, correct order.
+    const rawMappings = (template?.fieldMappings || []) as any[]
+    let resolvedFieldConfig: any[]
+    if (rawMappings.length > 0) {
+      resolvedFieldConfig = rawMappings
+        .filter((m: any) => m.type !== "photo")
+        .map((m: any) => {
+          const k = (m.fieldKey || "").toLowerCase()
+          let formType = "text"
+          if (k.includes("phone") || k.includes("mob") || k === "mob_father" || k === "mother_phone") formType = "tel"
+          return { key: m.fieldKey, label: m.label, type: formType, required: true }
+        })
+    } else {
+      resolvedFieldConfig = (template?.fieldConfig || []) as any[]
+    }
+
+    // Only query students for house/flag colours when the template actually has
+    // a flag-type mapping. For schools without flags this avoids a full table scan.
+    const hasFlagMapping = rawMappings.some((m: any) => m.type === "flag")
     const FLAG_KEYS = ["flagColor", "Flag Color", "flag_color", "House", "house", "Colour", "colour", "houseFlag", "house_flag", "houseColor", "house_color"]
     const flagColorSet = new Set<string>()
-    try {
-      const otherStudents = await prisma.student.findMany({
-        where: { schoolId: cls.school.id },
-        select: { formData: true },
-      })
-      for (const s of otherStudents) {
-        const fd = (s.formData as Record<string, string> | null) || {}
-        for (const k of FLAG_KEYS) {
-          const v = (fd[k] || "").trim()
-          if (v) flagColorSet.add(v)
+    if (hasFlagMapping) {
+      try {
+        const otherStudents = await prisma.student.findMany({
+          where: { schoolId: cls.school.id },
+          select: { formData: true },
+        })
+        for (const s of otherStudents) {
+          const fd = (s.formData as Record<string, string> | null) || {}
+          for (const k of FLAG_KEYS) {
+            const v = (fd[k] || "").trim()
+            if (v) flagColorSet.add(v)
+          }
         }
+      } catch {
+        // Non-fatal — dropdown will simply be empty and form falls back to text input
       }
-    } catch {
-      // Non-fatal — dropdown will simply be empty and form falls back to text input
     }
     const flagColors = Array.from(flagColorSet).sort((a, b) => a.localeCompare(b))
 
@@ -59,7 +78,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
         className: cls.name,
         schoolId: cls.school.id,
         classId: cls.id,
-        fieldConfig: template?.fieldConfig || [],
+        fieldConfig: resolvedFieldConfig,
         frontLayout: template?.frontLayout || [],
         backLayout: template?.backLayout || [],
         cardWidthMm: template?.cardWidthMm || 85.6,
@@ -67,7 +86,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
         orientation: template?.orientation || "LANDSCAPE",
         // JPG template data for card preview
         templateImageUrl: template?.templateImageUrl || null,
-        fieldMappings: template?.fieldMappings || [],
+        fieldMappings: rawMappings,
         // Photo background color for auto-replacement
         photoBgColor: template?.photoBgColor || "#FFFFFF",
         // Available house/flag colours for dropdown in public form

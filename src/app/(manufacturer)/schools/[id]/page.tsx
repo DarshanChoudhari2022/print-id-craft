@@ -76,7 +76,8 @@ type StudentData = {
   flagNote: string | null
   teacherComment: string | null
   submittedAt: string
-  class: { name: string }
+  classId: string
+  class: { id: string; name: string }
 }
 
 type SchoolDetail = {
@@ -227,7 +228,7 @@ export default function SchoolDetailPage() {
     // Load only essential data first (school info, classes, template) for fast initial render
     Promise.all([fetchSchool(), fetchClasses(), fetchTemplate()]).finally(() => setLoading(false))
     // Defer heavier data fetches slightly to avoid blocking initial render
-    setTimeout(() => { fetchStudents(); fetchFlags() }, 100)
+    setTimeout(() => { fetchStudents() }, 100)
   }, [schoolId])
 
   // Re-fetch students when filters/search change (but not on initial tab switch)
@@ -545,6 +546,93 @@ export default function SchoolDetailPage() {
   // corrected Excel can be re-uploaded without serial-number collisions or
   // stale rows from a previous import.
   const [deletingAll, setDeletingAll] = useState(false)
+
+  // Single-student edit / add modal
+  const [editStudentOpen, setEditStudentOpen] = useState(false)
+  const [editStudentTarget, setEditStudentTarget] = useState<StudentData | null>(null)
+  const [editFormFields, setEditFormFields] = useState<Record<string, string>>({})
+  const [editClassId, setEditClassId] = useState("")
+  const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null)
+  const [editPhotoPreview, setEditPhotoPreview] = useState("")
+  const [editSaving, setEditSaving] = useState(false)
+
+  const openAddStudent = () => {
+    setEditStudentTarget(null)
+    setEditFormFields({})
+    setEditClassId(classes[0]?.id || "")
+    setEditPhotoFile(null)
+    setEditPhotoPreview("")
+    setEditStudentOpen(true)
+  }
+
+  const openEditStudent = (s: StudentData) => {
+    setEditStudentTarget(s)
+    setEditFormFields({ ...(s.formData as Record<string, string>) })
+    setEditClassId(s.classId || s.class?.id || "")
+    setEditPhotoFile(null)
+    setEditPhotoPreview(s.photoUrl || "")
+    setEditStudentOpen(true)
+  }
+
+  const handleSaveStudent = async () => {
+    if (!editClassId) { toast.error("Please select a class"); return }
+    setEditSaving(true)
+    try {
+      let photoUrl = editStudentTarget?.photoUrl || ""
+      if (editPhotoFile) {
+        const fd = new FormData()
+        fd.append("file", editPhotoFile)
+        fd.append("folder", `students/${schoolId}`)
+        const res = await fetch("/api/upload", { method: "POST", body: fd })
+        const data = await res.json()
+        if (res.ok && data.success) photoUrl = data.url
+        else { toast.error(data.error || "Photo upload failed"); setEditSaving(false); return }
+      }
+      if (editStudentTarget) {
+        const res = await fetch(`/api/schools/${schoolId}/students/${editStudentTarget.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ formData: editFormFields, photoUrl, classId: editClassId }),
+        })
+        const data = await res.json()
+        if (data.success) {
+          toast.success("Student updated!")
+          setStudents(prev => prev.map(s => s.id === editStudentTarget.id ? { ...s, ...data.data } : s))
+          setEditStudentOpen(false)
+        } else toast.error(data.error || "Update failed")
+      } else {
+        const res = await fetch(`/api/schools/${schoolId}/students`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ formData: editFormFields, classId: editClassId, photoUrl }),
+        })
+        const data = await res.json()
+        if (data.success) {
+          toast.success("Student added!")
+          fetchStudents(studentPage)
+          fetchSchool()
+          setEditStudentOpen(false)
+        } else toast.error(data.error || "Create failed")
+      }
+    } catch { toast.error("Save failed") }
+    finally { setEditSaving(false) }
+  }
+
+  const handleDeleteStudent = async (sid: string, name: string) => {
+    if (!window.confirm(`Delete student "${name}"? This cannot be undone.`)) return
+    try {
+      const res = await fetch(`/api/schools/${schoolId}/students/${sid}`, { method: "DELETE" })
+      if (res.ok) {
+        toast.success("Student deleted")
+        setStudents(prev => prev.filter(s => s.id !== sid))
+        setStudentTotal(prev => prev - 1)
+      } else {
+        const data = await res.json()
+        toast.error(data.error || "Delete failed")
+      }
+    } catch { toast.error("Delete failed") }
+  }
+
   const handleDeleteAllStudents = async () => {
     if (studentTotal === 0) {
       toast.info("No students to delete.")
@@ -1328,10 +1416,16 @@ export default function SchoolDetailPage() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
                 Bulk Upload Photos
               </button>
-              <button className="btn btn-outline" onClick={() => setFlagUploadOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#f59e0b', color: '#d97706' }}>
+              <button className="btn btn-outline" onClick={openAddStudent} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#22c55e', color: '#16a34a' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+                Add Student
+              </button>
+              {(templateData?.fieldMappings as any[])?.some((m: any) => m.type === 'flag') && (
+              <button className="btn btn-outline" onClick={() => { if (flagColors.length === 0) fetchFlags(); setFlagUploadOpen(true) }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#f59e0b', color: '#d97706' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>
                 Manage Flags{flagColors.length > 0 ? ` (${flagColors.length})` : ''}
               </button>
+              )}
               <a href={`/api/schools/${schoolId}/students/import-template`} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', textDecoration: 'none', fontSize: 13 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                 Download Template
@@ -1380,39 +1474,44 @@ export default function SchoolDetailPage() {
             <div className="data-table-wrapper" style={{ overflowX: 'auto', position: 'relative', opacity: tabLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
               {tabLoading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, background: 'rgba(255,255,255,0.6)', borderRadius: 14 }}><div className="login-spinner" style={{ width: 28, height: 28, borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6' }} /></div>}
               {(() => {
-                // Derive display columns directly from student formData keys
-                // This ensures columns always match the actual imported Excel data
-                const keyToLabel: Record<string, string> = {
-                  srNo: "NO.", fullName: "Name", grNo: "GR NO", photoId: "PHOTO NO.",
-                  flagColor: "House", phone: "MOBILE", address: "Address", rollNo: "Roll No.",
-                  dob: "DOB", bloodGroup: "Blood Group", fatherName: "Father Name",
-                  motherName: "Mother Name", section: "Section", branch: "Branch",
-                }
-                // Collect all unique formData keys from current students (excluding "class")
-                const allKeys: string[] = []
-                const keySet = new Set<string>()
-                if (students.length > 0) {
-                  // Use first student to determine column order, then add any extra keys
+                // Derive display columns from template fieldMappings (correct per-school field set,
+                // in the order the admin placed them on the template image).
+                // Falls back to student formData keys only when no template mappings exist yet.
+                const keyToLabel: Record<string, string> = {}
+                const templateMappings = (templateData?.fieldMappings || []) as Array<{ fieldKey: string; label: string; type: string }>
+                const templateTextMappings = templateMappings.filter(
+                  m => m.type !== "photo" && m.fieldKey !== "class" && m.fieldKey !== "classSection"
+                )
+
+                let dataColumns: string[]
+                if (templateTextMappings.length > 0) {
+                  dataColumns = templateTextMappings.map(m => m.fieldKey)
+                  for (const m of templateTextMappings) keyToLabel[m.fieldKey] = m.label
+                } else {
+                  // Fallback: collect keys from student formData (schools without a JPG template)
+                  const fallback: Record<string, string> = {
+                    srNo: "NO.", fullName: "Name", grNo: "GR NO", photoId: "PHOTO NO.",
+                    flagColor: "House", phone: "MOBILE", address: "Address", rollNo: "Roll No.",
+                    dob: "DOB", bloodGroup: "Blood Group", fatherName: "Father Name",
+                    motherName: "Mother Name", section: "Section", branch: "Branch",
+                  }
+                  const fc = (templateData?.fieldConfig || []) as Array<{ key: string; label: string }>
+                  for (const f of fc) {
+                    if (f.key && f.label && f.key !== "class" && f.key !== "classSection") fallback[f.key] = f.label
+                  }
+                  const keySet = new Set<string>()
+                  const allKeys: string[] = []
                   for (const s of students) {
                     const fd = s.formData as any
                     if (fd && typeof fd === "object") {
                       for (const k of Object.keys(fd)) {
-                        if (!keySet.has(k) && k !== "class") {
-                          keySet.add(k)
-                          allKeys.push(k)
-                        }
+                        if (!keySet.has(k) && k !== "class") { keySet.add(k); allKeys.push(k) }
                       }
                     }
                   }
+                  dataColumns = allKeys.filter(k => k !== "class" && k !== "classSection")
+                  Object.assign(keyToLabel, fallback)
                 }
-                // Also check template fieldConfig for label overrides
-                const fc = (templateData?.fieldConfig || []) as Array<{ key: string; label: string }>
-                for (const f of fc) {
-                  if (f.key && f.label && f.key !== "class" && f.key !== "classSection") {
-                    keyToLabel[f.key] = f.label
-                  }
-                }
-                const dataColumns = allKeys.filter(k => k !== "class" && k !== "classSection")
                 const hasDynamicColumns = dataColumns.length > 0
                 const totalCols = 1 + (hasDynamicColumns ? dataColumns.length : 2) + 3
 
@@ -1490,14 +1589,16 @@ export default function SchoolDetailPage() {
                             {s.flagNote && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>📌 {s.flagNote}</div>}
                           </td>
                           <td style={{ textAlign: 'right' }}>
-                            <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                              <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#6366f1', color: '#4f46e5' }} onClick={() => setSelectedStudent(s)}>👁 View</button>
+                            <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
+                              <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#6366f1', color: '#4f46e5' }} onClick={() => setSelectedStudent(s)}>👁</button>
+                              <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#3b82f6', color: '#2563eb' }} onClick={() => openEditStudent(s)} title="Edit student">✏️</button>
                               <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#22c55e', color: '#16a34a' }} onClick={() => handleStatusUpdate(s.id, "APPROVED")}>✓</button>
                               {s.status === "FLAGGED" ? (
                                 <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#3b82f6', color: '#2563eb' }} onClick={() => handleUnflag(s.id)}>Unflag</button>
                               ) : (
-                                <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#ef4444', color: '#dc2626' }} onClick={() => handleFlag(s.id)}>🚩</button>
+                                <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#f59e0b', color: '#d97706' }} onClick={() => handleFlag(s.id)}>🚩</button>
                               )}
+                              <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#ef4444', color: '#dc2626' }} onClick={() => handleDeleteStudent(s.id, studentName)} title="Delete student">🗑</button>
                             </div>
                           </td>
                         </tr>
@@ -1521,6 +1622,119 @@ export default function SchoolDetailPage() {
               </div>
             )}
           </div>
+
+          {/* EDIT / ADD STUDENT MODAL */}
+          {editStudentOpen && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={() => !editSaving && setEditStudentOpen(false)}>
+              <div style={{ background: 'white', borderRadius: 20, maxWidth: 560, width: '100%', maxHeight: '92vh', overflow: 'auto', boxShadow: '0 25px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+
+                {/* Header */}
+                <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: 'white', zIndex: 2 }}>
+                  <div>
+                    <h2 style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', marginBottom: 2 }}>
+                      {editStudentTarget ? '✏️ Edit Student' : '➕ Add New Student'}
+                    </h2>
+                    <p style={{ fontSize: 12, color: '#64748b' }}>{school?.name}</p>
+                  </div>
+                  <button onClick={() => setEditStudentOpen(false)} disabled={editSaving} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: '#f1f5f9', cursor: 'pointer', fontSize: 15 }}>✕</button>
+                </div>
+
+                <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+                  {/* Class selector */}
+                  <div className="form-group">
+                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>Class <span style={{ color: '#ef4444' }}>*</span></label>
+                    <select value={editClassId} onChange={e => setEditClassId(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14 }}>
+                      <option value="">— Select class —</option>
+                      {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Photo upload */}
+                  <div>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>Photo</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      {editPhotoPreview ? (
+                        <img src={editPhotoPreview} alt="Preview" style={{ width: 72, height: 90, objectFit: 'cover', borderRadius: 8, border: '2px solid #e2e8f0', flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: 72, height: 90, borderRadius: 8, border: '2px dashed #cbd5e1', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        </div>
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: '#374151' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                          {editPhotoPreview ? 'Change Photo' : 'Upload Photo'}
+                          <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={e => {
+                            const f = e.target.files?.[0]
+                            if (!f) return
+                            setEditPhotoFile(f)
+                            setEditPhotoPreview(URL.createObjectURL(f))
+                          }} />
+                        </label>
+                        {editPhotoFile && <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{editPhotoFile.name}</div>}
+                        {editPhotoPreview && !editPhotoFile && editStudentTarget && (
+                          <div style={{ fontSize: 11, color: '#22c55e', marginTop: 4 }}>✓ Current photo loaded</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Template fields */}
+                  {(() => {
+                    const mappings = (templateData?.fieldMappings || []) as any[]
+                    const textMappings = mappings.filter(m => m.type !== 'photo' && m.fieldKey !== 'class' && m.fieldKey !== 'classSection')
+                    if (textMappings.length === 0) {
+                      // Fallback: show basic fields when no template
+                      return [
+                        { fieldKey: 'fullName', label: 'Full Name' },
+                        { fieldKey: 'phone', label: 'Phone' },
+                        { fieldKey: 'address', label: 'Address' },
+                      ].map(f => (
+                        <div key={f.fieldKey} className="form-group">
+                          <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>{f.label}</label>
+                          <input type="text" value={editFormFields[f.fieldKey] || ''} onChange={e => setEditFormFields(prev => ({ ...prev, [f.fieldKey]: e.target.value }))} style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
+                        </div>
+                      ))
+                    }
+                    return textMappings.map((m: any) => (
+                      <div key={m.fieldKey} className="form-group">
+                        <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>
+                          {m.label} <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        {m.type === 'flag' ? (
+                          <select value={editFormFields[m.fieldKey] || ''} onChange={e => setEditFormFields(prev => ({ ...prev, [m.fieldKey]: e.target.value }))} style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14 }}>
+                            <option value="">— Select {m.label} —</option>
+                            {flagColors.map((c: string) => <option key={c} value={c}>{c}</option>)}
+                            <option value={editFormFields[m.fieldKey] || ''}>{editFormFields[m.fieldKey] && !flagColors.includes(editFormFields[m.fieldKey]) ? `Custom: ${editFormFields[m.fieldKey]}` : ''}</option>
+                          </select>
+                        ) : m.fieldKey.toLowerCase().includes('address') ? (
+                          <textarea value={editFormFields[m.fieldKey] || ''} onChange={e => setEditFormFields(prev => ({ ...prev, [m.fieldKey]: e.target.value }))} rows={3} style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, resize: 'vertical', boxSizing: 'border-box' }} />
+                        ) : (
+                          <input
+                            type={m.fieldKey.toLowerCase().includes('phone') || m.fieldKey.toLowerCase().includes('mob') ? 'tel' : m.fieldKey.toLowerCase().includes('dob') || m.fieldKey.toLowerCase().includes('birth') ? 'date' : 'text'}
+                            value={editFormFields[m.fieldKey] || ''}
+                            onChange={e => setEditFormFields(prev => ({ ...prev, [m.fieldKey]: e.target.value }))}
+                            placeholder={`Enter ${m.label}`}
+                            style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+                          />
+                        )}
+                      </div>
+                    ))
+                  })()}
+
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 10, justifyContent: 'flex-end', position: 'sticky', bottom: 0, background: 'white' }}>
+                  <button className="btn btn-outline" onClick={() => setEditStudentOpen(false)} disabled={editSaving} style={{ padding: '10px 20px', fontSize: 14 }}>Cancel</button>
+                  <button className="btn btn-primary" onClick={handleSaveStudent} disabled={editSaving || !editClassId} style={{ padding: '10px 24px', fontSize: 14, fontWeight: 700, minWidth: 120 }}>
+                    {editSaving ? (editStudentTarget ? 'Saving…' : 'Adding…') : (editStudentTarget ? '💾 Save Changes' : '➕ Add Student')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* IMPORT MODAL */}
           {importOpen && (

@@ -68,7 +68,7 @@ export async function PATCH(
     }
 
     const body = await req.json()
-    const { formData, photoUrl, teacherComment, status } = body
+    const { formData, photoUrl, teacherComment, status, classId } = body
 
     // Build update object
     const updateData: any = {}
@@ -76,11 +76,12 @@ export async function PATCH(
     if (photoUrl !== undefined) updateData.photoUrl = photoUrl
     if (teacherComment !== undefined) updateData.teacherComment = teacherComment
     if (status) updateData.status = status
+    if (classId) updateData.classId = classId
 
     const student = await prisma.student.update({
       where: { id: params.sid },
       data: updateData,
-      include: { class: { select: { name: true } } },
+      include: { class: { select: { id: true, name: true } } },
     })
 
     return NextResponse.json({ success: true, data: student })

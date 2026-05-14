@@ -49,7 +49,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
           flagNote: true,
           teacherComment: true,
           submittedAt: true,
-          class: { select: { name: true } },
+          classId: true,
+          class: { select: { id: true, name: true } },
         },
         orderBy: { submittedAt: "desc" },
         skip: (page - 1) * limit,
@@ -75,6 +76,45 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   } catch (error) {
     console.error("GET students error:", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+  }
+}
+
+/**
+ * POST — create a single student manually (manufacturer / main-teacher only).
+ * Body: { formData: Record<string,string>, classId: string, photoUrl?: string }
+ */
+export async function POST(req: Request, { params }: { params: { id: string } }) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session || session.user?.role !== "MANUFACTURER") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    const schoolId = params.id
+    const school = await prisma.school.findUnique({ where: { id: schoolId }, select: { id: true, name: true } })
+    if (!school) return NextResponse.json({ error: "School not found" }, { status: 404 })
+
+    const body = await req.json()
+    const { formData, classId, photoUrl } = body
+    if (!classId) return NextResponse.json({ error: "classId is required" }, { status: 400 })
+    if (!formData || typeof formData !== "object") return NextResponse.json({ error: "formData is required" }, { status: 400 })
+
+    const schoolCode = school.name.replace(/[^A-Za-z]/g, "").substring(0, 6).toUpperCase()
+    const lastStudent = await prisma.student.findFirst({ where: { schoolId }, orderBy: { serialNumber: "desc" } })
+    let nextNum = 1
+    if (lastStudent) {
+      const match = lastStudent.serialNumber.match(/-(\d+)$/)
+      nextNum = match ? parseInt(match[1]) + 1 : (await prisma.student.count({ where: { schoolId } })) + 1
+    }
+    const serialNumber = `${schoolCode}-${String(nextNum).padStart(4, "0")}`
+
+    const student = await prisma.student.create({
+      data: { schoolId, classId, serialNumber, formData, photoUrl: photoUrl || "", status: "SUBMITTED" },
+      include: { class: { select: { id: true, name: true } } },
+    })
+    return NextResponse.json({ success: true, data: student }, { status: 201 })
+  } catch (error: any) {
+    console.error("Create student error:", error)
+    return NextResponse.json({ error: error?.message || "Internal Server Error" }, { status: 500 })
   }
 }
 
