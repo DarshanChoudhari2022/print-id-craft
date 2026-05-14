@@ -782,12 +782,31 @@ export default function SubmitPage() {
                     )
                   }
 
-                  // ── Name-like field: auto title-case ──
+                  // ── Name-like field: auto title-case + first/middle/last guidance ──
                   if (intent === "name") {
+                    const lbl = field.label.toLowerCase()
+                    const example = lbl.includes("father")
+                      ? "Ramesh Kumar Choudhari"
+                      : lbl.includes("mother")
+                        ? "Sunita Kumar Choudhari"
+                        : lbl.includes("guardian")
+                          ? "Ramesh Kumar Choudhari"
+                          : lbl.includes("surname")
+                            ? "Choudhari"
+                            : "Darshan Sunil Choudhari"
+                    const showOrderHint = !lbl.includes("surname")
                     return (
                       <div key={field.key} className="form-group">
                         <label>
                           {field.label}
+                          {showOrderHint && (
+                            <span style={{
+                              marginLeft: 8, fontSize: 11, fontWeight: 500,
+                              color: '#64748b',
+                            }}>
+                              (First name • Middle name • Last name)
+                            </span>
+                          )}
                           {field.required && <span style={{ color: '#ef4444' }}> *</span>}
                         </label>
                         <input
@@ -795,8 +814,16 @@ export default function SubmitPage() {
                           required={field.required}
                           value={value}
                           onChange={e => handleFieldChange(field.key, titleCaseWords(e.target.value))}
-                          placeholder={`e.g. ${field.label.toLowerCase().includes("father") ? "Ramesh Kumar" : field.label.toLowerCase().includes("mother") ? "Sunita Kumar" : "Darshan Choudhari"}`}
+                          placeholder={`e.g. ${example}`}
+                          title={showOrderHint
+                            ? "Type your full name in this order: First name, then Middle name, then Last name (Surname)."
+                            : "Type the surname only."}
                         />
+                        {showOrderHint && (
+                          <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                            Write your full name in order: <strong>First name → Middle name → Last name</strong>. Skip middle name if you don't have one.
+                          </span>
+                        )}
                       </div>
                     )
                   }
