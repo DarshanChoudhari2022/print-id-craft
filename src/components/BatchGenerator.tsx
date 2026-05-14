@@ -1,7 +1,7 @@
 "use client"
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { toast } from "sonner"
-import { normalizeKey, resolveFieldValue, FIELD_GROUPS } from "@/lib/field-resolver"
+import { normalizeKey, resolveFieldValue, FIELD_GROUPS, formatDateValue } from "@/lib/field-resolver"
 import { PrintDialog, type PrintConfig } from "./IDMakerDialogs"
 import { generateDirectPdf } from "@/lib/pdf-layout"
 
@@ -24,6 +24,19 @@ type FieldMapping = {
   //   "wrap"      → legacy auto-fit (shrink to one line, then wrap+shrink).
   //   "multiline" → wrap onto multiple lines AT THE USER'S CHOSEN size (no shrink).
   textWrap?: "nowrap" | "wrap" | "multiline"
+  // Enhanced text formatting — must match JpgTemplateMapper.tsx's FieldMapping.
+  fontStyle?: "normal" | "italic"
+  textDecoration?: "none" | "underline" | "line-through"
+  letterSpacing?: number
+  lineHeight?: number
+  textTransform?: "none" | "uppercase" | "lowercase" | "capitalize"
+  dateFormat?: string
+  // Photo styling (rounded corners + border) — kept optional so older
+  // saved templates without these props still render correctly.
+  photoBorderRadius?: number
+  photoBorderWidth?: number
+  photoBorderColor?: string
+  locked?: boolean
 }
 
 // Editor reference image width (px). Field.fontSize is stored relative to this.
@@ -33,7 +46,6 @@ type StudentRenderData = {
   id: string
   serialNumber: string
   photoUrl: string
-  qrCodeUrl: string | null
   className: string
   formData: Record<string, string>
 }
@@ -131,6 +143,66 @@ function clearStudentImageCache() {
 
 // ── Print resolution limits ──
 const MIN_PRINT_W = 661   // 300 DPI minimum (56mm)
+const PRINT_DPI = 300     // standard PVC print DPI
+
+// Shared measurement canvas for text metrics (SVG renderer + fitTextToBoxCanvas).
+// Avoids creating thousands of throwaway canvases during batch generation.
+let _measureCanvas: HTMLCanvasElement | null = null
+let _measureCtx: CanvasRenderingContext2D | null = null
+function getMeasureCtx(): CanvasRenderingContext2D | null {
+  if (!_measureCtx) {
+    _measureCanvas = document.createElement("canvas")
+    _measureCtx = _measureCanvas.getContext("2d")
+  }
+  return _measureCtx
+}
+
+// Reusable canvas pool — avoids creating+GCing a new canvas per student.
+// With CHUNK_SIZE=8, at most 8 canvases are in flight concurrently.
+const _canvasPool: HTMLCanvasElement[] = []
+function acquireCanvas(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+  const canvas = _canvasPool.pop() || document.createElement("canvas")
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext("2d")!
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = "high"
+  return { canvas, ctx }
+}
+function releaseCanvas(canvas: HTMLCanvasElement) {
+  _canvasPool.push(canvas)
+}
+
+/**
+ * Convert millimetres to pixels at the given DPI.
+ * 1 inch = 25.4 mm.
+ */
+function mmToPx(mm: number, dpi: number = PRINT_DPI): number {
+  return Math.round((mm * dpi) / 25.4)
+}
+
+/**
+ * Rounded-rectangle path on canvas context. Mirrors JpgCardPreview's
+ * pathRoundedRect so photo borders render identically in preview & print.
+ */
+function pathRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number,
+) {
+  const radius = Math.max(0, Math.min(r, Math.min(w, h) / 2))
+  ctx.beginPath()
+  if (radius <= 0) { ctx.rect(x, y, w, h); return }
+  ctx.moveTo(x + radius, y)
+  ctx.lineTo(x + w - radius, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius)
+  ctx.lineTo(x + w, y + h - radius)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h)
+  ctx.lineTo(x + radius, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius)
+  ctx.lineTo(x, y + radius)
+  ctx.quadraticCurveTo(x, y, x + radius, y)
+  ctx.closePath()
+}
 
 /**
  * Word-wrap + auto-shrink text on canvas to fit a fixed box.
@@ -149,11 +221,13 @@ function fitTextToBoxCanvas(
   canvasW: number = 0,
   userFontSizeEditorPx?: number,
   wrapMode: "nowrap" | "wrap" | "multiline" = "wrap",
+  fontStyle: string = "normal",
 ): { lines: string[]; fontSize: number; lineHeight: number } {
   const padding = 4
   const maxW = Math.max(1, boxW - padding * 2)
   const maxH = Math.max(1, boxH - padding * 2)
-  const fontPrefix = fontWeight === "bold" ? "bold " : ""
+  const italicPrefix = fontStyle === "italic" ? "italic " : ""
+  const fontPrefix = `${italicPrefix}${fontWeight === "bold" ? "bold " : ""}`
   const setFont = (s: number) => { ctx.font = `${fontPrefix}${s}px ${fontFamily}` }
 
   // Word-wrap helper used by both nowrap (for ellipsis fallback) and multiline.
@@ -215,7 +289,7 @@ function fitTextToBoxCanvas(
   }
 
   // ── WRAP (legacy auto-fit) → shrink to one line, fall back to wrapped+shrunk.
-  const minFont = Math.max(8, boxH * 0.28)
+  const minFont = Math.max(7, boxH * 0.28)
   let fontSize = boxH * 0.78
   setFont(fontSize)
   while (ctx.measureText(text).width > maxW && fontSize > minFont) {
@@ -251,25 +325,32 @@ async function renderIdCard(
   fieldMappings: FieldMapping[],
   student: StudentRenderData,
   flagImageUrl?: string,
+  cardWidthMm?: number,
+  cardHeightMm?: number,
 ): Promise<string> {
   const templateImg = await getCachedImage(templateImageUrl)
   if (!templateImg) throw new Error("Failed to load template")
 
-  // Use template's FULL native resolution (min 300 DPI).
-  // Preserve the template's native aspect ratio — works for both
-  // portrait (56×88) and landscape (88×56) card designs.
-  const printW = Math.max(MIN_PRINT_W, templateImg.naturalWidth)
-  const templateAspect = templateImg.naturalHeight / templateImg.naturalWidth
-  const printH = Math.round(printW * templateAspect)
+  // Canvas dimensions are derived from the user-entered card size in mm
+  // at PRINT_DPI, so the rendered card has the EXACT aspect ratio that
+  // jsPDF will place it into on the printed page. This eliminates the
+  // squash/stretch that occurs when the template image's aspect ratio
+  // differs from the card's mm aspect ratio.
+  let printW: number
+  let printH: number
+  if (cardWidthMm && cardHeightMm && cardWidthMm > 0 && cardHeightMm > 0) {
+    printW = Math.max(MIN_PRINT_W, mmToPx(cardWidthMm))
+    // Maintain the user's mm aspect ratio exactly.
+    printH = Math.round((printW * cardHeightMm) / cardWidthMm)
+  } else {
+    // Backward-compat: if card size not provided, use template image's
+    // native resolution (legacy behaviour).
+    printW = Math.max(MIN_PRINT_W, templateImg.naturalWidth)
+    const templateAspect = templateImg.naturalHeight / templateImg.naturalWidth
+    printH = Math.round(printW * templateAspect)
+  }
 
-  const canvas = document.createElement("canvas")
-  canvas.width = printW
-  canvas.height = printH
-  const ctx = canvas.getContext("2d")
-  if (!ctx) throw new Error("Canvas context failed")
-
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = "high"
+  const { canvas, ctx } = acquireCanvas(printW, printH)
 
   // Draw template stretched to fill the card canvas.
   // The template IS the card design — stretching to 56:88 is intentional.
@@ -283,29 +364,44 @@ async function renderIdCard(
     const fh = (field.height / 100) * printH
 
     if (field.type === "photo") {
+      // Scale saved editor-px values (border radius + width) to the
+      // generated canvas so PDFs match the on-screen preview exactly.
+      const radiusPx = ((field.photoBorderRadius || 0) / BATCH_EDITOR_REFERENCE_WIDTH) * printW
+      const borderPx = ((field.photoBorderWidth || 0) / BATCH_EDITOR_REFERENCE_WIDTH) * printW
       if (student.photoUrl) {
         const photoImg = await getCachedImage(student.photoUrl)
         if (photoImg) {
           // Contain-fit: show the ENTIRE photo, no cropping
-          // This prevents heads/faces from being cut off
           const photoAspect = photoImg.naturalWidth / photoImg.naturalHeight
           const boxAspect = fw / fh
           let dx: number, dy: number, dw: number, dh: number
           if (photoAspect > boxAspect) {
-            // Photo is wider than box — fit to width, center vertically
             dw = fw
             dh = fw / photoAspect
             dx = fx
             dy = fy + (fh - dh) / 2
           } else {
-            // Photo is taller than box — fit to height, center horizontally
             dh = fh
             dw = fh * photoAspect
             dx = fx + (fw - dw) / 2
             dy = fy
           }
+          ctx.save()
+          pathRoundedRect(ctx, fx, fy, fw, fh, radiusPx)
+          ctx.clip()
           ctx.drawImage(photoImg, 0, 0, photoImg.naturalWidth, photoImg.naturalHeight, dx, dy, dw, dh)
+          ctx.restore()
         }
+      }
+      // Draw photo border on top (matches JpgCardPreview)
+      if (borderPx > 0) {
+        ctx.save()
+        ctx.lineWidth = borderPx
+        ctx.strokeStyle = field.photoBorderColor || "#000000"
+        const inset = borderPx / 2
+        pathRoundedRect(ctx, fx + inset, fy + inset, fw - borderPx, fh - borderPx, Math.max(0, radiusPx - inset))
+        ctx.stroke()
+        ctx.restore()
       }
     } else if (field.type === "flag") {
       if (flagImageUrl) {
@@ -320,17 +416,35 @@ async function renderIdCard(
                   (field.fieldKey === "class" ? student.className : 
                    field.fieldKey === "serialNumber" ? student.serialNumber : "")
       
-      const value = String(val || "").trim()
+      // Apply dateFormat + textTransform before rendering (matches mapper preview).
+      let value = String(val || "").trim()
+      if (field.dateFormat && value) value = formatDateValue(value, field.dateFormat)
+      const transform = field.textTransform || "none"
+      if (transform === "uppercase") value = value.toUpperCase()
+      else if (transform === "lowercase") value = value.toLowerCase()
+      else if (transform === "capitalize") value = value.replace(/\b\w/g, c => c.toUpperCase())
+
       if (value) {
         const padding = 4
-        const fontFamily = field.fontFamily || "Inter, Arial"
+        const fontFamily = field.fontFamily || "Arial"
         const fontWeight = field.fontWeight || "normal"
-        const { lines, lineHeight } = fitTextToBoxCanvas(
+        const fStyle = field.fontStyle || "normal"
+        const { lines, fontSize, lineHeight: baseLineHeight } = fitTextToBoxCanvas(
           ctx, value, fw, fh, fontFamily, fontWeight,
-          printW, field.fontSize, field.textWrap || "wrap",
+          printW, field.fontSize, field.textWrap || "wrap", fStyle,
         )
+        // Honour the user's lineHeight multiplier if set (default 1.2 for multiline, ~1.15 otherwise).
+        const userLH = field.lineHeight && field.lineHeight > 0 ? field.lineHeight : 0
+        const lineHeight = userLH > 0 ? fontSize * userLH : baseLineHeight
 
-        ctx.fillStyle = field.fontColor || "#0f172a"
+        // Apply letterSpacing (scaled from editor px to canvas px).
+        const lsEditorPx = field.letterSpacing || 0
+        const lsCanvasPx = (lsEditorPx / BATCH_EDITOR_REFERENCE_WIDTH) * printW
+        if (lsCanvasPx !== 0 && (ctx as any).letterSpacing !== undefined) {
+          (ctx as any).letterSpacing = `${lsCanvasPx}px`
+        }
+
+        ctx.fillStyle = field.fontColor || "#000"
         const align = field.textAlign || "left"
         ctx.textAlign = align
         ctx.textBaseline = "middle"
@@ -347,7 +461,27 @@ async function renderIdCard(
           ? fy + padding + lineHeight / 2
           : fy + (fh - totalH) / 2 + lineHeight / 2
         for (let i = 0; i < lines.length; i++) {
-          ctx.fillText(lines[i], textX, firstLineY + i * lineHeight)
+          const ly = firstLineY + i * lineHeight
+          ctx.fillText(lines[i], textX, ly)
+          // textDecoration: underline / line-through
+          const decoration = field.textDecoration || "none"
+          if (decoration !== "none") {
+            const tw = ctx.measureText(lines[i]).width
+            const lx = align === "center" ? textX - tw / 2 : align === "right" ? textX - tw : textX
+            ctx.save()
+            ctx.strokeStyle = field.fontColor || "#000"
+            ctx.lineWidth = Math.max(1, fontSize * 0.05)
+            ctx.beginPath()
+            const yOff = decoration === "underline" ? fontSize * 0.35 : 0
+            ctx.moveTo(lx, ly + yOff)
+            ctx.lineTo(lx + tw, ly + yOff)
+            ctx.stroke()
+            ctx.restore()
+          }
+        }
+        // Reset letterSpacing
+        if (lsCanvasPx !== 0 && (ctx as any).letterSpacing !== undefined) {
+          (ctx as any).letterSpacing = "0px"
         }
         ctx.restore()
       }
@@ -355,7 +489,9 @@ async function renderIdCard(
   }
 
   // PNG lossless — maximum quality for PVC card printing
-  return canvas.toDataURL("image/png")
+  const dataUrl = canvas.toDataURL("image/png")
+  releaseCanvas(canvas)
+  return dataUrl
 }
 
 /**
@@ -368,12 +504,23 @@ async function renderIdCardSvg(
   fieldMappings: FieldMapping[],
   student: StudentRenderData,
   flagImageUrl?: string,
+  cardWidthMm?: number,
+  cardHeightMm?: number,
 ): Promise<string> {
   const templateImg = await getCachedImage(templateImageUrl)
   if (!templateImg) throw new Error("Failed to load template")
 
-  const w = templateImg.naturalWidth
-  const h = templateImg.naturalHeight
+  // Honour user-entered card mm size for SVG canvas so the exported
+  // vector matches the printed PDF aspect (no squash in CorelDRAW).
+  let w: number
+  let h: number
+  if (cardWidthMm && cardHeightMm && cardWidthMm > 0 && cardHeightMm > 0) {
+    w = mmToPx(cardWidthMm)
+    h = mmToPx(cardHeightMm)
+  } else {
+    w = templateImg.naturalWidth
+    h = templateImg.naturalHeight
+  }
 
   // Convert template to data URL for embedding
   const templateDataUrl = await imageToDataUrl(templateImageUrl)
@@ -416,7 +563,9 @@ async function renderIdCardSvg(
         const textX = field.textAlign === "center" ? fx + fw / 2 : field.textAlign === "right" ? fx + fw - padding : fx + padding
         const fontWeight = field.fontWeight || "normal"
         const fontFamily = field.fontFamily || "Arial"
-        const fill = field.fontColor || "#0f172a"
+        const fill = field.fontColor || "#000"
+        const svgFontStyle = field.fontStyle === "italic" ? "italic" : "normal"
+        const svgTextDecor = field.textDecoration && field.textDecoration !== "none" ? field.textDecoration : ""
         const userPx =
           field.fontSize && field.fontSize > 0
             ? (field.fontSize * w) / BATCH_EDITOR_REFERENCE_WIDTH
@@ -427,8 +576,7 @@ async function renderIdCardSvg(
         // ── MULTILINE → keep user font size, wrap onto <tspan> rows.
         if (wrapMode === "multiline") {
           const maxWidth = Math.max(1, fw - padding * 2)
-          const measureCanvas = document.createElement("canvas")
-          const mctx = measureCanvas.getContext("2d")
+          const mctx = getMeasureCtx()
           const fontPrefix = fontWeight === "bold" ? "bold " : ""
           const wrappedLines: string[] = []
           if (mctx) {
@@ -450,20 +598,20 @@ async function renderIdCardSvg(
           const tspans = wrappedLines
             .map((ln, i) => `<tspan x="${textX.toFixed(1)}" y="${(firstLineY + i * lineHeight).toFixed(1)}">${escape(ln)}</tspan>`)
             .join("")
-          lines.push(`  <text font-family="${fontFamily}" font-size="${userPx.toFixed(1)}" fill="${fill}" font-weight="${fontWeight}" text-anchor="${textAnchor}">${tspans}</text>`)
+          const decorAttr = svgTextDecor ? ` text-decoration="${svgTextDecor}"` : ""
+          lines.push(`  <text font-family="${fontFamily}" font-size="${userPx.toFixed(1)}" fill="${fill}" font-weight="${fontWeight}" font-style="${svgFontStyle}"${decorAttr} text-anchor="${textAnchor}">${tspans}</text>`)
         } else {
           // wrap (auto-fit) or nowrap: single-line behaviour as before.
           let fontSize = Math.round(fh * 0.78)
           const textY = fy + fh / 2
           if (wrapMode === "wrap") {
             const maxWidth = Math.max(1, fw - padding * 2)
-            const measureCanvas = document.createElement("canvas")
-            const mctx = measureCanvas.getContext("2d")
+            const mctx = getMeasureCtx()
             if (mctx) {
               const fontPrefix = fontWeight === "bold" ? "bold " : ""
               mctx.font = `${fontPrefix}${fontSize}px ${fontFamily}`
               let ww = mctx.measureText(value).width
-              const minFs = Math.max(8, fh * 0.3)
+              const minFs = Math.max(7, fh * 0.28)
               while (ww > maxWidth && fontSize > minFs) {
                 fontSize -= 0.5
                 mctx.font = `${fontPrefix}${fontSize}px ${fontFamily}`
@@ -473,7 +621,8 @@ async function renderIdCardSvg(
           } else if (wrapMode === "nowrap") {
             fontSize = Math.round(userPx)
           }
-          lines.push(`  <text x="${textX.toFixed(1)}" y="${textY.toFixed(1)}" font-family="${fontFamily}" font-size="${fontSize}" fill="${fill}" font-weight="${fontWeight}" text-anchor="${textAnchor}" dominant-baseline="central">${escape(value)}</text>`)
+          const decorAttr2 = svgTextDecor ? ` text-decoration="${svgTextDecor}"` : ""
+          lines.push(`  <text x="${textX.toFixed(1)}" y="${textY.toFixed(1)}" font-family="${fontFamily}" font-size="${fontSize}" fill="${fill}" font-weight="${fontWeight}" font-style="${svgFontStyle}"${decorAttr2} text-anchor="${textAnchor}" dominant-baseline="central">${escape(value)}</text>`)
         }
       }
     }
@@ -581,7 +730,7 @@ async function downloadAsZip(
       zip.file(card.name, base64, { base64: true })
     }
   }
-  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } })
+  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 1 } })
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
   a.href = url
@@ -621,7 +770,7 @@ async function downloadAsCdrZip(
     "You can also open the SVG files directly in CorelDRAW",
     "by using File > Import or dragging them into CorelDRAW.",
   ].join("\r\n"))
-  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } })
+  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 1 } })
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
   a.href = url
@@ -635,81 +784,74 @@ async function downloadAsCdrZip(
 type OutputFormat = "JPEG" | "CDR" | "PDF_PRINT" | "BMP"
 
 /**
- * Convert a PNG/JPEG data URL to a 24-bit BMP data URL.
- * BMP format: DIB header (BITMAPINFOHEADER) + pixel data (BGR, bottom-up).
+ * Convert a PNG/JPEG data URL to a 24-bit BMP ArrayBuffer.
+ * Returns raw bytes — avoids the costly base64→atob→Uint8Array roundtrip.
+ * Uses the canvas pool and image cache for efficiency.
  */
-function dataUrlToBmp(dataUrl: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      const w = img.naturalWidth
-      const h = img.naturalHeight
-      const canvas = document.createElement("canvas")
-      canvas.width = w
-      canvas.height = h
-      const ctx = canvas.getContext("2d")
-      if (!ctx) return reject(new Error("No canvas ctx"))
-      ctx.drawImage(img, 0, 0)
-      const imageData = ctx.getImageData(0, 0, w, h)
-      const pixels = imageData.data // RGBA, top-down
+async function dataUrlToBmpBuffer(dataUrl: string): Promise<ArrayBuffer> {
+  const img = await getCachedImage(dataUrl)
+  if (!img) throw new Error("Failed to load image for BMP conversion")
 
-      // Row size must be multiple of 4 bytes (24bpp = 3 bytes/pixel)
-      const rowSize = Math.ceil((w * 3) / 4) * 4
-      const pixelDataSize = rowSize * h
-      const fileSize = 54 + pixelDataSize // BMP header (14) + DIB header (40) + pixel data
+  const w = img.naturalWidth
+  const h = img.naturalHeight
+  const { canvas, ctx } = acquireCanvas(w, h)
+  ctx.drawImage(img, 0, 0)
+  const imageData = ctx.getImageData(0, 0, w, h)
+  const pixels = imageData.data // RGBA, top-down
+  releaseCanvas(canvas)
 
-      const buffer = new ArrayBuffer(fileSize)
-      const view = new DataView(buffer)
+  // Row size must be multiple of 4 bytes (24bpp = 3 bytes/pixel)
+  const rowSize = Math.ceil((w * 3) / 4) * 4
+  const pixelDataSize = rowSize * h
+  const fileSize = 54 + pixelDataSize // BMP header (14) + DIB header (40) + pixel data
 
-      // BMP file header
-      view.setUint8(0, 0x42) // 'B'
-      view.setUint8(1, 0x4D) // 'M'
-      view.setUint32(2, fileSize, true)   // file size
-      view.setUint32(6, 0, true)          // reserved
-      view.setUint32(10, 54, true)        // pixel data offset
+  const buffer = new ArrayBuffer(fileSize)
+  const view = new DataView(buffer)
 
-      // DIB header (BITMAPINFOHEADER)
-      view.setUint32(14, 40, true)        // header size
-      view.setInt32(18, w, true)          // width
-      view.setInt32(22, h, true)          // height (positive = bottom-up)
-      view.setUint16(26, 1, true)         // color planes
-      view.setUint16(28, 24, true)        // bits per pixel
-      view.setUint32(30, 0, true)         // no compression
-      view.setUint32(34, pixelDataSize, true)
-      view.setInt32(38, 2835, true)       // X pixels per meter (~72 DPI)
-      view.setInt32(42, 2835, true)       // Y pixels per meter
-      view.setUint32(46, 0, true)         // colors in table
-      view.setUint32(50, 0, true)         // important colors
+  // BMP file header
+  view.setUint8(0, 0x42) // 'B'
+  view.setUint8(1, 0x4D) // 'M'
+  view.setUint32(2, fileSize, true)   // file size
+  view.setUint32(6, 0, true)          // reserved
+  view.setUint32(10, 54, true)        // pixel data offset
 
-      // Pixel data — BMP stores rows bottom-up, BGR order
-      let offset = 54
-      for (let row = h - 1; row >= 0; row--) {
-        for (let col = 0; col < w; col++) {
-          const i = (row * w + col) * 4
-          view.setUint8(offset++, pixels[i + 2]) // B
-          view.setUint8(offset++, pixels[i + 1]) // G
-          view.setUint8(offset++, pixels[i + 0]) // R
-        }
-        // Padding to align row to 4 bytes
-        for (let p = 0; p < rowSize - w * 3; p++) view.setUint8(offset++, 0)
-      }
+  // DIB header (BITMAPINFOHEADER)
+  view.setUint32(14, 40, true)        // header size
+  view.setInt32(18, w, true)          // width
+  view.setInt32(22, h, true)          // height (positive = bottom-up)
+  view.setUint16(26, 1, true)         // color planes
+  view.setUint16(28, 24, true)        // bits per pixel
+  view.setUint32(30, 0, true)         // no compression
+  view.setUint32(34, pixelDataSize, true)
+  view.setInt32(38, 2835, true)       // X pixels per meter (~72 DPI)
+  view.setInt32(42, 2835, true)       // Y pixels per meter
+  view.setUint32(46, 0, true)         // colors in table
+  view.setUint32(50, 0, true)         // important colors
 
-      const blob = new Blob([buffer], { type: "image/bmp" })
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
+  // Pixel data — BMP stores rows bottom-up, BGR order
+  let offset = 54
+  for (let row = h - 1; row >= 0; row--) {
+    for (let col = 0; col < w; col++) {
+      const i = (row * w + col) * 4
+      view.setUint8(offset++, pixels[i + 2]) // B
+      view.setUint8(offset++, pixels[i + 1]) // G
+      view.setUint8(offset++, pixels[i + 0]) // R
     }
-    img.onerror = reject
-    img.src = dataUrl
-  })
+    // Padding to align row to 4 bytes
+    for (let p = 0; p < rowSize - w * 3; p++) view.setUint8(offset++, 0)
+  }
+
+  return buffer
 }
 
-/** Prompt user to pick a folder (via <input webkitdirectory>) and save BMP files into it */
+/** Prompt user to pick a folder (via File System Access API) and save BMP files into it */
 async function saveBmpFilesToFolder(
   cards: { serialNumber: string; frontDataUrl: string; backDataUrl?: string }[],
   onProgress: (current: number, total: number) => void,
 ): Promise<void> {
+  const total = cards.reduce((acc, c) => acc + 1 + (c.backDataUrl ? 1 : 0), 0)
+  let done = 0
+
   // Use the File System Access API if available (Chromium/Electron)
   if ((window as any).showDirectoryPicker) {
     let dirHandle: FileSystemDirectoryHandle
@@ -718,45 +860,37 @@ async function saveBmpFilesToFolder(
     } catch {
       return // user cancelled
     }
-    let done = 0
-    const total = cards.reduce((acc, c) => acc + 1 + (c.backDataUrl ? 1 : 0), 0)
     for (const card of cards) {
-      const frontBmp = await dataUrlToBmp(card.frontDataUrl)
-      const frontBase64 = frontBmp.split(",")[1]
-      const frontBytes = Uint8Array.from(atob(frontBase64), c => c.charCodeAt(0))
+      const frontBuf = await dataUrlToBmpBuffer(card.frontDataUrl)
       const frontFile = await dirHandle.getFileHandle(`${card.serialNumber}_front.bmp`, { create: true })
       const frontWritable = await (frontFile as any).createWritable()
-      await frontWritable.write(frontBytes)
+      await frontWritable.write(frontBuf)
       await frontWritable.close()
       done++
       onProgress(done, total)
 
       if (card.backDataUrl) {
-        const backBmp = await dataUrlToBmp(card.backDataUrl)
-        const backBase64 = backBmp.split(",")[1]
-        const backBytes = Uint8Array.from(atob(backBase64), c => c.charCodeAt(0))
+        const backBuf = await dataUrlToBmpBuffer(card.backDataUrl)
         const backFile = await dirHandle.getFileHandle(`${card.serialNumber}_back.bmp`, { create: true })
         const backWritable = await (backFile as any).createWritable()
-        await backWritable.write(backBytes)
+        await backWritable.write(backBuf)
         await backWritable.close()
         done++
         onProgress(done, total)
       }
     }
   } else {
-    // Fallback: download BMP files one by one as individual downloads
+    // Fallback: pack BMP files into a ZIP and download
     const { default: JSZip } = await import("jszip")
     const zip = new JSZip()
-    let done = 0
-    const total = cards.reduce((acc, c) => acc + 1 + (c.backDataUrl ? 1 : 0), 0)
     for (const card of cards) {
-      const frontBmp = await dataUrlToBmp(card.frontDataUrl)
-      zip.file(`${card.serialNumber}_front.bmp`, frontBmp.split(",")[1], { base64: true })
+      const frontBuf = await dataUrlToBmpBuffer(card.frontDataUrl)
+      zip.file(`${card.serialNumber}_front.bmp`, frontBuf)
       done++
       onProgress(done, total)
       if (card.backDataUrl) {
-        const backBmp = await dataUrlToBmp(card.backDataUrl)
-        zip.file(`${card.serialNumber}_back.bmp`, backBmp.split(",")[1], { base64: true })
+        const backBuf = await dataUrlToBmpBuffer(card.backDataUrl)
+        zip.file(`${card.serialNumber}_back.bmp`, backBuf)
         done++
         onProgress(done, total)
       }
@@ -779,11 +913,40 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
   const [previewCards, setPreviewCards] = useState<{ serialNumber: string; frontDataUrl: string; backDataUrl?: string }[]>([])
   const [pdfPrintCards, setPdfPrintCards] = useState<{ serialNumber: string; frontDataUrl: string; backDataUrl?: string }[]>([])
   const [lastCardDims, setLastCardDims] = useState({ w: 85.6, h: 54 })
+  // Template's configured card size (single source of truth). Loaded on mount
+  // so Print Setup, render canvas, and PDF placement all agree.
+  const [templateCardDims, setTemplateCardDims] = useState<{ w: number; h: number } | null>(null)
   const [showPrintDialog, setShowPrintDialog] = useState(false)
   const [printConfig, setPrintConfig] = useState<PrintConfig>({
     paper: "A4 Horizontal", paperWidth: 297, paperHeight: 210,
     h1stPosition: 0, h2ndPosition: 0, v1stPosition: 0, v2ndPosition: 0,
   })
+
+  // Fetch the template's configured card dimensions once so the Print Setup
+  // dialog can default h2/v2 (per-card pitch) to match. This keeps the user
+  // from accidentally entering a card size in the dialog that disagrees
+  // with the template, which was the main cause of "size doesn't match"
+  // complaints.
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/schools/${schoolId}/template`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled || !data?.success || !data?.data) return
+        const w = Number(data.data.cardWidthMm) || 85.6
+        const h = Number(data.data.cardHeightMm) || 54
+        setTemplateCardDims({ w, h })
+        setLastCardDims({ w, h })
+        // Seed Print Setup defaults if user hasn't customised them yet.
+        setPrintConfig(prev =>
+          prev.h2ndPosition > 0 || prev.v2ndPosition > 0
+            ? prev
+            : { ...prev, h2ndPosition: w, v2ndPosition: h }
+        )
+      })
+      .catch(() => { /* non-fatal: dialog will still work with manual entry */ })
+    return () => { cancelled = true }
+  }, [schoolId])
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true)
@@ -847,17 +1010,27 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
       // ──── PDF PRINT PATH ────
       if (outputFormat === "PDF_PRINT") {
         const allCards: typeof pdfPrintCards = []
-        const CHUNK_SIZE = 4
+        const CHUNK_SIZE = 8
+
+        // Prefetch student photos in parallel before rendering (avoids serial
+        // loads inside renderIdCard which block each chunk). Fire all fetches
+        // concurrently — the LRU cache captures them for the render loop.
+        const photoUrls = students.map((s: any) => s.photoUrl).filter(Boolean)
+        await Promise.all(photoUrls.slice(0, 50).map((u: string) => getCachedImage(u).catch(() => null)))
+        // Continue fetching rest in background while rendering starts
+        if (photoUrls.length > 50) {
+          Promise.all(photoUrls.slice(50).map((u: string) => getCachedImage(u).catch(() => null)))
+        }
 
         for (let i = 0; i < students.length; i += CHUNK_SIZE) {
           const chunk = students.slice(i, i + CHUNK_SIZE)
           const promises = chunk.map(async (student: any) => {
             try {
               // Renders at fixed 661×1039 (300 DPI, 56×88mm) as JPEG
-              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student))
+              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
               let backDataUrl: string | undefined
               if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
-                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student))
+                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
               }
               return { serialNumber: student.serialNumber, frontDataUrl, backDataUrl }
             } catch (err) {
@@ -920,32 +1093,55 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         const svgCards: { name: string; svgContent: string }[] = []
         const previewData: typeof previewCards = []
         const studentIds: string[] = []
-        const CHUNK_SIZE = 2 // SVG generation is heavier due to base64 embedding
+        const CHUNK_SIZE = 4
+
+        // Prefetch student photos as data URLs for SVG embedding
+        const svgPhotoUrls = students.map((s: any) => s.photoUrl).filter(Boolean)
+        await Promise.all(svgPhotoUrls.slice(0, 30).map((u: string) => imageToDataUrl(u).catch(() => null)))
+        if (svgPhotoUrls.length > 30) {
+          Promise.all(svgPhotoUrls.slice(30).map((u: string) => imageToDataUrl(u).catch(() => null)))
+        }
 
         for (let i = 0; i < students.length; i += CHUNK_SIZE) {
           const chunk = students.slice(i, i + CHUNK_SIZE)
-          for (const student of chunk) {
+          const promises = chunk.map(async (student: any) => {
             try {
-              const frontSvg = await renderIdCardSvg(templateImageUrl, fieldMappings, student, getFlagUrl(student))
-              svgCards.push({ name: `${student.serialNumber}_front.svg`, svgContent: frontSvg })
-              studentIds.push(student.id)
+              const frontSvg = await renderIdCardSvg(templateImageUrl, fieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+              const result: { front: { name: string; svgContent: string }; back?: { name: string; svgContent: string }; id: string } = {
+                front: { name: `${student.serialNumber}_front.svg`, svgContent: frontSvg },
+                id: student.id,
+              }
 
               if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
-                const backSvg = await renderIdCardSvg(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student))
-                svgCards.push({ name: `${student.serialNumber}_back.svg`, svgContent: backSvg })
+                const backSvg = await renderIdCardSvg(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+                result.back = { name: `${student.serialNumber}_back.svg`, svgContent: backSvg }
               }
-
-              // Render JPEG preview for the first 8 (for on-screen display)
-              if (previewData.length < 8) {
-                const previewFront = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student))
-                let previewBack: string | undefined
-                if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
-                  previewBack = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student))
-                }
-                previewData.push({ serialNumber: student.serialNumber, frontDataUrl: previewFront, backDataUrl: previewBack })
-              }
+              return result
             } catch (err) {
               console.error(`Error rendering SVG for ${student.serialNumber}`, err)
+              return null
+            }
+          })
+          const results = await Promise.all(promises)
+          for (const r of results) {
+            if (!r) continue
+            svgCards.push(r.front)
+            studentIds.push(r.id)
+            if (r.back) svgCards.push(r.back)
+          }
+
+          // Render JPEG previews for first 8 (only once, outside the hot loop)
+          if (previewData.length < 8) {
+            for (const student of chunk) {
+              if (previewData.length >= 8) break
+              try {
+                const previewFront = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+                let previewBack: string | undefined
+                if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
+                  previewBack = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+                }
+                previewData.push({ serialNumber: student.serialNumber, frontDataUrl: previewFront, backDataUrl: previewBack })
+              } catch {}
             }
           }
 
@@ -973,16 +1169,23 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
       // ──── BMP PATH ────
       } else if (outputFormat === "BMP") {
         const renderedCards: { serialNumber: string; frontDataUrl: string; backDataUrl?: string; id: string }[] = []
-        const CHUNK_SIZE = 4
+        const CHUNK_SIZE = 8
+
+        // Prefetch student photos
+        const bmpPhotoUrls = students.map((s: any) => s.photoUrl).filter(Boolean)
+        await Promise.all(bmpPhotoUrls.slice(0, 50).map((u: string) => getCachedImage(u).catch(() => null)))
+        if (bmpPhotoUrls.length > 50) {
+          Promise.all(bmpPhotoUrls.slice(50).map((u: string) => getCachedImage(u).catch(() => null)))
+        }
 
         for (let i = 0; i < students.length; i += CHUNK_SIZE) {
           const chunk = students.slice(i, i + CHUNK_SIZE)
           const promises = chunk.map(async (student: any) => {
             try {
-              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student))
+              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
               let backDataUrl: string | undefined
               if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
-                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student))
+                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
               }
               return { serialNumber: student.serialNumber, frontDataUrl, backDataUrl, id: student.id }
             } catch (err) {
@@ -1021,16 +1224,23 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
       // ──── JPEG PATH (existing) ────
       } else {
         const renderedCards: { name: string; dataUrl: string; id: string; serialNumber: string; frontDataUrl: string; backDataUrl?: string }[] = []
-        const CHUNK_SIZE = 4
+        const CHUNK_SIZE = 8
+
+        // Prefetch student photos
+        const jpgPhotoUrls = students.map((s: any) => s.photoUrl).filter(Boolean)
+        await Promise.all(jpgPhotoUrls.slice(0, 50).map((u: string) => getCachedImage(u).catch(() => null)))
+        if (jpgPhotoUrls.length > 50) {
+          Promise.all(jpgPhotoUrls.slice(50).map((u: string) => getCachedImage(u).catch(() => null)))
+        }
 
         for (let i = 0; i < students.length; i += CHUNK_SIZE) {
           const chunk = students.slice(i, i + CHUNK_SIZE)
           const promises = chunk.map(async (student: any) => {
             try {
-              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student))
+              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
               let backDataUrl: string | undefined
               if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
-                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student))
+                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
               }
               return {
                 name: `${student.serialNumber}_front.jpg`,

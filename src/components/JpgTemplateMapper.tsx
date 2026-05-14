@@ -6,7 +6,7 @@ import {
   type IdSizeConfig, type FontConfig, type PhotoSizeConfig,
   type PhotoBorderConfig, type WrapTextConfig,
 } from "./IDMakerDialogs"
-import { resolveFieldValue } from "@/lib/field-resolver"
+import { resolveFieldValue, formatDateValue } from "@/lib/field-resolver"
 
 const BG_COLOR_PRESETS = [
   // Neutrals
@@ -107,46 +107,6 @@ const DATE_FORMATS = [
   { value: "DD MMM YYYY", label: "DD MMM YYYY", example: "15 Aug 2022" },
   { value: "MMMM DD, YYYY", label: "MMMM DD, YYYY", example: "August 15, 2022" },
 ]
-
-/** Convert a date string to the specified format for display preview */
-const formatDateValue = (value: string, format: string): string => {
-  // Try to parse common date formats
-  const datePatterns = [
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, // DD/MM/YYYY or MM/DD/YYYY
-    /^(\d{4})-(\d{1,2})-(\d{1,2})$/, // YYYY-MM-DD
-    /^(\d{1,2})-(\d{1,2})-(\d{4})$/, // DD-MM-YYYY
-  ]
-  
-  let day = "15", month = "08", year = "2022"
-  
-  for (const pattern of datePatterns) {
-    const match = value.match(pattern)
-    if (match) {
-      if (pattern === datePatterns[1]) {
-        // YYYY-MM-DD
-        year = match[1]; month = match[2]; day = match[3]
-      } else {
-        day = match[1]; month = match[2]; year = match[3]
-      }
-      break
-    }
-  }
-  
-  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"]
-  const monthShort = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-  const mIdx = parseInt(month, 10) - 1
-  
-  switch (format) {
-    case "DD/MM/YYYY": return `${day.padStart(2,"0")}/${month.padStart(2,"0")}/${year}`
-    case "MM/DD/YYYY": return `${month.padStart(2,"0")}/${day.padStart(2,"0")}/${year}`
-    case "YYYY-MM-DD": return `${year}-${month.padStart(2,"0")}-${day.padStart(2,"0")}`
-    case "DD-MM-YYYY": return `${day.padStart(2,"0")}-${month.padStart(2,"0")}-${year}`
-    case "DD.MM.YYYY": return `${day.padStart(2,"0")}.${month.padStart(2,"0")}.${year}`
-    case "DD MMM YYYY": return `${day.padStart(2,"0")} ${monthShort[mIdx] || "Aug"} ${year}`
-    case "MMMM DD, YYYY": return `${months[mIdx] || "August"} ${day}, ${year}`
-    default: return value
-  }
-}
 
 const FONT_FAMILIES = [
   // Sans-Serif

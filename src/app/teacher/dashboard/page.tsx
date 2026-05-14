@@ -891,6 +891,8 @@ export default function TeacherDashboard() {
                               studentPhoto={selectedStudent.photoUrl}
                               scale={0.5}
                               watermark="PREVIEW ONLY"
+                              cardWidthMm={(templateData as any).cardWidthMm}
+                              cardHeightMm={(templateData as any).cardHeightMm}
                             />
                           </div>
                           {templateData.hasBackSide && templateData.backTemplateImageUrl && (
@@ -903,6 +905,8 @@ export default function TeacherDashboard() {
                                 studentPhoto={selectedStudent.photoUrl}
                                 scale={0.5}
                                 watermark="PREVIEW ONLY"
+                                cardWidthMm={(templateData as any).cardWidthMm}
+                                cardHeightMm={(templateData as any).cardHeightMm}
                               />
                             </div>
                           )}

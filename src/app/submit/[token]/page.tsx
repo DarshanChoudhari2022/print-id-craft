@@ -530,6 +530,8 @@ export default function SubmitPage() {
                     studentPhoto={croppedPhoto}
                     scale={1}
                     watermark="Wise Melon"
+                    cardWidthMm={(config as any).cardWidthMm}
+                    cardHeightMm={(config as any).cardHeightMm}
                   />
                 </div>
               ) : (
@@ -571,6 +573,8 @@ export default function SubmitPage() {
                     studentPhoto={croppedPhoto}
                     scale={1}
                     watermark="Wise Melon"
+                    cardWidthMm={(config as any).cardWidthMm}
+                    cardHeightMm={(config as any).cardHeightMm}
                   />
                 ) : (
                   <>

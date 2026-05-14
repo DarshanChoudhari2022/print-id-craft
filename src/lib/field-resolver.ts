@@ -70,16 +70,30 @@ function findGroupForKey(normKey: string): string | null {
  * @param fieldKey - the canonical field key to resolve
  * @returns the resolved value (trimmed string) or empty string
  */
+// WeakMap-based cache: normalized lookup is built once per formData object,
+// then reused across all resolveFieldValue calls for the same student.
+// This avoids O(fields × keys) normalization work during batch rendering
+// (2000 students × 10 fields → 20K loops → 2K loops).
+const _fdNormCache = new WeakMap<Record<string, string>, Record<string, string>>()
+
+function getNormalizedFd(fd: Record<string, string>): Record<string, string> {
+  let cached = _fdNormCache.get(fd)
+  if (cached) return cached
+  cached = {}
+  for (const [k, v] of Object.entries(fd)) {
+    if (v && String(v).trim()) cached[normalizeKey(k)] = String(v).trim()
+  }
+  _fdNormCache.set(fd, cached)
+  return cached
+}
+
 export function resolveFieldValue(fd: Record<string, string>, fieldKey: string): string {
   // 1. Direct exact match (skip empty/whitespace-only values)
   const directVal = fd[fieldKey]
   if (directVal != null && String(directVal).trim()) return String(directVal).trim()
 
-  // 2. Build normalized lookup
-  const fdNormalized: Record<string, string> = {}
-  for (const [k, v] of Object.entries(fd)) {
-    if (v && String(v).trim()) fdNormalized[normalizeKey(k)] = String(v).trim()
-  }
+  // 2. Build normalized lookup (cached per formData object)
+  const fdNormalized = getNormalizedFd(fd)
 
   const normKey = normalizeKey(fieldKey)
   if (fdNormalized[normKey]) return fdNormalized[normKey]
@@ -99,4 +113,44 @@ export function resolveFieldValue(fd: Record<string, string>, fieldKey: string):
   }
 
   return ""
+}
+
+/**
+ * Formats a date string according to the user's chosen format.
+ * Parses DD/MM/YYYY, YYYY-MM-DD, and DD-MM-YYYY inputs.
+ * Returns the original value if parsing fails.
+ */
+export function formatDateValue(value: string, format: string): string {
+  if (!value || !format) return value
+  const datePatterns = [
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, // DD/MM/YYYY or MM/DD/YYYY
+    /^(\d{4})-(\d{1,2})-(\d{1,2})$/, // YYYY-MM-DD
+    /^(\d{1,2})-(\d{1,2})-(\d{4})$/, // DD-MM-YYYY
+  ]
+  let day = "", month = "", year = ""
+  for (const pattern of datePatterns) {
+    const match = value.match(pattern)
+    if (match) {
+      if (pattern === datePatterns[1]) {
+        year = match[1]; month = match[2]; day = match[3]
+      } else {
+        day = match[1]; month = match[2]; year = match[3]
+      }
+      break
+    }
+  }
+  if (!day || !month || !year) return value
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+  const monthShort = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+  const mIdx = parseInt(month, 10) - 1
+  switch (format) {
+    case "DD/MM/YYYY": return `${day.padStart(2,"0")}/${month.padStart(2,"0")}/${year}`
+    case "MM/DD/YYYY": return `${month.padStart(2,"0")}/${day.padStart(2,"0")}/${year}`
+    case "YYYY-MM-DD": return `${year}-${month.padStart(2,"0")}-${day.padStart(2,"0")}`
+    case "DD-MM-YYYY": return `${day.padStart(2,"0")}-${month.padStart(2,"0")}-${year}`
+    case "DD.MM.YYYY": return `${day.padStart(2,"0")}.${month.padStart(2,"0")}.${year}`
+    case "DD MMM YYYY": return `${day.padStart(2,"0")} ${monthShort[mIdx] || month} ${year}`
+    case "MMMM DD, YYYY": return `${months[mIdx] || month} ${day}, ${year}`
+    default: return value
+  }
 }

@@ -2564,6 +2564,8 @@ export default function SchoolDetailPage() {
                         flagImageUrl={resolveFlagImageUrl(selectedStudent.formData as Record<string, string>, flagImages)}
                         scale={1}
                         watermark="PREVIEW"
+                        cardWidthMm={(templateData as any).cardWidthMm}
+                        cardHeightMm={(templateData as any).cardHeightMm}
                       />
                     </div>
                     {templateData.hasBackSide && templateData.backTemplateImageUrl && (
@@ -2577,6 +2579,8 @@ export default function SchoolDetailPage() {
                           flagImageUrl={resolveFlagImageUrl(selectedStudent.formData as Record<string, string>, flagImages)}
                           scale={1}
                           watermark="PREVIEW"
+                          cardWidthMm={(templateData as any).cardWidthMm}
+                          cardHeightMm={(templateData as any).cardHeightMm}
                         />
                       </div>
                     )}

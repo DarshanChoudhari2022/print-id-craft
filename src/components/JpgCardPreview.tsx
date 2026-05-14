@@ -1,6 +1,6 @@
 "use client"
 import { useRef, useEffect, useState, useCallback, memo } from "react"
-import { resolveFieldValue as resolveFieldValueShared } from "@/lib/field-resolver"
+import { resolveFieldValue as resolveFieldValueShared, formatDateValue } from "@/lib/field-resolver"
 
 type FieldMapping = {
   id: string
@@ -23,11 +23,19 @@ type FieldMapping = {
   //   "multiline" → wraps onto multiple lines AT THE USER'S CHOSEN font size.
   //                  Used for long addresses where shrinking would be illegible.
   textWrap?: "nowrap" | "wrap" | "multiline"
+  // Enhanced text formatting — must match JpgTemplateMapper.tsx's FieldMapping.
+  fontStyle?: "normal" | "italic"
+  textDecoration?: "none" | "underline" | "line-through"
+  letterSpacing?: number
+  lineHeight?: number
+  textTransform?: "none" | "uppercase" | "lowercase" | "capitalize"
+  dateFormat?: string
   // Photo styling (rounded corners + border) — kept optional so older
   // saved templates without these props still render correctly.
   photoBorderRadius?: number
   photoBorderWidth?: number
   photoBorderColor?: string
+  locked?: boolean
 }
 
 /**
@@ -66,15 +74,32 @@ type JpgCardPreviewProps = {
   scale?: number
   className?: string
   watermark?: string
+  /**
+   * Card physical size in millimetres. When provided, the preview canvas
+   * uses this aspect ratio (cardWidthMm × DPI / 25.4 wide) instead of the
+   * template image's natural pixel size. This ensures the preview matches
+   * what jsPDF will render in the printed PDF — no squash/stretch.
+   */
+  cardWidthMm?: number
+  cardHeightMm?: number
 }
 
 const MAPPER_REFERENCE_WIDTH = 600
+const PREVIEW_DPI = 300
 
-// In-memory cache for loaded images to speed up rendering
-const imageCache: Record<string, HTMLImageElement> = {}
+// Bounded LRU image cache — prevents unbounded memory growth when
+// previewing many students. Template images (long-lived) are protected.
+const IMAGE_CACHE_MAX = 60
+const imageCache = new Map<string, HTMLImageElement>()
 
 async function loadImage(url: string): Promise<HTMLImageElement> {
-  if (imageCache[url]) return imageCache[url]
+  const cached = imageCache.get(url)
+  if (cached) {
+    // Move to end (most-recently-used)
+    imageCache.delete(url)
+    imageCache.set(url, cached)
+    return cached
+  }
   const img = new Image()
   img.crossOrigin = "anonymous"
   await new Promise<void>((resolve, reject) => {
@@ -82,7 +107,12 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error("Failed to load: " + url))
     img.src = url
   })
-  imageCache[url] = img
+  // Evict oldest if at capacity (skip template URLs)
+  if (imageCache.size >= IMAGE_CACHE_MAX) {
+    const oldest = imageCache.keys().next().value
+    if (oldest && !oldest.includes("/template")) imageCache.delete(oldest)
+  }
+  imageCache.set(url, img)
   return img
 }
 
@@ -139,11 +169,13 @@ function fitTextToBox(
   canvasW: number,
   userFontSizeEditorPx?: number,
   wrapMode: "nowrap" | "wrap" | "multiline" = "wrap",
+  fontStyle: string = "normal",
 ): { lines: string[]; fontSize: number; lineHeight: number } {
   const padding = 4 * scale
   const maxW = Math.max(1, boxW - padding * 2)
   const maxH = Math.max(1, boxH - padding * 2)
-  const fontPrefix = fontWeight === "bold" ? "bold " : ""
+  const italicPrefix = fontStyle === "italic" ? "italic " : ""
+  const fontPrefix = `${italicPrefix}${fontWeight === "bold" ? "bold " : ""}`
 
   const setFont = (s: number) => { ctx.font = `${fontPrefix}${s}px ${fontFamily}` }
 
@@ -240,6 +272,8 @@ export default function JpgCardPreview({
   scale = 1,
   className,
   watermark,
+  cardWidthMm,
+  cardHeightMm,
 }: JpgCardPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [dimensions, setDimensions] = useState({ width: 600, height: 380 })
@@ -252,8 +286,18 @@ export default function JpgCardPreview({
 
     try {
       const img = await loadImage(templateImageUrl)
-      const w = img.naturalWidth * scale
-      const h = img.naturalHeight * scale
+      // When card size in mm is provided, canvas uses that aspect ratio so
+      // the preview is pixel-faithful to the printed PDF. Otherwise fall
+      // back to the template image's natural size (legacy behaviour).
+      let w: number
+      let h: number
+      if (cardWidthMm && cardHeightMm && cardWidthMm > 0 && cardHeightMm > 0) {
+        w = Math.round((cardWidthMm * PREVIEW_DPI) / 25.4) * scale
+        h = Math.round((cardHeightMm * PREVIEW_DPI) / 25.4) * scale
+      } else {
+        w = img.naturalWidth * scale
+        h = img.naturalHeight * scale
+      }
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w
         canvas.height = h
@@ -338,15 +382,33 @@ export default function JpgCardPreview({
             }
           }
         } else {
-          const value = resolveFieldValue(formData, field.fieldKey)
+          // Apply dateFormat + textTransform before rendering (matches mapper preview).
+          let value = resolveFieldValue(formData, field.fieldKey)
+          if (field.dateFormat && value) value = formatDateValue(value, field.dateFormat)
+          const transform = field.textTransform || "none"
+          if (transform === "uppercase") value = value.toUpperCase()
+          else if (transform === "lowercase") value = value.toLowerCase()
+          else if (transform === "capitalize") value = value.replace(/\b\w/g, c => c.toUpperCase())
+
           if (value) {
             const padding = 4 * scale
             const fontFamily = field.fontFamily || "Arial"
             const fontWeight = field.fontWeight || "normal"
-            const { lines, fontSize, lineHeight } = fitTextToBox(
+            const fStyle = field.fontStyle || "normal"
+            const { lines, fontSize, lineHeight: baseLineHeight } = fitTextToBox(
               ctx, String(value), fw, fh, fontFamily, fontWeight, scale,
-              w, field.fontSize, field.textWrap || "wrap",
+              w, field.fontSize, field.textWrap || "wrap", fStyle,
             )
+            // Honour the user's lineHeight multiplier if set.
+            const userLH = field.lineHeight && field.lineHeight > 0 ? field.lineHeight : 0
+            const lineHeight = userLH > 0 ? fontSize * userLH : baseLineHeight
+
+            // Apply letterSpacing (scaled from editor px to canvas px).
+            const lsEditorPx = field.letterSpacing || 0
+            const lsCanvasPx = (lsEditorPx / MAPPER_REFERENCE_WIDTH) * w
+            if (lsCanvasPx !== 0 && (ctx as any).letterSpacing !== undefined) {
+              (ctx as any).letterSpacing = `${lsCanvasPx}px`
+            }
 
             ctx.fillStyle = field.fontColor || "#000"
             const align = field.textAlign || "left"
@@ -367,7 +429,27 @@ export default function JpgCardPreview({
               ? fy + padding + lineHeight / 2
               : fy + (fh - totalH) / 2 + lineHeight / 2
             for (let i = 0; i < lines.length; i++) {
-              ctx.fillText(lines[i], textX, firstLineY + i * lineHeight)
+              const ly = firstLineY + i * lineHeight
+              ctx.fillText(lines[i], textX, ly)
+              // textDecoration: underline / line-through
+              const decoration = field.textDecoration || "none"
+              if (decoration !== "none") {
+                const tw = ctx.measureText(lines[i]).width
+                const lx = align === "center" ? textX - tw / 2 : align === "right" ? textX - tw : textX
+                ctx.save()
+                ctx.strokeStyle = field.fontColor || "#000"
+                ctx.lineWidth = Math.max(1, fontSize * 0.05)
+                ctx.beginPath()
+                const yOff = decoration === "underline" ? fontSize * 0.35 : 0
+                ctx.moveTo(lx, ly + yOff)
+                ctx.lineTo(lx + tw, ly + yOff)
+                ctx.stroke()
+                ctx.restore()
+              }
+            }
+            // Reset letterSpacing
+            if (lsCanvasPx !== 0 && (ctx as any).letterSpacing !== undefined) {
+              (ctx as any).letterSpacing = "0px"
             }
             ctx.restore()
           }
@@ -391,7 +473,7 @@ export default function JpgCardPreview({
     } catch (err) {
       console.error("Render failed", err)
     }
-  }, [templateImageUrl, fieldMappings, formData, studentPhoto, flagImageUrl, scale, watermark])
+  }, [templateImageUrl, fieldMappings, formData, studentPhoto, flagImageUrl, scale, watermark, cardWidthMm, cardHeightMm])
 
   const renderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 

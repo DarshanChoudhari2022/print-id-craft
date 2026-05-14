@@ -57,7 +57,11 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
     const students = await prisma.student.findMany({
       where: whereClause,
-      include: {
+      select: {
+        id: true,
+        serialNumber: true,
+        photoUrl: true,
+        formData: true,
         class: { select: { name: true } },
       },
       orderBy: { serialNumber: "asc" },
@@ -77,7 +81,6 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         id: s.id,
         serialNumber: s.serialNumber,
         photoUrl: s.photoUrl,
-        qrCodeUrl: s.qrCodeUrl,
         className: s.class.name,
         formData: {
           ...formData,
