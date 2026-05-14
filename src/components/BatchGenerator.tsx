@@ -899,6 +899,13 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           cardHeight: ch,
           h1stPosition: printConfig.h1stPosition,
           v1stPosition: printConfig.v1stPosition,
+          // Honor Print Setup values exactly: h2/v2 already represent the
+          // full per-card pitch (card width/height incl. any user-intended
+          // gap), and h1/v1 are absolute start positions. No extra margin
+          // or gap should be added on top — otherwise the printed card
+          // size drifts from what the user configured.
+          marginMm: 0,
+          gapMm: 0,
         })
         setProgress({ current: totalCount, total: totalCount, status: "PDF downloaded! ✅" })
 
@@ -1395,6 +1402,9 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                     cardHeight: printConfig.v2ndPosition > 0 ? printConfig.v2ndPosition : lastCardDims.h,
                     h1stPosition: printConfig.h1stPosition,
                     v1stPosition: printConfig.v1stPosition,
+                    // See note in initial generateDirectPdf call above.
+                    marginMm: 0,
+                    gapMm: 0,
                   })
                 }}
                 style={{
