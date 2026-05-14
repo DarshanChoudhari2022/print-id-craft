@@ -332,12 +332,17 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
         })
 
         // ── 8. Blur Detection ──
+        // Threshold lowered (15 → 8) because the previous value rejected
+        // many in-focus phone-camera shots — phone JPEGs are heavily
+        // denoised, which suppresses the high-frequency content the
+        // Laplacian variance measures. We still flag genuinely smeared
+        // images but no longer reject normal phone selfies.
         const blurScore = detectBlur(ctx, img.width, img.height)
         checks.push({
-          passed: blurScore > 15,
+          passed: blurScore > 8,
           severity: "warning",
           label: "Sharpness",
-          detail: blurScore > 25 ? "Sharp" : blurScore > 15 ? "Acceptable" : "Blurry",
+          detail: blurScore > 20 ? "Sharp" : blurScore > 8 ? "Acceptable" : "Blurry",
           tip: "Hold the camera steady and ensure the subject is in focus"
         })
 
@@ -400,11 +405,17 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
           })
         }
 
-        // ── 14. Front-Facing Heuristic (CRITICAL for ID) ──
+        // ── 14. Front-Facing Heuristic ──
+        // Demoted from "critical" to "warning": this is just a luminance-
+        // symmetry check between the left/right halves of the face region,
+        // which fails on uneven lighting (window on one side), tilted
+        // heads, or strong backgrounds — none of which justify rejecting
+        // an otherwise good ID photo. The browser FaceDetector + Face
+        // Centering already cover the real "is the face in frame" case.
         const frontFacing = analyzeFrontFacing(ctx, img.width, img.height)
         checks.push({
           passed: frontFacing.passed,
-          severity: "critical",
+          severity: "warning",
           label: "Front-Facing",
           detail: frontFacing.confidence,
           tip: "Look directly at the camera — avoid side angles. ID cards require a front-facing photo."
@@ -432,11 +443,17 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
           })
         }
 
-        // ── 17. Content Appropriateness Check (CRITICAL) ──
+        // ── 17. Content Appropriateness Check ──
+        // Demoted from "critical" to "warning". This is a pure skin-pixel
+        // heuristic that gives lots of false positives — orange/red/yellow
+        // shirts read as skin, dark-skinned subjects fall outside the tuned
+        // range, etc. We still surface the suggestion but never hard-block
+        // a portrait that has already passed Face Detected + Face Centering
+        // + Front-Facing.
         const contentCheck = analyzeContentAppropriateness(ctx, img.width, img.height, faceResult)
         checks.push({
           passed: contentCheck.passed,
-          severity: "critical",
+          severity: "warning",
           label: "ID Photo Content",
           detail: contentCheck.detail,
           tip: contentCheck.tip
@@ -667,21 +684,21 @@ export default function PhotoVerifier({ onPhotoAccepted, currentPhotoUrl, school
       const lowerSkinRatio = lowerTotal > 0 ? skinLower / lowerTotal : 0
       const totalSkinRatio = (upperTotal + lowerTotal) > 0 ? (skinUpper + skinLower) / (upperTotal + lowerTotal) : 0
 
-      // Red flag: excessive skin in the lower half with no proper face detected in upper half
-      // A normal ID portrait has most skin in the upper region (face) and clothed body below
-      if (lowerSkinRatio > 0.45 && upperSkinRatio < 0.15) {
-        return { passed: false, detail: "Not an ID portrait photo", tip: "Upload a head-and-shoulders portrait — your face must be clearly visible in the upper portion" }
+      // Thresholds intentionally generous — this heuristic is purely a
+      // skin-pixel count and gives many false positives on coloured
+      // clothing, dark-skinned subjects, or warm-lit walls. The browser
+      // FaceDetector + Face Centering + Face Size checks already catch
+      // the real "not a portrait" case; this is only here as a soft hint.
+      if (lowerSkinRatio > 0.65 && upperSkinRatio < 0.08) {
+        return { passed: false, detail: "Face not visible in upper area", tip: "Upload a head-and-shoulders portrait — your face must be clearly visible in the upper portion" }
       }
 
-      // Red flag: too much total skin exposure (more than 60% of image is skin)
-      // Normal ID portrait: ~15-35% skin (face + neck area)
-      if (totalSkinRatio > 0.55) {
-        return { passed: false, detail: "Inappropriate photo content", tip: "This doesn't appear to be a standard ID portrait. Upload a photo showing only your face and shoulders." }
+      if (totalSkinRatio > 0.75) {
+        return { passed: false, detail: "Mostly skin-coloured pixels", tip: "If you're wearing very bright orange/red/yellow this can confuse the checker — try a different photo if you're not in proper attire." }
       }
 
-      // Red flag: high skin in lower half (> 35%) suggests non-portrait content
-      if (lowerSkinRatio > 0.35 && totalSkinRatio > 0.40) {
-        return { passed: false, detail: "Not a standard portrait", tip: "ID cards require a head-and-shoulders photo. Your lower body should not be prominently visible." }
+      if (lowerSkinRatio > 0.55 && totalSkinRatio > 0.60) {
+        return { passed: false, detail: "Unusual skin distribution", tip: "ID cards work best with a head-and-shoulders photo. You can still proceed if this is a valid portrait." }
       }
 
       return { passed: true, detail: "Valid ID portrait", tip: "" }
