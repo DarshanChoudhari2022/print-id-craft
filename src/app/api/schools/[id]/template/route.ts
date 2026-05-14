@@ -92,16 +92,25 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const body = await req.json()
     const validated = templateSchema.parse(body)
 
-    // AUTO-SYNC: When fieldMappings are saved, auto-generate fieldConfig
-    // This ensures the student form always matches the mapped JPG fields
+    // Only auto-derive fieldConfig from fieldMappings when the school has NO students
+    // (i.e. no Excel has been imported yet). Once students exist, fieldConfig is
+    // authoritative from the Excel auto-sync and must NOT be overwritten by the
+    // JPG-template field labels, which are for card printing only.
     let fieldConfig = validated.fieldConfig
     if (validated.fieldMappings && Array.isArray(validated.fieldMappings) && validated.fieldMappings.length > 0) {
-      fieldConfig = deriveFieldConfigFromMappings(validated.fieldMappings)
+      const studentCount = await prisma.student.count({ where: { schoolId: params.id } })
+      if (studentCount === 0) {
+        fieldConfig = deriveFieldConfigFromMappings(validated.fieldMappings)
+      }
+      // If students exist, leave fieldConfig as-is (Excel-synced values are preserved)
     }
 
     const updateData: any = { ...validated }
     if (fieldConfig) {
       updateData.fieldConfig = fieldConfig
+    } else {
+      // Never accidentally null out fieldConfig — remove it from the update payload
+      delete updateData.fieldConfig
     }
 
     const template = await prisma.template.upsert({

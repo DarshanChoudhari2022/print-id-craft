@@ -1481,52 +1481,55 @@ export default function SchoolDetailPage() {
             <div className="data-table-wrapper" style={{ overflowX: 'auto', position: 'relative', opacity: tabLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
               {tabLoading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, background: 'rgba(255,255,255,0.6)', borderRadius: 14 }}><div className="login-spinner" style={{ width: 28, height: 28, borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6' }} /></div>}
               {(() => {
-                // fieldConfig is auto-synced from Excel on every import — it has the EXACT
-                // Excel column names as labels and the correct stored data keys.
-                // Use it as the primary column source so every school shows exactly what
-                // was in their Excel (e.g. "GR NO" not "ROLL NO. / NO", "House" not "HOUSE FLAG").
-                // fieldMappings is only for physical card printing layout — fall back to it
-                // only when no Excel has ever been imported for this school.
-                const keyToLabel: Record<string, string> = {}
-                const fieldConf = (templateData?.fieldConfig || []) as Array<{ key: string; label: string; type: string }>
-                const fieldMappingsArr = (templateData?.fieldMappings || []) as Array<{ fieldKey: string; label: string; type: string }>
-                const SKIP_KEYS = new Set(["class", "classSection", "photoUrl"])
-                const SKIP_LABELS = new Set(["class", "class-section", "photo url", "photourl"])
+                // Derive columns from ACTUAL student formData keys — these are the ground
+                // truth of what is stored regardless of template config state.
+                // Labels come from: (1) fieldConfig label where key matches exactly,
+                // (2) canonical DEFAULT_KEY_LABELS for common normalized keys,
+                // (3) the key itself as a last resort.
+                const DEFAULT_KEY_LABELS: Record<string, string> = {
+                  srNo: "NO", fullName: "Name", grNo: "GR NO", photoId: "PHOTO NO.",
+                  flagColor: "House", phone: "MOBILE", address: "Address", rollNo: "Roll No.",
+                  fatherName: "Father", motherName: "Mother", branch: "Branch", section: "Section",
+                  dob: "Date of Birth", bloodGroup: "Blood Group", name: "Name",
+                  admissionNo: "Admission No.", father: "Father", mother: "Mother",
+                  mobile: "Mobile", classSection: "Class-Section",
+                }
+                // Build label map from fieldConfig (key → label, exact key match only)
+                const fcLabelMap: Record<string, string> = {}
+                const rawFC = (templateData?.fieldConfig || []) as Array<{ key: string; label: string }>
+                for (const f of rawFC) { if (f.key && f.label) fcLabelMap[f.key] = f.label }
 
-                let dataColumns: string[]
-                if (fieldConf.length > 0) {
-                  const visible = fieldConf.filter(f =>
-                    !SKIP_KEYS.has(f.key) &&
-                    !SKIP_LABELS.has((f.label || "").toLowerCase().trim())
-                  )
-                  dataColumns = visible.map(f => f.key)
-                  for (const f of visible) keyToLabel[f.key] = f.label
-                } else if (fieldMappingsArr.length > 0) {
-                  const visible = fieldMappingsArr.filter(
-                    m => m.type !== "photo" && m.fieldKey !== "class" && m.fieldKey !== "classSection"
-                  )
-                  dataColumns = visible.map(m => m.fieldKey)
-                  for (const m of visible) keyToLabel[m.fieldKey] = m.label
-                } else {
-                  // Last resort: collect unique keys from student formData
-                  const fallback: Record<string, string> = {
-                    srNo: "NO.", fullName: "Name", grNo: "GR NO", photoId: "PHOTO NO.",
-                    flagColor: "House", phone: "MOBILE", address: "Address", rollNo: "Roll No.",
-                    dob: "DOB", bloodGroup: "Blood Group", fatherName: "Father Name",
-                    motherName: "Mother Name", section: "Section", branch: "Branch",
-                  }
-                  const keySet = new Set<string>()
-                  const allKeys: string[] = []
-                  for (const s of students) {
-                    const fd = s.formData as any
-                    if (fd && typeof fd === "object") {
-                      for (const k of Object.keys(fd)) {
-                        if (!keySet.has(k) && k !== "class") { keySet.add(k); allKeys.push(k) }
+                const SKIP_KEYS = new Set(["class", "classSection", "photoUrl"])
+                const keyToLabel: Record<string, string> = {}
+                const keySet = new Set<string>()
+                const allKeys: string[] = []
+                for (const s of students) {
+                  const fd = s.formData as any
+                  if (fd && typeof fd === "object") {
+                    for (const k of Object.keys(fd)) {
+                      if (!keySet.has(k) && !SKIP_KEYS.has(k)) {
+                        keySet.add(k); allKeys.push(k)
+                        keyToLabel[k] = fcLabelMap[k] || DEFAULT_KEY_LABELS[k] || k
                       }
                     }
                   }
-                  dataColumns = allKeys.filter(k => k !== "class" && k !== "classSection")
-                  Object.assign(keyToLabel, fallback)
+                }
+
+                let dataColumns: string[]
+                if (allKeys.length > 0) {
+                  dataColumns = allKeys
+                } else {
+                  // No students yet — fall back to fieldConfig or fieldMappings for column skeleton
+                  const rawFM = (templateData?.fieldMappings || []) as Array<{ fieldKey: string; label: string; type: string }>
+                  if (rawFC.length > 0) {
+                    const visible = rawFC.filter(f => !SKIP_KEYS.has(f.key))
+                    dataColumns = visible.map(f => f.key)
+                    for (const f of visible) keyToLabel[f.key] = f.label
+                  } else {
+                    const visible = rawFM.filter(m => m.type !== "photo" && !SKIP_KEYS.has(m.fieldKey))
+                    dataColumns = visible.map(m => m.fieldKey)
+                    for (const m of visible) keyToLabel[m.fieldKey] = m.label
+                  }
                 }
                 const hasDynamicColumns = dataColumns.length > 0
                 const totalCols = 1 + (hasDynamicColumns ? dataColumns.length : 2) + 3
@@ -1586,7 +1589,7 @@ export default function SchoolDetailPage() {
                         }
                         return ""
                       }
-                      const studentName = resolveCell("name") || resolveCell("fullName") || "—"
+                      const studentName = (fd?.fullName || fd?.name || fd?.["Full Name"] || fd?.["Student Name"] || "—") as string
                       const hasPhoto = !!s.photoUrl
 
                       return (
@@ -1605,7 +1608,7 @@ export default function SchoolDetailPage() {
                           </td>
                           {hasDynamicColumns ? (
                             dataColumns.map(k => {
-                              const val = resolveCell(k)
+                              const val = (fd?.[k] !== undefined && String(fd[k]).trim() !== "") ? String(fd[k]) : ""
                               const isPhotoIdCol = k === "photoId"
                               const isNumCol = k === "srNo" || k === "rollNo" || k === "grNo"
                               return (

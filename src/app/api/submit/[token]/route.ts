@@ -37,8 +37,8 @@ export async function GET(req: Request, { params }: { params: { token: string } 
     const rawFieldConf = (template?.fieldConfig || []) as any[]
 
     // Keys/labels that students should not fill in (system-managed or auto-filled)
-    const FORM_SKIP_KEYS = new Set(["class", "classSection", "photoUrl"])
-    const FORM_SKIP_LABELS = new Set(["class", "class-section", "photo url", "photourl"])
+    const FORM_SKIP_KEYS = new Set(["class", "classSection", "photoUrl", "srNo", "photoId"])
+    const FORM_SKIP_LABELS = new Set(["class", "class-section", "photo url", "photourl", "no", "no.", "photo no", "photo no.", "photo id", "photo number"])
 
     let resolvedFieldConfig: any[]
     if (rawFieldConf.length > 0) {
