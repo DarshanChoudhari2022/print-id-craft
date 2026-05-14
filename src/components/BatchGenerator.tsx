@@ -922,11 +922,11 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     h1stPosition: 0, h2ndPosition: 0, v1stPosition: 0, v2ndPosition: 0,
   })
 
-  // Fetch the template's configured card dimensions once so the Print Setup
-  // dialog can default h2/v2 (per-card pitch) to match. This keeps the user
-  // from accidentally entering a card size in the dialog that disagrees
-  // with the template, which was the main cause of "size doesn't match"
-  // complaints.
+  // Track whether printConfig was loaded from DB (to show "saved" badge)
+  const [printConfigSaved, setPrintConfigSaved] = useState(false)
+
+  // Fetch the template's configured card dimensions + saved printConfig once.
+  // This ensures Print Setup, render canvas, and PDF placement all agree.
   useEffect(() => {
     let cancelled = false
     fetch(`/api/schools/${schoolId}/template`)
@@ -937,16 +937,36 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         const h = Number(data.data.cardHeightMm) || 54
         setTemplateCardDims({ w, h })
         setLastCardDims({ w, h })
-        // Seed Print Setup defaults if user hasn't customised them yet.
-        setPrintConfig(prev =>
-          prev.h2ndPosition > 0 || prev.v2ndPosition > 0
-            ? prev
-            : { ...prev, h2ndPosition: w, v2ndPosition: h }
-        )
+
+        // Restore saved Print Config from database if available
+        const saved = data.data.printConfig as PrintConfig | null
+        if (saved && saved.paperWidth > 0) {
+          setPrintConfig(saved)
+          setPrintConfigSaved(true)
+        } else {
+          // Seed Print Setup defaults from card dims if user hasn't customised.
+          setPrintConfig(prev =>
+            prev.h2ndPosition > 0 || prev.v2ndPosition > 0
+              ? prev
+              : { ...prev, h2ndPosition: w, v2ndPosition: h }
+          )
+        }
       })
       .catch(() => { /* non-fatal: dialog will still work with manual entry */ })
     return () => { cancelled = true }
   }, [schoolId])
+
+  // Save printConfig to template DB so it persists across sessions
+  const savePrintConfig = async (cfg: PrintConfig) => {
+    try {
+      await fetch(`/api/schools/${schoolId}/template`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ printConfig: cfg }),
+      })
+      setPrintConfigSaved(true)
+    } catch { /* non-fatal */ }
+  }
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true)
@@ -1474,6 +1494,58 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           </div>
         )}
 
+        {/* Saved Print Setup & Card Size Summary */}
+        <div style={{
+          display: "flex",
+          gap: 10,
+          flexWrap: "wrap",
+          marginTop: 12,
+          marginBottom: 4,
+        }}>
+          {templateCardDims && (
+            <div style={{
+              background: "linear-gradient(135deg, #f0fdf4, #dcfce7)",
+              border: "1px solid #86efac",
+              borderRadius: 10,
+              padding: "8px 14px",
+              fontSize: 12,
+              color: "#166534",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              flex: "1 1 180px",
+            }}>
+              <span style={{ fontSize: 16 }}>🪪</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 1 }}>Card Size (Saved)</div>
+                <div style={{ fontWeight: 600 }}>{templateCardDims.w} × {templateCardDims.h} mm</div>
+              </div>
+            </div>
+          )}
+          {printConfigSaved && (
+            <div style={{
+              background: "linear-gradient(135deg, #eff6ff, #dbeafe)",
+              border: "1px solid #93c5fd",
+              borderRadius: 10,
+              padding: "8px 14px",
+              fontSize: 12,
+              color: "#1e40af",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              flex: "1 1 260px",
+            }}>
+              <span style={{ fontSize: 16 }}>🖨️</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 1 }}>Print Setup (Saved)</div>
+                <div style={{ fontWeight: 600 }}>
+                  {printConfig.paper} ({printConfig.paperWidth}×{printConfig.paperHeight}mm) · Card {printConfig.h2ndPosition}×{printConfig.v2ndPosition}mm
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 16 }}>
           <button
             className="btn btn-outline"
@@ -1697,6 +1769,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           onOk={(cfg: PrintConfig) => {
             setPrintConfig(cfg)
             setShowPrintDialog(false)
+            savePrintConfig(cfg)
             toast.success(`Print setup saved: ${cfg.paper} (${cfg.paperWidth}×${cfg.paperHeight} mm)`)
           }}
           onCancel={() => setShowPrintDialog(false)}

@@ -18,6 +18,8 @@ const templateSchema = z.object({
   backFieldMappings: z.any().optional(),
   hasBackSide: z.boolean().optional(),
   photoBgColor: z.string().optional(),
+  cardSizeLocked: z.boolean().optional(),
+  printConfig: z.any().optional(),
 })
 
 /**
@@ -111,6 +113,17 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     } else {
       // Never accidentally null out fieldConfig — remove it from the update payload
       delete updateData.fieldConfig
+    }
+
+    // When the card size is locked, prevent accidental overwrite of dimensions
+    // unless the request explicitly includes cardSizeLocked (toggle or first-time lock).
+    const existing = await prisma.template.findUnique({ where: { schoolId: params.id }, select: { cardSizeLocked: true } })
+    if (existing?.cardSizeLocked && validated.cardSizeLocked !== false) {
+      // Preserve locked dimensions — strip size fields from the update
+      delete updateData.cardWidthMm
+      delete updateData.cardHeightMm
+      delete updateData.printDpi
+      delete updateData.orientation
     }
 
     const template = await prisma.template.upsert({

@@ -206,16 +206,14 @@ function WinInput({
 }) {
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     let v = e.target.value
-    if (type === "number") {
-      const n = Number(v)
-      if (min !== undefined && n < min) v = String(min)
-      if (max !== undefined && n > max) v = String(max)
-    }
+    // For number inputs, allow free typing without clamping on every
+    // keystroke — clamping is only applied on blur so the user can
+    // type multi-digit values like "85.6" without interference.
     if (type === "text") {
       v = v.replace(/[<>]/g, "")
     }
     onChange(v)
-  }, [onChange, type, min, max])
+  }, [onChange, type])
 
   return (
     <input

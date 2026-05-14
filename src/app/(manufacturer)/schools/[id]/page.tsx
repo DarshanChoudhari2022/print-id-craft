@@ -2533,6 +2533,18 @@ export default function SchoolDetailPage() {
                 fieldMappings={(templateData?.fieldMappings as any) || []}
                 fieldConfig={(templateData?.fieldConfig as any[]) || []}
                 initialPhotoBgColor={(templateData as any)?.photoBgColor || "#FFFFFF"}
+                initialCardSettings={templateData ? {
+                  cardSizePreset: "custom",
+                  cardWidth: (templateData as any).cardWidthMm || 85.6,
+                  cardHeight: (templateData as any).cardHeightMm || 53.98,
+                  cardOrientation: (templateData as any).orientation === "LANDSCAPE" ? "landscape" : "portrait",
+                  printSides: (templateData as any).hasBackSide ? "both" : "front",
+                  cardDpi: (templateData as any).printDpi || 300,
+                  bleedMargin: 1,
+                  backImageUrl: (templateData as any).backTemplateImageUrl || null,
+                  backMappings: (templateData as any).backFieldMappings || [],
+                  cardSizeLocked: (templateData as any).cardSizeLocked || false,
+                } : undefined}
                 previewStudent={students[0] ? {
                   formData: students[0].formData as Record<string, string>,
                   photoUrl: students[0].photoUrl || null,
@@ -2554,6 +2566,7 @@ export default function SchoolDetailPage() {
                           hasBackSide: cardSettings.printSides === "both",
                           backTemplateImageUrl: cardSettings.backImageUrl,
                           backFieldMappings: cardSettings.backMappings,
+                          cardSizeLocked: cardSettings.cardSizeLocked,
                         } : {}),
                       }),
                     })

@@ -75,6 +75,7 @@ type CardSettings = {
   bleedMargin: number
   backImageUrl?: string | null
   backMappings?: FieldMapping[]
+  cardSizeLocked?: boolean
 }
 
 type JpgTemplateMapperProps = {
@@ -431,30 +432,43 @@ export default function JpgTemplateMapper({
   const [backImageUrl, setBackImageUrl] = useState<string | null>(initialCardSettings?.backImageUrl || null)
   const [backMappings, setBackMappings] = useState<FieldMapping[]>(initialCardSettings?.backMappings || [])
   const [activeCardSide, setActiveCardSide] = useState<"front" | "back">("front")
+  const [cardSizeLocked, setCardSizeLocked] = useState(initialCardSettings?.cardSizeLocked || false)
+
+  // String-based intermediates for width/height inputs so user can type freely
+  const [cardWidthStr, setCardWidthStr] = useState(String(initialCardSettings?.cardWidth || 85.6))
+  const [cardHeightStr, setCardHeightStr] = useState(String(initialCardSettings?.cardHeight || 53.98))
 
   // Handle card size preset change
   const handleCardSizeChange = (presetId: string) => {
+    if (cardSizeLocked) return
     setCardSizePreset(presetId)
     const preset = CARD_SIZE_PRESETS.find(p => p.id === presetId)
     if (preset && presetId !== "custom") {
       if (cardOrientation === "landscape") {
         setCardWidth(preset.width)
         setCardHeight(preset.height)
+        setCardWidthStr(String(preset.width))
+        setCardHeightStr(String(preset.height))
       } else {
         setCardWidth(preset.height)
         setCardHeight(preset.width)
+        setCardWidthStr(String(preset.height))
+        setCardHeightStr(String(preset.width))
       }
     }
   }
 
   // Handle orientation change
   const handleOrientationChange = (orient: "landscape" | "portrait") => {
+    if (cardSizeLocked) return
     setCardOrientation(orient)
     // Swap width and height
     if ((orient === "portrait" && cardWidth > cardHeight) ||
         (orient === "landscape" && cardHeight > cardWidth)) {
       setCardWidth(cardHeight)
       setCardHeight(cardWidth)
+      setCardWidthStr(String(cardHeight))
+      setCardHeightStr(String(cardWidth))
     }
   }
 
@@ -838,6 +852,7 @@ export default function JpgTemplateMapper({
         bleedMargin,
         backImageUrl,
         backMappings,
+        cardSizeLocked,
       }
       await onSave(imageUrl, mappings, photoBgColor, settings)
     } finally {
@@ -858,19 +873,27 @@ export default function JpgTemplateMapper({
         <IdSizeDialog
           initial={{ preset: cardSizePreset, width: cardWidth, height: cardHeight, orientation: cardOrientation === "landscape" ? "horizontal" : "vertical", sides: printSides === "both" ? "both" : "one" }}
           onOk={(cfg: IdSizeConfig) => {
-            setCardWidth(cfg.width)
-            setCardHeight(cfg.height)
-            setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
-            setPrintSides(cfg.sides === "both" ? "both" : "front")
-            setCardSizePreset(cfg.preset)
+            if (!cardSizeLocked) {
+              setCardWidth(cfg.width)
+              setCardHeight(cfg.height)
+              setCardWidthStr(String(cfg.width))
+              setCardHeightStr(String(cfg.height))
+              setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
+              setPrintSides(cfg.sides === "both" ? "both" : "front")
+              setCardSizePreset(cfg.preset)
+            }
             setShowIdSizeDialog(false)
           }}
           onLoadTemplate={(cfg: IdSizeConfig) => {
-            setCardWidth(cfg.width)
-            setCardHeight(cfg.height)
-            setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
-            setPrintSides(cfg.sides === "both" ? "both" : "front")
-            setCardSizePreset(cfg.preset)
+            if (!cardSizeLocked) {
+              setCardWidth(cfg.width)
+              setCardHeight(cfg.height)
+              setCardWidthStr(String(cfg.width))
+              setCardHeightStr(String(cfg.height))
+              setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
+              setPrintSides(cfg.sides === "both" ? "both" : "front")
+              setCardSizePreset(cfg.preset)
+            }
             setShowIdSizeDialog(false)
           }}
           onClose={() => setShowIdSizeDialog(false)}
@@ -1817,9 +1840,11 @@ export default function JpgTemplateMapper({
           {!showPreview && (
             <div
               style={{
-                background: "linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 100%)",
+                background: cardSizeLocked
+                  ? "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)"
+                  : "linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 100%)",
                 borderRadius: 14,
-                border: "1px solid #bfdbfe",
+                border: cardSizeLocked ? "1.5px solid #86efac" : "1px solid #bfdbfe",
                 padding: 16,
               }}
             >
@@ -1827,7 +1852,7 @@ export default function JpgTemplateMapper({
                 style={{
                   fontSize: 14,
                   fontWeight: 700,
-                  color: "#1e40af",
+                  color: cardSizeLocked ? "#166534" : "#1e40af",
                   marginBottom: 12,
                   display: "flex",
                   alignItems: "center",
@@ -1835,9 +1860,56 @@ export default function JpgTemplateMapper({
                 }}
               >
                 <span style={{ fontSize: 16 }}>🪪</span> Card Settings
+                {cardSizeLocked && (
+                  <span style={{ fontSize: 10, background: "#16a34a", color: "white", padding: "2px 8px", borderRadius: 10, marginLeft: "auto" }}>
+                    🔒 SIZE LOCKED
+                  </span>
+                )}
               </h4>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Saved Size Badge — always visible */}
+              <div style={{
+                background: cardSizeLocked ? "#f0fdf4" : "#eff6ff",
+                border: cardSizeLocked ? "1px solid #bbf7d0" : "1px solid #bfdbfe",
+                borderRadius: 8,
+                padding: "8px 12px",
+                marginBottom: 10,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: "#6b7280", marginBottom: 2 }}>
+                    Current Card Size
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: cardSizeLocked ? "#166534" : "#1e40af" }}>
+                    {cardWidth} × {cardHeight} mm
+                  </div>
+                  <div style={{ fontSize: 9, color: "#6b7280" }}>
+                    {Math.round(cardWidth * cardDpi / 25.4)} × {Math.round(cardHeight * cardDpi / 25.4)} px at {cardDpi} DPI
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCardSizeLocked(!cardSizeLocked)}
+                  title={cardSizeLocked ? "Unlock card size to allow changes" : "Lock card size to prevent accidental changes"}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    border: cardSizeLocked ? "2px solid #16a34a" : "2px solid #d1d5db",
+                    background: cardSizeLocked ? "#dcfce7" : "white",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 18,
+                  }}
+                >
+                  {cardSizeLocked ? "🔒" : "🔓"}
+                </button>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, opacity: cardSizeLocked ? 0.6 : 1, pointerEvents: cardSizeLocked ? "none" : "auto" }}>
                 {/* Card Size Preset */}
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: "#3b82f6", marginBottom: 4, display: "block" }}>
@@ -1846,6 +1918,7 @@ export default function JpgTemplateMapper({
                   <select
                     value={cardSizePreset}
                     onChange={(e) => handleCardSizeChange(e.target.value)}
+                    disabled={cardSizeLocked}
                     style={{
                       width: "100%",
                       height: 34,
@@ -1853,7 +1926,7 @@ export default function JpgTemplateMapper({
                       border: "1.5px solid #bfdbfe",
                       borderRadius: 8,
                       fontSize: 12,
-                      background: "white",
+                      background: cardSizeLocked ? "#f3f4f6" : "white",
                     }}
                   >
                     {CARD_SIZE_PRESETS.map((p) => (
@@ -1867,19 +1940,30 @@ export default function JpgTemplateMapper({
                   </div>
                 </div>
 
-                {/* Width × Height Inputs */}
+                {/* Width × Height Inputs — text mode for free typing */}
                 <div style={{ display: "flex", gap: 6 }}>
                   <div style={{ flex: 1 }}>
                     <label style={{ fontSize: 10, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 2 }}>
                       Width (mm)
                     </label>
                     <input
-                      type="number"
-                      min={20}
-                      max={200}
-                      step={0.1}
-                      value={cardWidth}
-                      onChange={(e) => { setCardWidth(Number(e.target.value)); setCardSizePreset("custom"); }}
+                      type="text"
+                      inputMode="decimal"
+                      value={cardWidthStr}
+                      disabled={cardSizeLocked}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        if (v === "" || /^\d*\.?\d*$/.test(v)) {
+                          setCardWidthStr(v)
+                          const n = parseFloat(v)
+                          if (!isNaN(n) && n > 0) { setCardWidth(n); setCardSizePreset("custom") }
+                        }
+                      }}
+                      onBlur={() => {
+                        const n = parseFloat(cardWidthStr)
+                        if (!isNaN(n) && n > 0) { setCardWidth(n); setCardWidthStr(String(n)) }
+                        else { setCardWidthStr(String(cardWidth)) }
+                      }}
                       style={{
                         width: "100%",
                         height: 30,
@@ -1888,7 +1972,7 @@ export default function JpgTemplateMapper({
                         borderRadius: 6,
                         fontSize: 12,
                         textAlign: "center",
-                        background: "white",
+                        background: cardSizeLocked ? "#f3f4f6" : "white",
                       }}
                     />
                   </div>
@@ -1898,12 +1982,23 @@ export default function JpgTemplateMapper({
                       Height (mm)
                     </label>
                     <input
-                      type="number"
-                      min={20}
-                      max={200}
-                      step={0.1}
-                      value={cardHeight}
-                      onChange={(e) => { setCardHeight(Number(e.target.value)); setCardSizePreset("custom"); }}
+                      type="text"
+                      inputMode="decimal"
+                      value={cardHeightStr}
+                      disabled={cardSizeLocked}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        if (v === "" || /^\d*\.?\d*$/.test(v)) {
+                          setCardHeightStr(v)
+                          const n = parseFloat(v)
+                          if (!isNaN(n) && n > 0) { setCardHeight(n); setCardSizePreset("custom") }
+                        }
+                      }}
+                      onBlur={() => {
+                        const n = parseFloat(cardHeightStr)
+                        if (!isNaN(n) && n > 0) { setCardHeight(n); setCardHeightStr(String(n)) }
+                        else { setCardHeightStr(String(cardHeight)) }
+                      }}
                       style={{
                         width: "100%",
                         height: 30,
@@ -1912,22 +2007,10 @@ export default function JpgTemplateMapper({
                         borderRadius: 6,
                         fontSize: 12,
                         textAlign: "center",
-                        background: "white",
+                        background: cardSizeLocked ? "#f3f4f6" : "white",
                       }}
                     />
                   </div>
-                </div>
-
-                {/* Pixel dimensions display */}
-                <div style={{
-                  fontSize: 10,
-                  color: "#6b7280",
-                  background: "rgba(255,255,255,0.7)",
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  textAlign: "center",
-                }}>
-                  {Math.round(cardWidth * cardDpi / 25.4)} × {Math.round(cardHeight * cardDpi / 25.4)} px at {cardDpi} DPI
                 </div>
 
                 {/* Orientation */}
@@ -3623,19 +3706,27 @@ export default function JpgTemplateMapper({
         <IdSizeDialog
           initial={{ preset: cardSizePreset, width: cardWidth, height: cardHeight, orientation: cardOrientation === "landscape" ? "horizontal" : "vertical", sides: printSides === "both" ? "both" : "one" }}
           onOk={(cfg: IdSizeConfig) => {
-            setCardWidth(cfg.width)
-            setCardHeight(cfg.height)
-            setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
-            setPrintSides(cfg.sides === "both" ? "both" : "front")
-            setCardSizePreset(cfg.preset)
+            if (!cardSizeLocked) {
+              setCardWidth(cfg.width)
+              setCardHeight(cfg.height)
+              setCardWidthStr(String(cfg.width))
+              setCardHeightStr(String(cfg.height))
+              setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
+              setPrintSides(cfg.sides === "both" ? "both" : "front")
+              setCardSizePreset(cfg.preset)
+            }
             setShowIdSizeDialog(false)
           }}
           onLoadTemplate={(cfg: IdSizeConfig) => {
-            setCardWidth(cfg.width)
-            setCardHeight(cfg.height)
-            setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
-            setPrintSides(cfg.sides === "both" ? "both" : "front")
-            setCardSizePreset(cfg.preset)
+            if (!cardSizeLocked) {
+              setCardWidth(cfg.width)
+              setCardHeight(cfg.height)
+              setCardWidthStr(String(cfg.width))
+              setCardHeightStr(String(cfg.height))
+              setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
+              setPrintSides(cfg.sides === "both" ? "both" : "front")
+              setCardSizePreset(cfg.preset)
+            }
             setShowIdSizeDialog(false)
           }}
           onClose={() => setShowIdSizeDialog(false)}
