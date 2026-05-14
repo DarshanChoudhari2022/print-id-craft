@@ -31,6 +31,138 @@ type FormConfig = {
   fieldMappings: any[]
   // Photo background color
   photoBgColor: string
+  // Available house/flag colours (from other students in this school) — used to
+  // render the House Flag input as a dropdown so parents don't misspell.
+  flagColors?: string[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Field-intent helpers — classify each fieldConfig entry from the key/label so
+// we can render parent-friendly inputs (dropdowns, prefixes, validation) for
+// well-known fields without requiring template changes.
+// ─────────────────────────────────────────────────────────────────────────────
+type FieldIntent = "name" | "roll" | "address" | "mobile" | "flag" | "default"
+
+const fieldIntent = (field: FieldConfig): FieldIntent => {
+  const k = (field.key || "").toLowerCase()
+  const l = (field.label || "").toLowerCase()
+  const hay = `${k} ${l}`
+  if (/\b(mobile|phone|contact|whatsapp|tel)\b/.test(hay)) return "mobile"
+  if (/\b(addr|address)\b/.test(hay)) return "address"
+  if (/\b(roll|admission ?no|adm ?no)\b/.test(hay)) return "roll"
+  if (/\b(house ?flag|flag ?colou?r|^house$|colou?r ?house|^colour$|^color$)\b/.test(hay)) return "flag"
+  if (/\b(name|father|mother|guardian|surname)\b/.test(hay)) return "name"
+  return "default"
+}
+
+// Title-case each word: "darshan choudhari" -> "Darshan Choudhari".
+// Capitalises the first character of every whitespace-delimited word while
+// leaving the rest of the word as the user typed it, so corrections like
+// "McDonald" survive editing.
+const titleCaseWords = (s: string): string =>
+  s.replace(/(^|\s)([a-zA-Z])/g, (_m, sp, ch) => sp + ch.toUpperCase())
+
+// Strip the +91 prefix (with optional spaces / 0 / hyphens) so we can show only
+// the local 10-digit portion in the input while storing the full E.164-ish
+// string in formData.
+const stripIndianPrefix = (raw: string): string => {
+  const digits = (raw || "").replace(/\D/g, "")
+  if (digits.startsWith("91") && digits.length > 10) return digits.slice(2).slice(-10)
+  return digits.slice(-10)
+}
+
+// Count whitespace-delimited words in a string (used for address minimum check).
+const wordCount = (s: string): number =>
+  (s || "").trim().split(/\s+/).filter(Boolean).length
+
+const ADDRESS_MIN_WORDS = 5
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SampleReferencePhoto — shows a clear illustration of "what a good ID photo
+// looks like". If an admin places a real image at /public/sample-id-photo.jpg
+// it is rendered with its upper-face region blurred for privacy. Otherwise a
+// neutral SVG silhouette is shown — never both at once, so the card never
+// looks like garbage with a silhouette pasted on top of a real photo.
+// ─────────────────────────────────────────────────────────────────────────────
+const SampleReferencePhoto = () => {
+  const [hasRealPhoto, setHasRealPhoto] = useState<boolean | null>(null) // null = loading
+  return (
+    <div style={{ flex: '0 0 110px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{
+        width: 110, aspectRatio: '3 / 4', borderRadius: 8, overflow: 'hidden',
+        border: '2px solid #22c55e',
+        background: hasRealPhoto ? '#000' : '#fee2e2',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        position: 'relative',
+      }}>
+        {/* Probe image — hidden if it fails to load. We rely on onLoad/onError
+            to decide whether to render the silhouette fallback. */}
+        <img
+          src="/sample-id-photo.jpg"
+          alt="Sample ID photo"
+          onLoad={() => setHasRealPhoto(true)}
+          onError={() => setHasRealPhoto(false)}
+          style={{
+            width: '100%', height: '100%', objectFit: 'cover',
+            display: hasRealPhoto ? 'block' : 'none',
+          }}
+        />
+
+        {/* Silhouette fallback — drawn only when there is no real photo. */}
+        {hasRealPhoto === false && (
+          <svg viewBox="0 0 60 80" width="100%" height="100%" aria-hidden style={{ position: 'absolute', inset: 0 }}>
+            {/* Subtle gradient backdrop */}
+            <defs>
+              <linearGradient id="refBg" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stopColor="#fecaca" />
+                <stop offset="1" stopColor="#fca5a5" />
+              </linearGradient>
+            </defs>
+            <rect x="0" y="0" width="60" height="80" fill="url(#refBg)" />
+            {/* Head */}
+            <circle cx="30" cy="30" r="10" fill="#fde68a" stroke="#92400e" strokeWidth="0.6" />
+            {/* Hair cap */}
+            <path d="M20 28 Q30 14 40 28 L40 26 Q30 18 20 26 Z" fill="#451a03" />
+            {/* Shoulders/uniform (blazer) */}
+            <path d="M10 80 L14 52 Q30 44 46 52 L50 80 Z" fill="#1e3a5f" />
+            {/* Shirt collar */}
+            <path d="M26 48 L30 56 L34 48 L34 52 L30 60 L26 52 Z" fill="#f8fafc" />
+            {/* Tie */}
+            <path d="M29 56 L31 56 L32 70 L28 70 Z" fill="#7f1d1d" />
+          </svg>
+        )}
+
+        {/* Privacy blur over the upper-face region — only useful when a real
+            photo is shown. CSS backdrop-filter; modern browsers only. */}
+        {hasRealPhoto && (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              top: '6%', left: '22%', width: '56%', height: '46%',
+              borderRadius: '50%',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              background: 'rgba(255,255,255,0.05)',
+              pointerEvents: 'none',
+            }}
+          />
+        )}
+
+        <div style={{
+          position: 'absolute', top: 4, left: 4,
+          background: '#22c55e', color: 'white',
+          fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+        }}>SAMPLE</div>
+      </div>
+      <div style={{ fontSize: 10, color: '#0369a1', marginTop: 6, textAlign: 'center', fontWeight: 600 }}>
+        Reference photo
+        {hasRealPhoto && (
+          <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 500 }}>(face blurred for privacy)</div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // Helper components moved outside to keep SubmitPage clean
@@ -143,6 +275,33 @@ export default function SubmitPage() {
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Per-field validation for the parent-friendly intents. We surface the
+    // first error inline via setAlertMsg + early return so the form never
+    // submits with garbage data (a sub-5-word address, an incomplete mobile
+    // number, etc.).
+    if (config) {
+      for (const f of config.fieldConfig) {
+        if (f.key === "class") continue
+        const value = (formData[f.key] || "").trim()
+        const intent = fieldIntent(f)
+        if (intent === "address" && f.required) {
+          if (wordCount(value) < ADDRESS_MIN_WORDS) {
+            setAlertMsg(`Please write the full address — at least ${ADDRESS_MIN_WORDS} words (house no, street, area, city, pincode).`)
+            return
+          }
+        }
+        if (intent === "mobile" && f.required) {
+          const local = stripIndianPrefix(value)
+          if (local.length !== 10) {
+            setAlertMsg("Mobile number must be exactly 10 digits (after +91).")
+            return
+          }
+        }
+      }
+    }
+    setAlertMsg("")
+
     if (!photoFile) {
       setStep("photo")
       return
@@ -484,40 +643,200 @@ export default function SubmitPage() {
                     <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>Auto-assigned based on your form link</span>
                   </div>
                 )}
-                {config?.fieldConfig.filter(f => f.key !== "class").map(field => (
-                  <div key={field.key} className="form-group">
-                    <label>
-                      {field.label}
-                      {field.required && <span style={{ color: '#ef4444' }}> *</span>}
-                    </label>
-                    {field.type === "select" && field.key === "bloodGroup" ? (
-                      <select
-                        required={field.required}
-                        value={formData[field.key] || ""}
-                        onChange={e => handleFieldChange(field.key, e.target.value)}
-                      >
-                        <option value="">Select...</option>
-                        {["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"].map(bg => <option key={bg} value={bg}>{bg}</option>)}
-                      </select>
-                    ) : field.type === "textarea" ? (
-                      <textarea
-                        required={field.required}
-                        value={formData[field.key] || ""}
-                        onChange={e => handleFieldChange(field.key, e.target.value)}
-                        rows={3}
-                        style={{ resize: 'vertical', minHeight: 60 }}
-                      />
-                    ) : (
-                      <input
-                        type={field.type === "tel" ? "tel" : field.type === "date" ? "date" : "text"}
-                        required={field.required}
-                        value={formData[field.key] || ""}
-                        onChange={e => handleFieldChange(field.key, e.target.value)}
-                        placeholder={`Enter ${field.label.toLowerCase()}`}
-                      />
-                    )}
-                  </div>
-                ))}
+                {config?.fieldConfig.filter(f => f.key !== "class").map(field => {
+                  const intent = fieldIntent(field)
+                  const value = formData[field.key] || ""
+
+                  // ── Mobile: locked "+91" prefix + 10-digit numeric input ──
+                  if (intent === "mobile") {
+                    const local = stripIndianPrefix(value)
+                    return (
+                      <div key={field.key} className="form-group">
+                        <label>
+                          {field.label}
+                          {field.required && <span style={{ color: '#ef4444' }}> *</span>}
+                        </label>
+                        <div style={{
+                          display: 'flex', alignItems: 'stretch',
+                          border: '1px solid #d1d5db', borderRadius: 8, overflow: 'hidden',
+                          background: '#fff',
+                        }}>
+                          <span style={{
+                            padding: '12px 12px', background: '#f1f5f9',
+                            color: '#475569', fontWeight: 700, fontSize: 14,
+                            display: 'flex', alignItems: 'center',
+                            borderRight: '1px solid #e2e8f0',
+                          }} aria-hidden>🇮🇳 +91</span>
+                          <input
+                            type="tel"
+                            inputMode="numeric"
+                            pattern="[0-9]{10}"
+                            maxLength={10}
+                            required={field.required}
+                            value={local}
+                            onChange={e => {
+                              const onlyDigits = e.target.value.replace(/\D/g, "").slice(0, 10)
+                              handleFieldChange(field.key, onlyDigits ? `+91 ${onlyDigits}` : "")
+                            }}
+                            placeholder="9876543210"
+                            style={{ flex: 1, border: 'none', outline: 'none', padding: '12px 14px', fontSize: 14 }}
+                          />
+                        </div>
+                        <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                          Type only the 10-digit number — country code is added automatically.
+                        </span>
+                      </div>
+                    )
+                  }
+
+                  // ── Address: textarea + minimum-word counter ──
+                  if (intent === "address") {
+                    const wc = wordCount(value)
+                    const ok = wc >= ADDRESS_MIN_WORDS
+                    return (
+                      <div key={field.key} className="form-group">
+                        <label>
+                          {field.label}
+                          {field.required && <span style={{ color: '#ef4444' }}> *</span>}
+                        </label>
+                        <textarea
+                          required={field.required}
+                          value={value}
+                          onChange={e => handleFieldChange(field.key, e.target.value)}
+                          rows={3}
+                          style={{ resize: 'vertical', minHeight: 70 }}
+                          placeholder="e.g. House No 12, MG Road, Kothrud, Pune, 411038"
+                        />
+                        <span style={{
+                          fontSize: 11, marginTop: 4, display: 'block',
+                          color: ok ? '#16a34a' : '#dc2626', fontWeight: 600,
+                        }}>
+                          {ok
+                            ? `✓ ${wc} words — looks complete`
+                            : `Write the full address — at least ${ADDRESS_MIN_WORDS} words (${wc}/${ADDRESS_MIN_WORDS})`}
+                        </span>
+                      </div>
+                    )
+                  }
+
+                  // ── House Flag: dropdown of existing colours, else free text ──
+                  if (intent === "flag") {
+                    const opts = config?.flagColors || []
+                    if (opts.length > 0) {
+                      return (
+                        <div key={field.key} className="form-group">
+                          <label>
+                            {field.label}
+                            {field.required && <span style={{ color: '#ef4444' }}> *</span>}
+                          </label>
+                          <select
+                            required={field.required}
+                            value={value}
+                            onChange={e => handleFieldChange(field.key, e.target.value)}
+                          >
+                            <option value="">Select your house...</option>
+                            {opts.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                            Pick the house assigned by your school.
+                          </span>
+                        </div>
+                      )
+                    }
+                    // Fallback: free text (e.g. first student in the school)
+                    return (
+                      <div key={field.key} className="form-group">
+                        <label>
+                          {field.label}
+                          {field.required && <span style={{ color: '#ef4444' }}> *</span>}
+                        </label>
+                        <input
+                          type="text"
+                          required={field.required}
+                          value={value}
+                          onChange={e => handleFieldChange(field.key, titleCaseWords(e.target.value))}
+                          placeholder="e.g. Blue"
+                        />
+                      </div>
+                    )
+                  }
+
+                  // ── Roll number: numeric, with example placeholder ──
+                  if (intent === "roll") {
+                    return (
+                      <div key={field.key} className="form-group">
+                        <label>
+                          {field.label}
+                          {field.required && <span style={{ color: '#ef4444' }}> *</span>}
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          required={field.required}
+                          value={value}
+                          onChange={e => handleFieldChange(field.key, e.target.value.replace(/\D/g, ""))}
+                          placeholder="e.g. 7"
+                        />
+                      </div>
+                    )
+                  }
+
+                  // ── Name-like field: auto title-case ──
+                  if (intent === "name") {
+                    return (
+                      <div key={field.key} className="form-group">
+                        <label>
+                          {field.label}
+                          {field.required && <span style={{ color: '#ef4444' }}> *</span>}
+                        </label>
+                        <input
+                          type="text"
+                          required={field.required}
+                          value={value}
+                          onChange={e => handleFieldChange(field.key, titleCaseWords(e.target.value))}
+                          placeholder={`e.g. ${field.label.toLowerCase().includes("father") ? "Ramesh Kumar" : field.label.toLowerCase().includes("mother") ? "Sunita Kumar" : "Darshan Choudhari"}`}
+                        />
+                      </div>
+                    )
+                  }
+
+                  // ── Generic fallback: previous behaviour ──
+                  return (
+                    <div key={field.key} className="form-group">
+                      <label>
+                        {field.label}
+                        {field.required && <span style={{ color: '#ef4444' }}> *</span>}
+                      </label>
+                      {field.type === "select" && field.key === "bloodGroup" ? (
+                        <select
+                          required={field.required}
+                          value={value}
+                          onChange={e => handleFieldChange(field.key, e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          {["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"].map(bg => <option key={bg} value={bg}>{bg}</option>)}
+                        </select>
+                      ) : field.type === "textarea" ? (
+                        <textarea
+                          required={field.required}
+                          value={value}
+                          onChange={e => handleFieldChange(field.key, e.target.value)}
+                          rows={3}
+                          style={{ resize: 'vertical', minHeight: 60 }}
+                        />
+                      ) : (
+                        <input
+                          type={field.type === "tel" ? "tel" : field.type === "date" ? "date" : "text"}
+                          required={field.required}
+                          value={value}
+                          onChange={e => handleFieldChange(field.key, e.target.value)}
+                          placeholder={`Enter ${field.label.toLowerCase()}`}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
               </div>
               <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 24, padding: '14px', fontSize: 15 }}>
                 Next: Upload Photo →
@@ -541,57 +860,7 @@ export default function SubmitPage() {
                   borderRadius: 12, marginBottom: 16,
                 }}>
                   {/* Sample reference photo */}
-                  <div style={{ flex: '0 0 110px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{
-                      width: 110, aspectRatio: '3 / 4', borderRadius: 8, overflow: 'hidden',
-                      border: '2px solid #22c55e', background: '#fee2e2',
-                      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-                      position: 'relative',
-                    }}>
-                      {/* Real reference image if provided in /public/sample-id-photo.jpg.
-                          Falls back to an SVG silhouette illustration so the card always renders. */}
-                      <img
-                        src="/sample-id-photo.jpg"
-                        alt="Sample ID photo"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                      />
-                      <svg
-                        viewBox="0 0 60 80" width="100%" height="100%"
-                        style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
-                        aria-hidden
-                      >
-                        {/* Subtle silhouette overlay — only visible if the photo above failed to load */}
-                        <circle cx="30" cy="26" r="11" fill="#fecaca" />
-                        <path d="M8 80 C 10 56, 50 56, 52 80 Z" fill="#1e3a5f" />
-                      </svg>
-                      {/* Privacy: blur the face region of the sample reference photo so a real
-                          student's identity is never exposed when an admin drops a photo into
-                          /public/sample-id-photo.jpg. The oval is sized to cover the upper face
-                          area of a standard 3:4 head-and-shoulders portrait. */}
-                      <div
-                        aria-hidden
-                        style={{
-                          position: 'absolute',
-                          top: '6%', left: '22%', width: '56%', height: '46%',
-                          borderRadius: '50%',
-                          backdropFilter: 'blur(12px)',
-                          WebkitBackdropFilter: 'blur(12px)',
-                          background: 'rgba(255,255,255,0.05)',
-                          pointerEvents: 'none',
-                        }}
-                      />
-                      <div style={{
-                        position: 'absolute', top: 4, left: 4,
-                        background: '#22c55e', color: 'white',
-                        fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                      }}>SAMPLE</div>
-                    </div>
-                    <div style={{ fontSize: 10, color: '#0369a1', marginTop: 6, textAlign: 'center', fontWeight: 600 }}>
-                      Reference photo
-                      <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 500 }}>(face blurred for privacy)</div>
-                    </div>
-                  </div>
+                  <SampleReferencePhoto />
 
                   {/* Instructions */}
                   <div style={{ flex: '1 1 220px', minWidth: 0 }}>
