@@ -7,6 +7,7 @@ import PhotoVerifier from "@/components/PhotoVerifier"
 
 const JpgCardPreview = dynamic(() => import("@/components/JpgCardPreview"), { ssr: false })
 const PhotoBgProcessor = dynamic(() => import("@/components/PhotoBgProcessor"), { ssr: false })
+const PhotoCropper = dynamic(() => import("@/components/PhotoCropper"), { ssr: false })
 
 type FieldConfig = { key: string; label: string; type: string; required: boolean }
 type TemplateElement = { 
@@ -245,7 +246,7 @@ export default function SubmitPage() {
   const params = useParams()
   const token = params.token as string
 
-  const [step, setStep] = useState<"loading" | "error" | "form" | "photo" | "bgprocess" | "review" | "success">("loading")
+  const [step, setStep] = useState<"loading" | "error" | "form" | "photo" | "crop" | "bgprocess" | "review" | "success">("loading")
   const [errorMsg, setErrorMsg] = useState("")
   const [config, setConfig] = useState<FormConfig | null>(null)
   const [formData, setFormData] = useState<Record<string, string>>({})
@@ -1225,9 +1226,19 @@ export default function SubmitPage() {
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-                <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setStep("form")}>← Back</button>
-                <button className="btn btn-primary" style={{ flex: 1 }} disabled={!photoPreview} onClick={() => {
+              <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap' }}>
+                <button className="btn btn-outline" style={{ flex: 1, minWidth: 120 }} onClick={() => setStep("form")}>← Back</button>
+                {photoPreview && (
+                  <button
+                    className="btn btn-outline"
+                    style={{ flex: 1, minWidth: 120 }}
+                    onClick={() => setStep("crop")}
+                    title="Manually adjust the crop box"
+                  >
+                    ✂️ Adjust Crop
+                  </button>
+                )}
+                <button className="btn btn-primary" style={{ flex: 1, minWidth: 140 }} disabled={!photoPreview} onClick={() => {
                   if (bgSkippable) {
                     // Photo already has clean background — skip AI processing
                     setCroppedPhoto(photoPreview)
@@ -1237,6 +1248,44 @@ export default function SubmitPage() {
                   }
                 }}>
                   {bgSkippable ? "Continue to Review →" : "Process Background →"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* CROP STEP — manual crop adjustment after auto-crop. Optional;
+              parents can skip back to the previous step or accept the
+              cropped result. */}
+          {step === "crop" && photoPreview && (
+            <div>
+              <div style={{ fontSize: 14, color: '#64748b', marginBottom: 12, textAlign: 'center' }}>
+                Adjust the crop box to frame the face. The aspect ratio is locked to 3:4.
+              </div>
+              <PhotoCropper
+                photoUrl={photoPreview}
+                aspectRatio={3 / 4}
+                onCropped={(croppedUrl) => {
+                  // Replace photoPreview with the manually-cropped version
+                  // and rebuild the photoFile so the rest of the pipeline
+                  // (bg processing, upload) sees the new bytes.
+                  setPhotoPreview(croppedUrl)
+                  fetch(croppedUrl)
+                    .then(r => r.blob())
+                    .then(blob => {
+                      setPhotoFile(new File([blob], `cropped-${Date.now()}.jpg`, { type: "image/jpeg" }))
+                    })
+                    .catch(() => { /* non-fatal: photoFile stays as auto-cropped */ })
+                  // After a manual crop the bg-skippable hint is stale
+                  // (the cropped region's edges may differ). Reset to
+                  // false so we run AI bg cleanup unless the user opts out.
+                  setBgSkippable(false)
+                  setStep("photo")
+                }}
+                onCancel={() => setStep("photo")}
+              />
+              <div style={{ marginTop: 12 }}>
+                <button className="btn btn-outline" style={{ width: '100%', fontSize: 12 }} onClick={() => setStep("photo")}>
+                  ← Back without changes
                 </button>
               </div>
             </div>
