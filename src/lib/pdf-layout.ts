@@ -206,11 +206,14 @@ export function calculateGridLayout(
   const printH = pageHeightMm - marginMm * 2
   // When a custom start position is set, reduce available space so cards
   // don't overflow the page edge.
-  const availW = (customStartX !== undefined && customStartX >= 0)
-    ? pageWidthMm - customStartX
+  // Guard: null passes `!== undefined` in JS, so coerce to a proper number first.
+  const safeStartX = typeof customStartX === "number" && isFinite(customStartX) && customStartX >= 0 ? customStartX : undefined
+  const safeStartY = typeof customStartY === "number" && isFinite(customStartY) && customStartY >= 0 ? customStartY : undefined
+  const availW = safeStartX !== undefined
+    ? pageWidthMm - safeStartX
     : printW
-  const availH = (customStartY !== undefined && customStartY >= 0)
-    ? pageHeightMm - customStartY
+  const availH = safeStartY !== undefined
+    ? pageHeightMm - safeStartY
     : printH
   const cols = Math.max(1, Math.floor((availW + gapMm) / (cardWidthMm + gapMm)))
   const rows = Math.max(1, Math.floor((availH + gapMm) / (cardHeightMm + gapMm)))
@@ -219,11 +222,11 @@ export function calculateGridLayout(
   const usedW = cols * cardWidthMm + (cols - 1) * gapMm
   const usedH = rows * cardHeightMm + (rows - 1) * gapMm
   // Use custom start positions if provided, otherwise auto-center
-  const startX = customStartX !== undefined && customStartX >= 0
-    ? customStartX
+  const startX = safeStartX !== undefined
+    ? safeStartX
     : marginMm + (printW - usedW) / 2
-  const startY = customStartY !== undefined && customStartY >= 0
-    ? customStartY
+  const startY = safeStartY !== undefined
+    ? safeStartY
     : marginMm + (printH - usedH) / 2
   return { cols, rows, cardsPerPage, totalPages, startX, startY, usedW, usedH }
 }

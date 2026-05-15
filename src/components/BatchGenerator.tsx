@@ -1748,6 +1748,42 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             🖨️ Print Setup...
           </button>
 
+          {printConfigSaved && (
+            <button
+              className="btn btn-outline"
+              title="Clear saved Print Setup and reset to card dimension defaults"
+              onClick={async () => {
+                const w = templateCardDims?.w || 56
+                const h = templateCardDims?.h || 88
+                const defaults: PrintConfig = {
+                  paper: "A4 Horizontal", paperWidth: 297, paperHeight: 210,
+                  h1stPosition: 0, h2ndPosition: w, v1stPosition: 0, v2ndPosition: h,
+                  cardWidthMm: w, cardHeightMm: h,
+                }
+                setPrintConfig(defaults)
+                setPrintConfigSaved(false)
+                await fetch(`/api/schools/${schoolId}/template`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ printConfig: null }),
+                })
+                toast.success("Print settings reset to defaults")
+              }}
+              style={{
+                padding: "13px 18px",
+                fontSize: 13,
+                minHeight: 48,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                color: "#ef4444",
+                borderColor: "#fca5a5",
+              }}
+            >
+              🔄 Reset Settings
+            </button>
+          )}
+
           <button
             className="btn btn-primary"
             onClick={handleGenerate}
