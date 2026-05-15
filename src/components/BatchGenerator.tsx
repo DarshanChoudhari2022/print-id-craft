@@ -924,9 +924,16 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     pageH: number
     cardW: number
     cardH: number
+    h1stPosition: number
+    v1stPosition: number
+    hPitch: number
+    vPitch: number
     cols?: number
     rows?: number
     totalPages?: number
+    // For PDF: keep raw rendered cards + studentIds so we can re-stage when user edits layout
+    pdfCards?: { serialNumber: string; frontDataUrl: string; backDataUrl?: string }[]
+    pdfStudentIds?: string[]
     save: () => Promise<void>
   }
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null)
@@ -1116,9 +1123,15 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           pageH: printConfig.paperHeight,
           cardW: cw,
           cardH: ch,
+          h1stPosition: printConfig.h1stPosition,
+          v1stPosition: printConfig.v1stPosition,
+          hPitch,
+          vPitch,
           cols,
           rows,
           totalPages,
+          pdfCards: allCards,
+          pdfStudentIds: studentIds,
           save: async () => {
             await generateDirectPdf({
               cards: allCards,
@@ -1225,6 +1238,10 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           pageH: printConfig.paperHeight,
           cardW: cdrCw,
           cardH: cdrCh,
+          h1stPosition: printConfig.h1stPosition,
+          v1stPosition: printConfig.v1stPosition,
+          hPitch: printConfig.h2ndPosition,
+          vPitch: printConfig.v2ndPosition,
           save: async () => {
             await downloadAsCdrZip(svgCards, `${schoolName}-${cdrClassName}-IDCards-CDR.zip`)
             await fetch(`/api/schools/${schoolId}/generate`, {
@@ -1288,6 +1305,10 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           pageH: printConfig.paperHeight,
           cardW: bmpCw,
           cardH: bmpCh,
+          h1stPosition: printConfig.h1stPosition,
+          v1stPosition: printConfig.v1stPosition,
+          hPitch: printConfig.h2ndPosition,
+          vPitch: printConfig.v2ndPosition,
           save: async () => {
             setProgress({ current: 0, total: bmpRendered.length, status: "Converting to BMP & saving..." })
             await saveBmpFilesToFolder(bmpRendered, (done, total) => {
@@ -1371,6 +1392,10 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           pageH: printConfig.paperHeight,
           cardW: jpegCw,
           cardH: jpegCh,
+          h1stPosition: printConfig.h1stPosition,
+          v1stPosition: printConfig.v1stPosition,
+          hPitch: printConfig.h2ndPosition,
+          vPitch: printConfig.v2ndPosition,
           save: async () => {
             setProgress({ current: totalCount, total: totalCount, status: "Creating ZIP file..." })
             await downloadAsZip(zipCards, `${schoolName}-${jpegClassName}-IDCards.zip`)
@@ -1413,6 +1438,61 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     setPendingSave(null)
     setProgress({ current: 0, total: 0, status: "" })
   }, [])
+
+  // Re-stage PDF save using already-rendered cards but a (possibly new) printConfig.
+  // Called when the user clicks "Edit Layout" and confirms the dialog — avoids re-rendering.
+  const restagePdfSave = useCallback((cfg: PrintConfig, cw: number, ch: number) => {
+    if (!pendingSave || pendingSave.format !== "PDF_PRINT" || !pendingSave.pdfCards || !pendingSave.pdfStudentIds) return
+    const cards = pendingSave.pdfCards
+    const studentIds = pendingSave.pdfStudentIds
+    const hPitch = cfg.h2ndPosition > 0 ? cfg.h2ndPosition : cw
+    const vPitch = cfg.v2ndPosition > 0 ? cfg.v2ndPosition : ch
+    const availW = cfg.h1stPosition > 0 ? cfg.paperWidth - cfg.h1stPosition : cfg.paperWidth
+    const availH = cfg.v1stPosition > 0 ? cfg.paperHeight - cfg.v1stPosition : cfg.paperHeight
+    const cols = Math.max(1, Math.floor((availW + (hPitch - cw)) / hPitch))
+    const rows = Math.max(1, Math.floor((availH + (vPitch - ch)) / vPitch))
+    const totalPages = Math.ceil(cards.length / (cols * rows))
+    setLastCardDims({ w: cw, h: ch })
+    setPendingSave({
+      format: "PDF_PRINT",
+      cardCount: cards.length,
+      pageW: cfg.paperWidth,
+      pageH: cfg.paperHeight,
+      cardW: cw,
+      cardH: ch,
+      h1stPosition: cfg.h1stPosition,
+      v1stPosition: cfg.v1stPosition,
+      hPitch,
+      vPitch,
+      cols,
+      rows,
+      totalPages,
+      pdfCards: cards,
+      pdfStudentIds: studentIds,
+      save: async () => {
+        await generateDirectPdf({
+          cards,
+          schoolName,
+          paperWidth: cfg.paperWidth,
+          paperHeight: cfg.paperHeight,
+          cardWidth: cw,
+          cardHeight: ch,
+          h1stPosition: cfg.h1stPosition,
+          v1stPosition: cfg.v1stPosition,
+          hPitch: cfg.h2ndPosition > 0 ? cfg.h2ndPosition : undefined,
+          vPitch: cfg.v2ndPosition > 0 ? cfg.v2ndPosition : undefined,
+          marginMm: 0,
+          gapMm: 0,
+        })
+        await fetch(`/api/schools/${schoolId}/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ studentIds }),
+        })
+      },
+    })
+    setProgress({ current: cards.length, total: cards.length, status: `Layout updated! (${cols}×${rows} = ${cols * rows} per page · ${totalPages} pages)` })
+  }, [pendingSave, schoolId, schoolName])
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -1817,6 +1897,21 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                     {pendingSave.totalPages}
                   </div>
                 </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>1st Card Position</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2, fontFamily: "monospace" }}>
+                    X: {pendingSave.h1stPosition} mm · Y: {pendingSave.v1stPosition} mm
+                    {(pendingSave.h1stPosition === 0 && pendingSave.v1stPosition === 0) && (
+                      <span style={{ fontSize: 10, color: "#92400e", marginLeft: 6 }}>(auto-centered)</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>Pitch (card-to-card)</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2, fontFamily: "monospace" }}>
+                    H: {pendingSave.hPitch} mm · V: {pendingSave.vPitch} mm
+                  </div>
+                </div>
               </>
             )}
             <div>
@@ -1827,7 +1922,43 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             </div>
           </div>
 
+          {pendingSave.format === "PDF_PRINT" && pendingSave.hPitch > 0 && pendingSave.vPitch > 0 && (
+            (pendingSave.hPitch < pendingSave.cardW || pendingSave.vPitch < pendingSave.cardH) && (
+              <div style={{
+                background: "#fee2e2",
+                border: "1px solid #fca5a5",
+                borderRadius: 8,
+                padding: 10,
+                marginBottom: 12,
+                fontSize: 12,
+                color: "#991b1b",
+              }}>
+                <strong>⚠ Pitch is smaller than card size.</strong> Cards will overlap on output.
+                {pendingSave.hPitch < pendingSave.cardW && ` (H pitch ${pendingSave.hPitch}mm < card width ${pendingSave.cardW}mm)`}
+                {pendingSave.vPitch < pendingSave.cardH && ` (V pitch ${pendingSave.vPitch}mm < card height ${pendingSave.cardH}mm)`}
+              </div>
+            )
+          )}
+
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {pendingSave.format === "PDF_PRINT" && (
+              <button
+                onClick={() => setShowPrintDialog(true)}
+                disabled={downloading}
+                style={{
+                  padding: "12px 20px",
+                  borderRadius: 10,
+                  border: "1px solid #f59e0b",
+                  background: "white",
+                  color: "#92400e",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: downloading ? "not-allowed" : "pointer",
+                }}
+              >
+                ✏️ Edit Layout
+              </button>
+            )}
             <button
               onClick={handleConfirmDownload}
               disabled={downloading}
@@ -1985,7 +2116,16 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             setPrintConfig(cfg)
             setShowPrintDialog(false)
             savePrintConfig(cfg)
-            toast.success(`Print setup saved: ${cfg.paper} (${cfg.paperWidth}×${cfg.paperHeight} mm)`)
+            // If a PDF save is staged, re-stage immediately with the new layout
+            // (no re-render needed — card images are already drawn).
+            if (pendingSave?.format === "PDF_PRINT") {
+              const cw = templateCardDims?.w || pendingSave.cardW
+              const ch = templateCardDims?.h || pendingSave.cardH
+              restagePdfSave(cfg, cw, ch)
+              toast.success(`Layout updated: ${cfg.paperWidth}×${cfg.paperHeight} mm`)
+            } else {
+              toast.success(`Print setup saved: ${cfg.paper} (${cfg.paperWidth}×${cfg.paperHeight} mm)`)
+            }
           }}
           onCancel={() => setShowPrintDialog(false)}
         />
