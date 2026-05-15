@@ -959,6 +959,9 @@ export type PrintConfig = {
   h2ndPosition: number
   v1stPosition: number
   v2ndPosition: number
+  /** Card dimensions at time of save — used to detect stale pitch values */
+  cardWidthMm?: number
+  cardHeightMm?: number
 }
 
 const PAPER_PRESETS: Record<string, { width: number; height: number }> = {

@@ -966,7 +966,20 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         // Restore saved Print Config from database if available
         const saved = data.data.printConfig as PrintConfig | null
         if (saved && saved.paperWidth > 0) {
-          setPrintConfig(saved)
+          // Detect stale pitch values caused by card dimension change.
+          // Compare the dimensions stored in the config against current card dims.
+          const savedCW = saved.cardWidthMm ?? 0
+          const savedCH = saved.cardHeightMm ?? 0
+          const dimsChanged = Math.abs(savedCW - w) > 0.5 || Math.abs(savedCH - h) > 0.5 || savedCW === 0
+          if (dimsChanged) {
+            // Card dimensions changed (or were never recorded) — recalculate pitches
+            // from the current card size, preserving any deliberate gap the user had.
+            const oldGapH = savedCW > 0 ? Math.max(0, saved.h2ndPosition - savedCW) : 0
+            const oldGapV = savedCH > 0 ? Math.max(0, saved.v2ndPosition - savedCH) : 0
+            setPrintConfig({ ...saved, h2ndPosition: w + oldGapH, v2ndPosition: h + oldGapV, cardWidthMm: w, cardHeightMm: h })
+          } else {
+            setPrintConfig(saved)
+          }
           setPrintConfigSaved(true)
         } else {
           // Seed Print Setup defaults from card dims if user hasn't customised.
@@ -2113,15 +2126,17 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         <PrintDialog
           initial={printConfig}
           onOk={(cfg: PrintConfig) => {
-            setPrintConfig(cfg)
+            // Stamp current card dims so future loads can detect stale pitch values.
+            const cfgWithDims: PrintConfig = { ...cfg, cardWidthMm: templateCardDims?.w, cardHeightMm: templateCardDims?.h }
+            setPrintConfig(cfgWithDims)
             setShowPrintDialog(false)
-            savePrintConfig(cfg)
+            savePrintConfig(cfgWithDims)
             // If a PDF save is staged, re-stage immediately with the new layout
             // (no re-render needed — card images are already drawn).
             if (pendingSave?.format === "PDF_PRINT") {
               const cw = templateCardDims?.w || pendingSave.cardW
               const ch = templateCardDims?.h || pendingSave.cardH
-              restagePdfSave(cfg, cw, ch)
+              restagePdfSave(cfgWithDims, cw, ch)
               toast.success(`Layout updated: ${cfg.paperWidth}×${cfg.paperHeight} mm`)
             } else {
               toast.success(`Print setup saved: ${cfg.paper} (${cfg.paperWidth}×${cfg.paperHeight} mm)`)
