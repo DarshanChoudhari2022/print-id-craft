@@ -1138,26 +1138,48 @@ export function PrintDialog({
 
       {/* Page Margin / First Card Position */}
       <div style={{ border: "1px solid #808080", padding: "10px 14px", marginBottom: 14, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, marginBottom: 10 }}>First Card Position (page margin)</div>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>ID-Card Position</div>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Horizontal</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-          <label style={{ width: 150, fontSize: 11 }}>X offset from left</label>
+          <label style={{ width: 150, fontSize: 11 }}>1st ID-Card Position</label>
           <WinInput
             type="number"
             value={h1}
             onChange={(v) => setH1(Math.max(0, Number(v) || 0))}
             style={{ width: 55 }}
           />
-          <span style={{ fontSize: 11, color: "#555" }}>(mm, 0 = auto-center)</span>
+          <span style={{ fontSize: 11, color: "#555" }}>(in mm)</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <label style={{ width: 150, fontSize: 11 }}>Y offset from top</label>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <label style={{ width: 150, fontSize: 11 }}>2nd Position (Card Width)</label>
+          <WinInput
+            type="number"
+            value={Number(hPitch.toFixed(1))}
+            onChange={(v) => setGapH(Math.max(0, (Number(v) || cardW) - cardW))}
+            style={{ width: 55 }}
+          />
+          <span style={{ fontSize: 11, color: "#555" }}>(in mm)</span>
+        </div>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Vertical</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <label style={{ width: 150, fontSize: 11 }}>1st ID-Card Position</label>
           <WinInput
             type="number"
             value={v1}
             onChange={(v) => setV1(Math.max(0, Number(v) || 0))}
             style={{ width: 55 }}
           />
-          <span style={{ fontSize: 11, color: "#555" }}>(mm, 0 = auto-center)</span>
+          <span style={{ fontSize: 11, color: "#555" }}>(in mm)</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <label style={{ width: 150, fontSize: 11 }}>2nd Position (Card Height)</label>
+          <WinInput
+            type="number"
+            value={Number(vPitch.toFixed(1))}
+            onChange={(v) => setGapV(Math.max(0, (Number(v) || cardH) - cardH))}
+            style={{ width: 55 }}
+          />
+          <span style={{ fontSize: 11, color: "#555" }}>(in mm)</span>
         </div>
       </div>
 
