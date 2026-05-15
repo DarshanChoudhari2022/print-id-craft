@@ -913,6 +913,24 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
   const [previewCards, setPreviewCards] = useState<{ serialNumber: string; frontDataUrl: string; backDataUrl?: string }[]>([])
   const [pdfPrintCards, setPdfPrintCards] = useState<{ serialNumber: string; frontDataUrl: string; backDataUrl?: string }[]>([])
   const [lastCardDims, setLastCardDims] = useState({ w: 85.6, h: 54 })
+  // Preview-first download flow: after rendering, hold a closure that performs
+  // the actual file write. User must click "Download" to commit. This lets them
+  // verify the layout (page size, card size, grid) matches their cutter setup
+  // BEFORE any file is written.
+  type PendingSave = {
+    format: OutputFormat
+    cardCount: number
+    pageW: number
+    pageH: number
+    cardW: number
+    cardH: number
+    cols?: number
+    rows?: number
+    totalPages?: number
+    save: () => Promise<void>
+  }
+  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null)
+  const [downloading, setDownloading] = useState(false)
   // Template's configured card size (single source of truth). Loaded on mount
   // so Print Setup, render canvas, and PDF placement all agree.
   const [templateCardDims, setTemplateCardDims] = useState<{ w: number; h: number } | null>(null)
@@ -972,6 +990,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     setGenerating(true)
     setProgress({ current: 0, total: 0, status: "Preparing data..." })
     setPreviewCards([])
+    setPendingSave(null)
 
     try {
       const params = new URLSearchParams({ status: statusFilter })
@@ -1069,38 +1088,61 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
 
         setPreviewCards(allCards.slice(0, 8))
         setPdfPrintCards(allCards)
-        setProgress({ current: totalCount, total: totalCount, status: "Done! Generating PDF..." })
 
-        // Mark as printed
-        const studentIds = students.map((s: any) => s.id)
-        await fetch(`/api/schools/${schoolId}/generate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ studentIds }),
-        })
-
-        // Generate PDF directly using Print Setup values — no modal
-        const cw = printConfig.h2ndPosition > 0 ? printConfig.h2ndPosition : cardWidthMm || 85.6
-        const ch = printConfig.v2ndPosition > 0 ? printConfig.v2ndPosition : cardHeightMm || 54
+        // Compute the actual grid that generateDirectPdf will use, so the
+        // preview panel shows EXACTLY what the cutter will see.
+        const cw = cardWidthMm || 85.6
+        const ch = cardHeightMm || 54
         setLastCardDims({ w: cw, h: ch })
-        await generateDirectPdf({
-          cards: allCards,
-          schoolName,
-          paperWidth: printConfig.paperWidth,
-          paperHeight: printConfig.paperHeight,
-          cardWidth: cw,
-          cardHeight: ch,
-          h1stPosition: printConfig.h1stPosition,
-          v1stPosition: printConfig.v1stPosition,
-          // Honor Print Setup values exactly: h2/v2 already represent the
-          // full per-card pitch (card width/height incl. any user-intended
-          // gap), and h1/v1 are absolute start positions. No extra margin
-          // or gap should be added on top — otherwise the printed card
-          // size drifts from what the user configured.
-          marginMm: 0,
-          gapMm: 0,
+        const hPitch = printConfig.h2ndPosition > 0 ? printConfig.h2ndPosition : cw
+        const vPitch = printConfig.v2ndPosition > 0 ? printConfig.v2ndPosition : ch
+        const availW = printConfig.h1stPosition > 0
+          ? printConfig.paperWidth - printConfig.h1stPosition
+          : printConfig.paperWidth
+        const availH = printConfig.v1stPosition > 0
+          ? printConfig.paperHeight - printConfig.v1stPosition
+          : printConfig.paperHeight
+        const cols = Math.max(1, Math.floor((availW + (hPitch - cw)) / hPitch))
+        const rows = Math.max(1, Math.floor((availH + (vPitch - ch)) / vPitch))
+        const totalPages = Math.ceil(allCards.length / (cols * rows))
+
+        // Stage the save — DO NOT download yet. User must confirm via the
+        // preview panel after verifying the layout matches their cutter.
+        const studentIds = students.map((s: any) => s.id)
+        setPendingSave({
+          format: "PDF_PRINT",
+          cardCount: allCards.length,
+          pageW: printConfig.paperWidth,
+          pageH: printConfig.paperHeight,
+          cardW: cw,
+          cardH: ch,
+          cols,
+          rows,
+          totalPages,
+          save: async () => {
+            await generateDirectPdf({
+              cards: allCards,
+              schoolName,
+              paperWidth: printConfig.paperWidth,
+              paperHeight: printConfig.paperHeight,
+              cardWidth: cw,
+              cardHeight: ch,
+              h1stPosition: printConfig.h1stPosition,
+              v1stPosition: printConfig.v1stPosition,
+              hPitch: printConfig.h2ndPosition > 0 ? printConfig.h2ndPosition : undefined,
+              vPitch: printConfig.v2ndPosition > 0 ? printConfig.v2ndPosition : undefined,
+              marginMm: 0,
+              gapMm: 0,
+            })
+            // Mark as printed only after successful download
+            await fetch(`/api/schools/${schoolId}/generate`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ studentIds }),
+            })
+          },
         })
-        setProgress({ current: totalCount, total: totalCount, status: "PDF downloaded! ✅" })
+        setProgress({ current: totalCount, total: totalCount, status: `Ready! Verify layout below, then click Download. (${cols}×${rows} = ${cols*rows} per page · ${totalPages} pages)` })
 
       // ──── CDR (SVG) PATH ────
       } else if (outputFormat === "CDR") {
@@ -1171,20 +1213,28 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         }
 
         setPreviewCards(previewData)
-        setProgress({ current: totalCount, total: totalCount, status: "Creating CDR ZIP..." })
-
-        const className = classes.find((c) => c.id === selectedClassId)?.name || "All"
-        await downloadAsCdrZip(svgCards, `${schoolName}-${className}-IDCards-CDR.zip`)
-
-        // Mark as printed
-        await fetch(`/api/schools/${schoolId}/generate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ studentIds }),
+        const cdrCw = cardWidthMm || 85.6
+        const cdrCh = cardHeightMm || 54
+        setLastCardDims({ w: cdrCw, h: cdrCh })
+        const cdrClassName = classes.find((c) => c.id === selectedClassId)?.name || "All"
+        const cdrStudentIds = [...studentIds]
+        setPendingSave({
+          format: "CDR",
+          cardCount: svgCards.length,
+          pageW: printConfig.paperWidth,
+          pageH: printConfig.paperHeight,
+          cardW: cdrCw,
+          cardH: cdrCh,
+          save: async () => {
+            await downloadAsCdrZip(svgCards, `${schoolName}-${cdrClassName}-IDCards-CDR.zip`)
+            await fetch(`/api/schools/${schoolId}/generate`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ studentIds: cdrStudentIds }),
+            })
+          },
         })
-
-        setProgress({ current: totalCount, total: totalCount, status: "Done! ✅" })
-        toast.success(`${svgCards.length} SVG files + CorelDRAW converter script exported!`)
+        setProgress({ current: totalCount, total: totalCount, status: `Ready! ${svgCards.length} SVG files staged. Verify size below, then click Download.` })
 
       // ──── BMP PATH ────
       } else if (outputFormat === "BMP") {
@@ -1226,20 +1276,31 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           backDataUrl: c.backDataUrl,
         })))
 
-        setProgress({ current: 0, total: renderedCards.length, status: "Converting to BMP & saving..." })
-        await saveBmpFilesToFolder(renderedCards, (done, total) => {
-          setProgress({ current: done, total, status: `Saving BMP ${done}/${total}...` })
+        const bmpCw = cardWidthMm || 85.6
+        const bmpCh = cardHeightMm || 54
+        setLastCardDims({ w: bmpCw, h: bmpCh })
+        const bmpStudentIds = renderedCards.map(c => c.id)
+        const bmpRendered = renderedCards.slice()
+        setPendingSave({
+          format: "BMP",
+          cardCount: bmpRendered.length,
+          pageW: printConfig.paperWidth,
+          pageH: printConfig.paperHeight,
+          cardW: bmpCw,
+          cardH: bmpCh,
+          save: async () => {
+            setProgress({ current: 0, total: bmpRendered.length, status: "Converting to BMP & saving..." })
+            await saveBmpFilesToFolder(bmpRendered, (done, total) => {
+              setProgress({ current: done, total, status: `Saving BMP ${done}/${total}...` })
+            })
+            await fetch(`/api/schools/${schoolId}/generate`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ studentIds: bmpStudentIds }),
+            })
+          },
         })
-
-        const studentIds = renderedCards.map(c => c.id)
-        await fetch(`/api/schools/${schoolId}/generate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ studentIds }),
-        })
-
-        setProgress({ current: renderedCards.length, total: renderedCards.length, status: "Done! ✅" })
-        toast.success(`${renderedCards.length} ID cards saved as BMP files!`)
+        setProgress({ current: totalCount, total: totalCount, status: `Ready! ${renderedCards.length} BMP cards staged. Verify size below, then click Download.` })
 
       // ──── JPEG PATH (existing) ────
       } else {
@@ -1290,8 +1351,6 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           backDataUrl: c.backDataUrl,
         })))
 
-        setProgress({ current: totalCount, total: totalCount, status: "Creating ZIP file..." })
-        
         const zipCards: { name: string; dataUrl: string }[] = []
         for (const card of renderedCards) {
           zipCards.push({ name: `${card.serialNumber}_front.jpg`, dataUrl: card.frontDataUrl })
@@ -1300,18 +1359,29 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           }
         }
 
-        const className = classes.find((c) => c.id === selectedClassId)?.name || "All"
-        await downloadAsZip(zipCards, `${schoolName}-${className}-IDCards.zip`)
-
-        const studentIds = renderedCards.map((c) => c.id)
-        await fetch(`/api/schools/${schoolId}/generate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ studentIds }),
+        const jpegCw = cardWidthMm || 85.6
+        const jpegCh = cardHeightMm || 54
+        setLastCardDims({ w: jpegCw, h: jpegCh })
+        const jpegClassName = classes.find((c) => c.id === selectedClassId)?.name || "All"
+        const jpegStudentIds = renderedCards.map((c) => c.id)
+        setPendingSave({
+          format: "JPEG",
+          cardCount: renderedCards.length,
+          pageW: printConfig.paperWidth,
+          pageH: printConfig.paperHeight,
+          cardW: jpegCw,
+          cardH: jpegCh,
+          save: async () => {
+            setProgress({ current: totalCount, total: totalCount, status: "Creating ZIP file..." })
+            await downloadAsZip(zipCards, `${schoolName}-${jpegClassName}-IDCards.zip`)
+            await fetch(`/api/schools/${schoolId}/generate`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ studentIds: jpegStudentIds }),
+            })
+          },
         })
-
-        setProgress({ current: totalCount, total: totalCount, status: "Done! ✅" })
-        toast.success(`${renderedCards.length} ID cards exported! (${zipCards.length} images in ZIP)`)
+        setProgress({ current: totalCount, total: totalCount, status: `Ready! ${renderedCards.length} cards (${zipCards.length} images) staged. Verify size below, then click Download.` })
       }
     } catch (err: any) {
       console.error(err)
@@ -1321,7 +1391,28 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
       // Release student photo cache to prevent memory build-up across runs
       clearStudentImageCache()
     }
-  }, [schoolId, schoolName, selectedClassId, statusFilter, outputFormat, classes])
+  }, [schoolId, schoolName, selectedClassId, statusFilter, outputFormat, classes, printConfig])
+
+  const handleConfirmDownload = useCallback(async () => {
+    if (!pendingSave) return
+    setDownloading(true)
+    try {
+      await pendingSave.save()
+      setProgress({ current: pendingSave.cardCount, total: pendingSave.cardCount, status: "Downloaded! ✅" })
+      toast.success(`${pendingSave.cardCount} cards downloaded as ${pendingSave.format}.`)
+      setPendingSave(null)
+    } catch (err: any) {
+      console.error(err)
+      toast.error("Download failed: " + (err?.message || "Unknown error"))
+    } finally {
+      setDownloading(false)
+    }
+  }, [pendingSave])
+
+  const handleCancelDownload = useCallback(() => {
+    setPendingSave(null)
+    setProgress({ current: 0, total: 0, status: "" })
+  }, [])
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -1601,7 +1692,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 Generating...
               </>
             ) : (
-              <>{outputFormat === "CDR" ? "📐 Generate CorelDRAW Files (ZIP)" : outputFormat === "PDF_PRINT" ? "📄 Generate PDF Print" : outputFormat === "BMP" ? "🖼️ Generate & Save as BMP" : "🖨️ Generate & Download ID Cards (ZIP)"}</>
+              <>{outputFormat === "CDR" ? "📐 Render CorelDRAW Preview" : outputFormat === "PDF_PRINT" ? "📄 Render PDF Preview" : outputFormat === "BMP" ? "🖼️ Render BMP Preview" : "🖨️ Render JPEG Preview"}</>
             )}
           </button>
         </div>
@@ -1658,6 +1749,129 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         </div>
       )}
 
+      {/* ── Layout Verification Panel (shown when a save is staged) ── */}
+      {pendingSave && (
+        <div
+          style={{
+            background: "linear-gradient(135deg, #fffbeb, #fef3c7)",
+            border: "2px solid #f59e0b",
+            borderRadius: 16,
+            padding: 20,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 22 }}>⚠️</span>
+            <h4 style={{ fontSize: 15, fontWeight: 700, color: "#78350f" }}>
+              Verify layout before downloading
+            </h4>
+          </div>
+          <p style={{ fontSize: 12, color: "#78350f", marginBottom: 14, lineHeight: 1.5 }}>
+            Cards have been rendered at the <strong>exact dimensions configured below</strong>.
+            Confirm these match your cutter setup before saving.
+          </p>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 10,
+              background: "white",
+              border: "1px solid #fcd34d",
+              borderRadius: 10,
+              padding: 14,
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>Format</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2 }}>
+                {pendingSave.format === "PDF_PRINT" ? "📄 PDF Print Sheet" :
+                 pendingSave.format === "JPEG" ? "📷 JPEG (ZIP)" :
+                 pendingSave.format === "BMP" ? "🖼️ BMP files" :
+                 "📐 CorelDRAW (ZIP)"}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>Card Size</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2, fontFamily: "monospace" }}>
+                {pendingSave.cardW} × {pendingSave.cardH} mm
+              </div>
+            </div>
+            {pendingSave.format === "PDF_PRINT" && (
+              <>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>Page Size</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2, fontFamily: "monospace" }}>
+                    {pendingSave.pageW} × {pendingSave.pageH} mm
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>Grid / Page</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2, fontFamily: "monospace" }}>
+                    {pendingSave.cols} × {pendingSave.rows} = {(pendingSave.cols || 0) * (pendingSave.rows || 0)} cards
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>Total Pages</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2, fontFamily: "monospace" }}>
+                    {pendingSave.totalPages}
+                  </div>
+                </div>
+              </>
+            )}
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>Total Cards</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2, fontFamily: "monospace" }}>
+                {pendingSave.cardCount}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              onClick={handleConfirmDownload}
+              disabled={downloading}
+              style={{
+                flex: "1 1 200px",
+                padding: "12px 20px",
+                borderRadius: 10,
+                border: "none",
+                background: downloading
+                  ? "#94a3b8"
+                  : "linear-gradient(135deg, #16a34a, #15803d)",
+                color: "white",
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: downloading ? "not-allowed" : "pointer",
+                boxShadow: "0 2px 10px rgba(22,163,74,0.3)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              {downloading ? "Downloading..." : `✅ Confirm & Download ${pendingSave.format === "PDF_PRINT" ? "PDF" : pendingSave.format}`}
+            </button>
+            <button
+              onClick={handleCancelDownload}
+              disabled={downloading}
+              style={{
+                padding: "12px 20px",
+                borderRadius: 10,
+                border: "1px solid #cbd5e1",
+                background: "white",
+                color: "#475569",
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: downloading ? "not-allowed" : "pointer",
+              }}
+            >
+              ✕ Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Preview Grid */}
       {previewCards.length > 0 && (
         <div
@@ -1670,9 +1884,9 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         >
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
             <h4 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
-              Preview ({previewCards.length} of {progress.total})
+              Card Preview ({previewCards.length} of {progress.total})
             </h4>
-            {pdfPrintCards.length > 0 && (
+            {pdfPrintCards.length > 0 && !pendingSave && (
               <button
                 onClick={async () => {
                   await generateDirectPdf({
@@ -1680,11 +1894,12 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                     schoolName,
                     paperWidth: printConfig.paperWidth,
                     paperHeight: printConfig.paperHeight,
-                    cardWidth: printConfig.h2ndPosition > 0 ? printConfig.h2ndPosition : lastCardDims.w,
-                    cardHeight: printConfig.v2ndPosition > 0 ? printConfig.v2ndPosition : lastCardDims.h,
+                    cardWidth: lastCardDims.w,
+                    cardHeight: lastCardDims.h,
                     h1stPosition: printConfig.h1stPosition,
                     v1stPosition: printConfig.v1stPosition,
-                    // See note in initial generateDirectPdf call above.
+                    hPitch: printConfig.h2ndPosition > 0 ? printConfig.h2ndPosition : undefined,
+                    vPitch: printConfig.v2ndPosition > 0 ? printConfig.v2ndPosition : undefined,
                     marginMm: 0,
                     gapMm: 0,
                   })

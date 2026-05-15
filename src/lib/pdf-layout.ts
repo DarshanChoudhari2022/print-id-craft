@@ -204,8 +204,16 @@ export function calculateGridLayout(
 ): GridLayout {
   const printW = pageWidthMm - marginMm * 2
   const printH = pageHeightMm - marginMm * 2
-  const cols = Math.max(1, Math.floor((printW + gapMm) / (cardWidthMm + gapMm)))
-  const rows = Math.max(1, Math.floor((printH + gapMm) / (cardHeightMm + gapMm)))
+  // When a custom start position is set, reduce available space so cards
+  // don't overflow the page edge.
+  const availW = (customStartX !== undefined && customStartX >= 0)
+    ? pageWidthMm - customStartX
+    : printW
+  const availH = (customStartY !== undefined && customStartY >= 0)
+    ? pageHeightMm - customStartY
+    : printH
+  const cols = Math.max(1, Math.floor((availW + gapMm) / (cardWidthMm + gapMm)))
+  const rows = Math.max(1, Math.floor((availH + gapMm) / (cardHeightMm + gapMm)))
   const cardsPerPage = cols * rows
   const totalPages = Math.ceil(totalCards / cardsPerPage)
   const usedW = cols * cardWidthMm + (cols - 1) * gapMm
@@ -251,17 +259,23 @@ export type DirectPdfOptions = {
   paperWidth: number
   /** Paper height in mm */
   paperHeight: number
-  /** Card width in mm */
+  /** Card image width in mm (actual size placed on PDF) */
   cardWidth: number
-  /** Card height in mm */
+  /** Card image height in mm (actual size placed on PDF) */
   cardHeight: number
   /** First card horizontal position (mm), 0 = auto-center */
   h1stPosition?: number
   /** First card vertical position (mm), 0 = auto-center */
   v1stPosition?: number
+  /** Horizontal pitch — distance between successive card left-edges (mm).
+   *  Defaults to cardWidth (edge-to-edge). When > cardWidth a visible gap appears. */
+  hPitch?: number
+  /** Vertical pitch — distance between successive card top-edges (mm).
+   *  Defaults to cardHeight (edge-to-edge). */
+  vPitch?: number
   /** Page margin in mm (default 3) */
   marginMm?: number
-  /** Gap between cards in mm (default 1) */
+  /** Gap between cards in mm (default 1) — used only when hPitch/vPitch are 0 */
   gapMm?: number
   /** Add crop/cut marks (default true) */
   addCutMarks?: boolean
@@ -280,6 +294,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
     paperWidth, paperHeight,
     cardWidth, cardHeight,
     h1stPosition = 0, v1stPosition = 0,
+    hPitch: _hPitch, vPitch: _vPitch,
     marginMm = 3, gapMm = 1,
     addCutMarks = true,
   } = opts
@@ -289,12 +304,33 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
   const cardW = cardWidth
   const cardH = cardHeight
 
-  // Use custom position if nonzero, else pass undefined for auto-center
-  const customX = h1stPosition > 0 ? h1stPosition : undefined
-  const customY = v1stPosition > 0 ? v1stPosition : undefined
+  // Pitch = distance between successive card left/top edges.
+  // When explicitly provided (from Print Setup h2nd/v2ndPosition), use it.
+  // Otherwise fall back to cardW/H + gapMm (legacy auto-layout).
+  const hPitch = _hPitch && _hPitch > 0 ? _hPitch : cardW + gapMm
+  const vPitch = _vPitch && _vPitch > 0 ? _vPitch : cardH + gapMm
 
-  const layout = calculateGridLayout(pageW, pageH, cardW, cardH, marginMm, gapMm, cards.length, customX, customY)
-  const { cols, rows, cardsPerPage, startX, startY } = layout
+  // Starting position: use Print Setup first-card position if set,
+  // otherwise auto-center on the page.
+  const hasCustomX = h1stPosition > 0
+  const hasCustomY = v1stPosition > 0
+
+  // Compute how many cards fit within the available page area.
+  // When a custom start offset is set, the available width shrinks.
+  const availW = hasCustomX ? pageW - h1stPosition : pageW - marginMm * 2
+  const availH = hasCustomY ? pageH - v1stPosition : pageH - marginMm * 2
+  const cols = Math.max(1, Math.floor((availW + (hPitch - cardW)) / hPitch))
+  const rows = Math.max(1, Math.floor((availH + (vPitch - cardH)) / vPitch))
+  const cardsPerPage = cols * rows
+  const totalPages = Math.ceil(cards.length / cardsPerPage)
+
+  // Compute start positions (auto-center if no custom offset)
+  const usedW = cols * hPitch - (hPitch - cardW) // = cols * cardW + (cols-1) * gap
+  const usedH = rows * vPitch - (vPitch - cardH)
+  const startX = hasCustomX ? h1stPosition : marginMm + (availW - usedW) / 2
+  const startY = hasCustomY ? v1stPosition : marginMm + (availH - usedH) / 2
+
+  console.log(`[PDF] page ${pageW}×${pageH}mm · card ${cardW}×${cardH}mm · pitch ${hPitch}×${vPitch}mm · grid ${cols}×${rows} · start (${startX.toFixed(1)}, ${startY.toFixed(1)})`)
 
   const hasBackSide = cards.some(c => !!c.backDataUrl)
 
@@ -353,7 +389,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
   let aliasCounter = 0
 
   // Front pages
-  for (let pageIdx = 0; pageIdx < Math.ceil(cards.length / cardsPerPage); pageIdx++) {
+  for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
     if (pageIdx > 0) doc.addPage([pageW, pageH])
 
     doc.setFontSize(6); doc.setTextColor(200, 200, 200)
@@ -364,8 +400,8 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
       if (cardIdx >= cards.length) break
       const row = Math.floor(slot / cols)
       const col = slot % cols
-      const x = startX + col * (cardW + gapMm)
-      const y = startY + row * (cardH + gapMm)
+      const x = startX + col * hPitch
+      const y = startY + row * vPitch
 
       try {
         if (frontBytes[cardIdx]) {
@@ -381,7 +417,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
 
   // Back pages (mirrored)
   if (hasBackSide) {
-    for (let pageIdx = 0; pageIdx < Math.ceil(cards.length / cardsPerPage); pageIdx++) {
+    for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
       doc.addPage([pageW, pageH])
       doc.setFontSize(6); doc.setTextColor(200, 200, 200)
       doc.text(`${schoolName} - Back Side - Page ${pageIdx + 1}`, pageW / 2, 4, { align: "center" })
@@ -393,8 +429,8 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
         const row = Math.floor(slot / cols)
         const col = slot % cols
         const mirroredCol = getMirroredCol(col, cols)
-        const x = startX + mirroredCol * (cardW + gapMm)
-        const y = startY + row * (cardH + gapMm)
+        const x = startX + mirroredCol * hPitch
+        const y = startY + row * vPitch
 
         try {
           doc.addImage(backBytes[cardIdx]!, backFmt[cardIdx]!, x, y, cardW, cardH, `img_${aliasCounter++}`, "FAST")
@@ -417,5 +453,5 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
   a.click()
   document.body.removeChild(a)
   setTimeout(() => URL.revokeObjectURL(blobUrl), 5000)
-  toast.success(`PDF saved! ${cards.length} cards on ${layout.totalPages} page(s) · ${pageW}×${pageH}mm · Card ${cardW}×${cardH}mm`)
+  toast.success(`PDF saved! ${cards.length} cards on ${totalPages} page(s) · ${pageW}×${pageH}mm · Card ${cardW}×${cardH}mm · Grid ${cols}×${rows}`)
 }
