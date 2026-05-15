@@ -1016,7 +1016,7 @@ export default function TeacherDashboard() {
                     const d = await res.json()
                     if (d.success) {
                       toast.success('Template saved successfully!')
-                      fetch(`/api/schools/${getSchoolId()}/template`)
+                      fetch(`/api/schools/${getSchoolId()}/template`, { cache: 'no-store' })
                          .then(r => r.json())
                          .then(d => { if (d.success) setTemplateData(d.data) })
                     } else {

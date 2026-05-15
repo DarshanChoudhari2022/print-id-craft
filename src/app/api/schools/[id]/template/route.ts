@@ -116,9 +116,11 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     }
 
     // When the card size is locked, prevent accidental overwrite of dimensions
-    // unless the request explicitly includes cardSizeLocked (toggle or first-time lock).
+    // unless the request explicitly unlocks (cardSizeLocked === false).
     const existing = await prisma.template.findUnique({ where: { schoolId: params.id }, select: { cardSizeLocked: true } })
-    if (existing?.cardSizeLocked && validated.cardSizeLocked !== false) {
+    const isLocked = existing?.cardSizeLocked === true
+    const isUnlocking = validated.cardSizeLocked === false
+    if (isLocked && !isUnlocking) {
       // Preserve locked dimensions — strip size fields from the update
       delete updateData.cardWidthMm
       delete updateData.cardHeightMm
@@ -141,6 +143,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         templateImageUrl: validated.templateImageUrl,
         fieldMappings: validated.fieldMappings || [],
         photoBgColor: validated.photoBgColor || "#FFFFFF",
+        cardSizeLocked: validated.cardSizeLocked ?? false,
       },
     })
 
