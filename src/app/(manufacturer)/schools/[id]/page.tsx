@@ -229,6 +229,8 @@ export default function SchoolDetailPage() {
     Promise.all([fetchSchool(), fetchClasses(), fetchTemplate()]).finally(() => setLoading(false))
     // Defer heavier data fetches slightly to avoid blocking initial render
     setTimeout(() => { fetchStudents() }, 100)
+    // Always fetch flags on load so house-based flag images persist across refreshes
+    fetchFlags()
   }, [schoolId])
 
   // Re-fetch students when filters/search change (but not on initial tab switch)

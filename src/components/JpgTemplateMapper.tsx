@@ -449,11 +449,13 @@ export default function JpgTemplateMapper({
         setCardHeight(preset.height)
         setCardWidthStr(String(preset.width))
         setCardHeightStr(String(preset.height))
+        autoSaveCardSize(preset.width, preset.height, cardOrientation)
       } else {
         setCardWidth(preset.height)
         setCardHeight(preset.width)
         setCardWidthStr(String(preset.height))
         setCardHeightStr(String(preset.width))
+        autoSaveCardSize(preset.height, preset.width, cardOrientation)
       }
     }
   }
@@ -469,8 +471,31 @@ export default function JpgTemplateMapper({
       setCardHeight(cardWidth)
       setCardWidthStr(String(cardHeight))
       setCardHeightStr(String(cardWidth))
+      autoSaveCardSize(cardHeight, cardWidth, orient)
+    } else {
+      autoSaveCardSize(cardWidth, cardHeight, orient)
     }
   }
+
+  // ── Auto-save card size to backend immediately ──
+  // Called when the ID Size dialog is confirmed so dimensions persist universally
+  // for this school without requiring an explicit "Save Template" click.
+  const autoSaveCardSize = useCallback(async (width: number, height: number, orientation: "landscape" | "portrait", dpi?: number) => {
+    try {
+      await fetch(`/api/schools/${schoolId}/template`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cardWidthMm: width,
+          cardHeightMm: height,
+          orientation: orientation === "landscape" ? "LANDSCAPE" : "PORTRAIT",
+          ...(dpi ? { printDpi: dpi } : {}),
+        }),
+      })
+    } catch (err) {
+      console.error("Auto-save card size failed:", err)
+    }
+  }, [schoolId])
 
   // ── Target card aspect ratio for PVC printing (56mm × 88mm) ──
   const CARD_RATIO = 56 / 88 // 0.6364
@@ -874,25 +899,29 @@ export default function JpgTemplateMapper({
           initial={{ preset: cardSizePreset, width: cardWidth, height: cardHeight, orientation: cardOrientation === "landscape" ? "horizontal" : "vertical", sides: printSides === "both" ? "both" : "one" }}
           onOk={(cfg: IdSizeConfig) => {
             if (!cardSizeLocked) {
+              const orient = cfg.orientation === "horizontal" ? "landscape" : "portrait" as const
               setCardWidth(cfg.width)
               setCardHeight(cfg.height)
               setCardWidthStr(String(cfg.width))
               setCardHeightStr(String(cfg.height))
-              setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
+              setCardOrientation(orient)
               setPrintSides(cfg.sides === "both" ? "both" : "front")
               setCardSizePreset(cfg.preset)
+              autoSaveCardSize(cfg.width, cfg.height, orient)
             }
             setShowIdSizeDialog(false)
           }}
           onLoadTemplate={(cfg: IdSizeConfig) => {
             if (!cardSizeLocked) {
+              const orient = cfg.orientation === "horizontal" ? "landscape" : "portrait" as const
               setCardWidth(cfg.width)
               setCardHeight(cfg.height)
               setCardWidthStr(String(cfg.width))
               setCardHeightStr(String(cfg.height))
-              setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
+              setCardOrientation(orient)
               setPrintSides(cfg.sides === "both" ? "both" : "front")
               setCardSizePreset(cfg.preset)
+              autoSaveCardSize(cfg.width, cfg.height, orient)
             }
             setShowIdSizeDialog(false)
           }}
@@ -1961,7 +1990,7 @@ export default function JpgTemplateMapper({
                       }}
                       onBlur={() => {
                         const n = parseFloat(cardWidthStr)
-                        if (!isNaN(n) && n > 0) { setCardWidth(n); setCardWidthStr(String(n)) }
+                        if (!isNaN(n) && n > 0) { setCardWidth(n); setCardWidthStr(String(n)); autoSaveCardSize(n, cardHeight, cardOrientation) }
                         else { setCardWidthStr(String(cardWidth)) }
                       }}
                       style={{
@@ -1996,7 +2025,7 @@ export default function JpgTemplateMapper({
                       }}
                       onBlur={() => {
                         const n = parseFloat(cardHeightStr)
-                        if (!isNaN(n) && n > 0) { setCardHeight(n); setCardHeightStr(String(n)) }
+                        if (!isNaN(n) && n > 0) { setCardHeight(n); setCardHeightStr(String(n)); autoSaveCardSize(cardWidth, n, cardOrientation) }
                         else { setCardHeightStr(String(cardHeight)) }
                       }}
                       style={{
@@ -3707,25 +3736,29 @@ export default function JpgTemplateMapper({
           initial={{ preset: cardSizePreset, width: cardWidth, height: cardHeight, orientation: cardOrientation === "landscape" ? "horizontal" : "vertical", sides: printSides === "both" ? "both" : "one" }}
           onOk={(cfg: IdSizeConfig) => {
             if (!cardSizeLocked) {
+              const orient = cfg.orientation === "horizontal" ? "landscape" : "portrait" as const
               setCardWidth(cfg.width)
               setCardHeight(cfg.height)
               setCardWidthStr(String(cfg.width))
               setCardHeightStr(String(cfg.height))
-              setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
+              setCardOrientation(orient)
               setPrintSides(cfg.sides === "both" ? "both" : "front")
               setCardSizePreset(cfg.preset)
+              autoSaveCardSize(cfg.width, cfg.height, orient)
             }
             setShowIdSizeDialog(false)
           }}
           onLoadTemplate={(cfg: IdSizeConfig) => {
             if (!cardSizeLocked) {
+              const orient = cfg.orientation === "horizontal" ? "landscape" : "portrait" as const
               setCardWidth(cfg.width)
               setCardHeight(cfg.height)
               setCardWidthStr(String(cfg.width))
               setCardHeightStr(String(cfg.height))
-              setCardOrientation(cfg.orientation === "horizontal" ? "landscape" : "portrait")
+              setCardOrientation(orient)
               setPrintSides(cfg.sides === "both" ? "both" : "front")
               setCardSizePreset(cfg.preset)
+              autoSaveCardSize(cfg.width, cfg.height, orient)
             }
             setShowIdSizeDialog(false)
           }}
