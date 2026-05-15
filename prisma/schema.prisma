@@ -37,6 +37,11 @@ model School {
   address      String?
   contactEmail String       @default("")
   logoUrl      String?
+  // School-wide registration link. Parents open one URL and pick their
+  // child's class from a dropdown — replaces per-class linkToken sharing.
+  linkToken    String       @unique @default(cuid())
+  linkActive   Boolean      @default(true)
+  linkExpiresAt DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   template     Template?

@@ -86,6 +86,11 @@ type SchoolDetail = {
   contactEmail: string
   address: string | null
   logoUrl: string | null
+  // School-wide registration link — single URL parents use, with a class
+  // dropdown on the form. Replaces per-class link sharing.
+  linkToken: string
+  linkActive: boolean
+  linkExpiresAt: string | null
   _count: { classes: number; students: number; batches: number }
   template: { id: string; fieldConfig: any } | null
   teachers?: any[]
@@ -377,6 +382,77 @@ export default function SchoolDetailPage() {
     const url = `${window.location.origin}/submit/${token}`
     navigator.clipboard.writeText(url)
     toast.success("Link copied to clipboard!")
+  }
+
+  // ── School-wide link helpers ──
+  // The school-level URL is the single link admins distribute. Parents
+  // open it, pick their class from a dropdown, then fill the same form
+  // they would have via a per-class link.
+  const schoolFormUrl = school?.linkToken
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/submit/school/${school.linkToken}`
+    : ""
+
+  const copySchoolLink = () => {
+    if (!schoolFormUrl) return
+    navigator.clipboard.writeText(schoolFormUrl)
+    toast.success("School link copied to clipboard!")
+  }
+
+  const shareSchoolWhatsApp = () => {
+    if (!schoolFormUrl || !school) return
+    const msg = encodeURIComponent(
+      `📋 ID Card Registration\n\nSchool: ${school.name}\n\nPlease open the link below, select your child's class, and fill the registration form:\n${schoolFormUrl}`
+    )
+    window.open(`https://wa.me/?text=${msg}`, "_blank")
+  }
+
+  const shareSchoolEmail = () => {
+    if (!schoolFormUrl || !school) return
+    const subject = encodeURIComponent(`ID Card Registration — ${school.name}`)
+    const body = encodeURIComponent(
+      `Dear Parent/Student,\n\nPlease open the link below, select your child's class, and fill the ID card registration form:\n\n${schoolFormUrl}\n\nRegards,\n${school.name}`
+    )
+    window.open(`mailto:?subject=${subject}&body=${body}`)
+  }
+
+  const toggleSchoolLink = async () => {
+    if (!school) return
+    try {
+      const res = await fetch(`/api/schools/${school.id}/link`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ linkActive: !school.linkActive }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed")
+      setSchool({ ...school, linkActive: json.data.linkActive })
+      toast.success(json.data.linkActive ? "School link is now active." : "School link closed.")
+    } catch (e: any) {
+      toast.error(e?.message || "Could not update link.")
+    }
+  }
+
+  const regenerateSchoolLink = async () => {
+    if (!school) return
+    if (!confirm("Generate a new link? The current URL will stop working immediately.")) return
+    try {
+      const res = await fetch(`/api/schools/${school.id}/link`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regenerate: true }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed")
+      setSchool({
+        ...school,
+        linkToken: json.data.linkToken,
+        linkActive: json.data.linkActive,
+        linkExpiresAt: json.data.linkExpiresAt,
+      })
+      toast.success("New link generated.")
+    } catch (e: any) {
+      toast.error(e?.message || "Could not regenerate link.")
+    }
   }
 
   const shareWhatsApp = (token: string, className: string) => {
@@ -1272,6 +1348,99 @@ export default function SchoolDetailPage() {
         {/* CLASSES TAB */}
         {tab === "classes" && (
           <div className="fade-in">
+            {/* ── School-wide registration link panel ──
+                Single URL parents use; class dropdown on the form. Replaces
+                per-class link distribution. Per-class share buttons in the
+                table below remain available for backward-compat. */}
+            {school && (
+              <div style={{
+                marginBottom: 24,
+                padding: 16,
+                borderRadius: 12,
+                border: '1px solid #c7d2fe',
+                background: 'linear-gradient(135deg, #eef2ff, #f0f9ff)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    background: 'linear-gradient(135deg, #6366f1, #3b82f6)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'white', fontSize: 16,
+                  }}>🔗</div>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>
+                      School-Wide Registration Link
+                    </div>
+                    <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.45 }}>
+                      One URL for the whole school. Parents pick their child&apos;s class from a dropdown.
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 999,
+                    background: school.linkActive ? '#dcfce7' : '#fee2e2',
+                    color: school.linkActive ? '#166534' : '#991b1b',
+                  }}>
+                    {school.linkActive ? '● ACTIVE' : '● CLOSED'}
+                  </span>
+                </div>
+
+                <div style={{
+                  display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10,
+                  background: 'white', border: '1px solid #cbd5e1', borderRadius: 8,
+                  padding: '8px 10px', flexWrap: 'wrap',
+                }}>
+                  <code style={{
+                    flex: 1, minWidth: 200, fontSize: 12, color: '#334155',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {schoolFormUrl || 'Generating link…'}
+                  </code>
+                  <button
+                    className="btn btn-outline"
+                    onClick={copySchoolLink}
+                    style={{ fontSize: 11, padding: '5px 10px' }}
+                  >📋 Copy</button>
+                  <button
+                    className="btn btn-outline"
+                    onClick={shareSchoolWhatsApp}
+                    style={{ fontSize: 11, padding: '5px 10px', color: '#22c55e', borderColor: '#22c55e' }}
+                  >💬 WhatsApp</button>
+                  <button
+                    className="btn btn-outline"
+                    onClick={shareSchoolEmail}
+                    style={{ fontSize: 11, padding: '5px 10px' }}
+                  >📧 Email</button>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-outline"
+                    onClick={toggleSchoolLink}
+                    style={{
+                      fontSize: 11, padding: '5px 10px',
+                      color: school.linkActive ? '#dc2626' : '#16a34a',
+                      borderColor: school.linkActive ? '#fecaca' : '#bbf7d0',
+                    }}
+                  >
+                    {school.linkActive ? '🔒 Close Link' : '🔓 Reopen Link'}
+                  </button>
+                  <button
+                    className="btn btn-outline"
+                    onClick={regenerateSchoolLink}
+                    style={{ fontSize: 11, padding: '5px 10px', color: '#7c3aed', borderColor: '#ddd6fe' }}
+                  >🔄 Regenerate</button>
+                  {school.linkExpiresAt && (
+                    <span style={{
+                      fontSize: 11, color: '#92400e', padding: '5px 10px',
+                      background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6,
+                    }}>
+                      Expires {new Date(school.linkExpiresAt).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleAddClass} style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
               <div className="form-group" style={{ flex: 1, minWidth: 200 }}>
                 <input placeholder="New class name (e.g. Grade 10-A)" value={newClassName} onChange={e => setNewClassName(e.target.value)} required />
