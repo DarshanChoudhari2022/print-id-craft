@@ -111,8 +111,11 @@ const DATE_FORMATS = [
 
 const FONT_FAMILIES = [
   // Sans-Serif
-  "Arial", "Helvetica", "Verdana", "Tahoma", "Trebuchet MS",
+  "Arial", "Arial Narrow", "Helvetica", "Verdana", "Tahoma", "Trebuchet MS",
   "Calibri", "Segoe UI", "Lucida Sans", "Franklin Gothic Medium",
+  // Condensed / Narrow — used when columns are tight (parents' addresses,
+  // long names). Combine with fontWeight=bold to get "Narrow Bold".
+  "Roboto Condensed", "Oswald", "Open Sans Condensed", "Barlow Condensed",
   // Serif
   "Times New Roman", "Georgia", "Palatino", "Garamond",
   "Book Antiqua", "Cambria", "Constantia", "Didot",
@@ -122,7 +125,7 @@ const FONT_FAMILIES = [
   "Impact", "Comic Sans MS", "Copperplate", "Papyrus",
   // Google Fonts (loaded via CDN)
   "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins",
-  "Raleway", "Oswald", "Inter", "Nunito", "Playfair Display",
+  "Raleway", "Inter", "Nunito", "Playfair Display",
   "Merriweather", "Ubuntu", "Rubik", "Outfit", "Mukta",
   // Indian Language Friendly
   "Noto Sans Devanagari", "Noto Sans", "Tiro Devanagari Hindi",
@@ -299,9 +302,15 @@ export default function JpgTemplateMapper({
   // ── Professional Features State ──
   // Editor image render width in CSS pixels. Used to scale per-field font
   // sizes so they preview at the same proportional size as the final card.
-  // The renderer (BatchGenerator / JpgCardPreview) uses 600 px as the
-  // reference width; here we measure the actual <img> render width and
-  // scale `m.fontSize` by (renderedWidth / 600).
+  // `field.fontSize` is interpreted as typographic POINTS (pt). We
+  // convert pt → editor pixels using the actual rendered image width
+  // and the card's mm width:
+  //
+  //     pxPerPt = editorImgWidth × 25.4 / (cardWidth × 72)
+  //
+  // This is the same formula used by JpgCardPreview and BatchGenerator,
+  // so what the user sees in the editor matches the printed card
+  // exactly (and "size 10" in the picker really is 10 pt on print).
   const EDITOR_REFERENCE_WIDTH = 600
   const [editorImgWidth, setEditorImgWidth] = useState(EDITOR_REFERENCE_WIDTH)
   useEffect(() => {
@@ -322,7 +331,6 @@ export default function JpgTemplateMapper({
       ro?.disconnect()
     }
   }, [imageUrl])
-  const fontScale = editorImgWidth / EDITOR_REFERENCE_WIDTH
 
   const [zoomLevel, setZoomLevel] = useState(100) // percentage
   const [showGrid, setShowGrid] = useState(false)
@@ -1797,6 +1805,13 @@ export default function JpgTemplateMapper({
                         m.dateFormat && showPreview
                           ? formatDateValue(sampleValue, m.dateFormat)
                           : sampleValue
+                      // pt → editor-pixels using the rendered image width
+                      // and the card's mm width. Same formula as the
+                      // renderer (JpgCardPreview / BatchGenerator) so the
+                      // editor preview matches the printed card exactly.
+                      const fontScale = editorImgWidth > 0 && cardWidth > 0
+                        ? (editorImgWidth * 25.4) / (cardWidth * 72)
+                        : editorImgWidth / EDITOR_REFERENCE_WIDTH
                       const baseStyle: React.CSSProperties = {
                         fontSize: m.fontSize * fontScale,
                         color: m.fontColor,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { buildFormFields, type FormField } from "@/lib/submit-fields"
+import { migrateTemplateToPt } from "@/lib/font-size-units"
 
 export async function GET(req: Request, { params }: { params: { token: string } }) {
   try {
@@ -27,7 +28,30 @@ export async function GET(req: Request, { params }: { params: { token: string } 
       return NextResponse.json({ error: "This link has expired", code: "EXPIRED" }, { status: 410 })
     }
 
-    const template = cls.school.template
+    // One-shot legacy → pt font-size migration. Same logic as the
+    // admin template endpoint so the public preview, the admin
+    // preview, and the printed batch all share the same fontSize unit.
+    let template = cls.school.template
+    if (template) {
+      const { migrated, data } = migrateTemplateToPt(template as any)
+      if (migrated && data) {
+        try {
+          template = await prisma.template.update({
+            where: { schoolId: cls.school.id },
+            data: {
+              frontLayout: (data as any).frontLayout,
+              backLayout: (data as any).backLayout,
+              fieldMappings: (data as any).fieldMappings,
+              backFieldMappings: (data as any).backFieldMappings,
+              printConfig: (data as any).printConfig,
+            },
+          })
+        } catch (e) {
+          console.error("Public per-class: font-size migration persist failed (non-fatal):", e)
+          template = data as any
+        }
+      }
+    }
 
     // fieldConfig is auto-synced from Excel on every import — it has the EXACT Excel column
     // names as labels (e.g. "GR NO", "House", "MOBILE") and the correct stored data keys.

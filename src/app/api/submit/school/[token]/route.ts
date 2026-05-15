@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { buildFormFields, type FormField } from "@/lib/submit-fields"
+import { migrateTemplateToPt } from "@/lib/font-size-units"
 
 /**
  * Public GET — resolves a school-wide registration token to the school
@@ -34,7 +35,28 @@ export async function GET(req: Request, { params }: { params: { token: string } 
       return NextResponse.json({ error: "This link has expired", code: "EXPIRED" }, { status: 410 })
     }
 
-    const template = school.template
+    // One-shot legacy → pt font-size migration (idempotent — see lib/font-size-units.ts).
+    let template = school.template
+    if (template) {
+      const { migrated, data } = migrateTemplateToPt(template as any)
+      if (migrated && data) {
+        try {
+          template = await prisma.template.update({
+            where: { schoolId: school.id },
+            data: {
+              frontLayout: (data as any).frontLayout,
+              backLayout: (data as any).backLayout,
+              fieldMappings: (data as any).fieldMappings,
+              backFieldMappings: (data as any).backFieldMappings,
+              printConfig: (data as any).printConfig,
+            },
+          })
+        } catch (e) {
+          console.error("Public school-wide: font-size migration persist failed (non-fatal):", e)
+          template = data as any
+        }
+      }
+    }
     const rawMappings = (template?.fieldMappings || []) as any[]
     const rawFieldConf = (template?.fieldConfig || []) as any[]
 

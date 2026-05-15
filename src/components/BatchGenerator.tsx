@@ -211,6 +211,9 @@ function pathRoundedRect(
  * further until every line fits vertically. Mirrors JpgCardPreview's
  * fitTextToBox so on-screen preview and printed output stay identical.
  */
+// Caller threads cardWidthMm through so we convert the user's
+// typographic-pt fontSize into canvas pixels exactly. When omitted
+// we fall back to legacy 600-px reference behaviour.
 function fitTextToBoxCanvas(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -219,9 +222,10 @@ function fitTextToBoxCanvas(
   fontFamily: string,
   fontWeight: string,
   canvasW: number = 0,
-  userFontSizeEditorPx?: number,
+  userFontSizePt?: number,
   wrapMode: "nowrap" | "wrap" | "multiline" = "wrap",
   fontStyle: string = "normal",
+  cardWidthMm: number = 85.6,
 ): { lines: string[]; fontSize: number; lineHeight: number } {
   const padding = 4
   const maxW = Math.max(1, boxW - padding * 2)
@@ -259,10 +263,14 @@ function fitTextToBoxCanvas(
     return lines
   }
 
-  // Resolve the user's chosen editor-px font size into canvas pixels.
+  // Resolve the user's chosen font size (in typographic points) into
+  // canvas pixels using the card's mm width: px/pt = canvasW * 25.4 /
+  // (cardWidthMm * 72). This means "size 10" in the picker really is
+  // 10 pt on the printed card, matching Word/Photoshop expectations.
+  const pxPerPt = canvasW > 0 && cardWidthMm > 0 ? (canvasW * 25.4) / (cardWidthMm * 72) : 0
   const userPx =
-    userFontSizeEditorPx && userFontSizeEditorPx > 0 && canvasW > 0
-      ? (userFontSizeEditorPx * canvasW) / BATCH_EDITOR_REFERENCE_WIDTH
+    userFontSizePt && userFontSizePt > 0 && pxPerPt > 0
+      ? userFontSizePt * pxPerPt
       : boxH * 0.6
 
   // ── MULTILINE → keep the user's font size, wrap to as many lines as needed.
@@ -432,6 +440,7 @@ async function renderIdCard(
         const { lines, fontSize, lineHeight: baseLineHeight } = fitTextToBoxCanvas(
           ctx, value, fw, fh, fontFamily, fontWeight,
           printW, field.fontSize, field.textWrap || "wrap", fStyle,
+          cardWidthMm || 85.6,
         )
         // Honour the user's lineHeight multiplier if set (default 1.2 for multiline, ~1.15 otherwise).
         const userLH = field.lineHeight && field.lineHeight > 0 ? field.lineHeight : 0
@@ -566,9 +575,14 @@ async function renderIdCardSvg(
         const fill = field.fontColor || "#000"
         const svgFontStyle = field.fontStyle === "italic" ? "italic" : "normal"
         const svgTextDecor = field.textDecoration && field.textDecoration !== "none" ? field.textDecoration : ""
+        // SVG renderer uses the same pt-based formula as the raster
+        // renderer + editor so vector exports match preview pixel-for-pixel.
+        const svgPxPerPt = w > 0 && (cardWidthMm || 85.6) > 0
+          ? (w * 25.4) / ((cardWidthMm || 85.6) * 72)
+          : 0
         const userPx =
-          field.fontSize && field.fontSize > 0
-            ? (field.fontSize * w) / BATCH_EDITOR_REFERENCE_WIDTH
+          field.fontSize && field.fontSize > 0 && svgPxPerPt > 0
+            ? field.fontSize * svgPxPerPt
             : fh * 0.6
 
         const escape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")

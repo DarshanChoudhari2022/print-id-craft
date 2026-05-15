@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { migrateTemplateToPt } from "@/lib/font-size-units"
 
 const templateSchema = z.object({
   frontLayout: z.any().optional(),
@@ -73,7 +74,35 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       where: { schoolId: params.id },
     })
 
-    return NextResponse.json({ success: true, data: template })
+    // One-shot legacy → pt font-size migration. Idempotent: gated by
+    // `printConfig.fontSizeUnit === "pt"`. After the first GET on a
+    // legacy template, every subsequent read is a fast no-op.
+    let outTemplate: typeof template = template
+    if (template) {
+      const { migrated, data } = migrateTemplateToPt(template as any)
+      if (migrated && data) {
+        try {
+          outTemplate = await prisma.template.update({
+            where: { schoolId: params.id },
+            data: {
+              frontLayout: (data as any).frontLayout,
+              backLayout: (data as any).backLayout,
+              fieldMappings: (data as any).fieldMappings,
+              backFieldMappings: (data as any).backFieldMappings,
+              printConfig: (data as any).printConfig,
+            },
+          })
+        } catch (persistErr) {
+          // Non-fatal — return the migrated values to the caller anyway
+          // so the renderer uses correct fontSizes even if persistence
+          // failed (e.g. read-only replica). Next save will fix it.
+          console.error("Font-size migration persist failed (non-fatal):", persistErr)
+          outTemplate = data as any
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, data: outTemplate })
   } catch (error) {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }

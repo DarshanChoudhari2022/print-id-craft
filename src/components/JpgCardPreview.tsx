@@ -158,6 +158,9 @@ export function resolveFieldValue(fd: Record<string, string>, fieldKey: string):
  * in editor pixels, relative to a ~600 px reference image). We scale it to
  * canvas pixels here so what they see in the editor matches the preview.
  */
+// `userFontSizePt` is interpreted as typographic points. We convert
+// to canvas pixels using the card's mm width so size 10 in the picker
+// really is 10 pt on the printed card.
 function fitTextToBox(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -167,9 +170,10 @@ function fitTextToBox(
   fontWeight: string,
   scale: number,
   canvasW: number,
-  userFontSizeEditorPx?: number,
+  userFontSizePt?: number,
   wrapMode: "nowrap" | "wrap" | "multiline" = "wrap",
   fontStyle: string = "normal",
+  cardWidthMm: number = 85.6,
 ): { lines: string[]; fontSize: number; lineHeight: number } {
   const padding = 4 * scale
   const maxW = Math.max(1, boxW - padding * 2)
@@ -209,12 +213,13 @@ function fitTextToBox(
     return lines
   }
 
-  // Resolve the user's chosen font size into canvas pixels. We scale by the
-  // canvas width vs the editor reference width so the on-card text looks the
-  // same size as in the editor at any DPI.
+  // Resolve the user's chosen font size (in pt) into canvas pixels.
+  // pxPerPt = canvasW * 25.4 / (cardWidthMm * 72) so the printed text
+  // size in pt is exactly what the user picked.
+  const pxPerPt = canvasW > 0 && cardWidthMm > 0 ? (canvasW * 25.4) / (cardWidthMm * 72) : 0
   const userPx =
-    userFontSizeEditorPx && userFontSizeEditorPx > 0
-      ? (userFontSizeEditorPx * canvasW) / MAPPER_REFERENCE_WIDTH
+    userFontSizePt && userFontSizePt > 0 && pxPerPt > 0
+      ? userFontSizePt * pxPerPt
       : boxH * 0.6
 
   // ── MULTILINE: preserve the user's font size, wrap to as many lines as needed.
@@ -398,6 +403,7 @@ export default function JpgCardPreview({
             const { lines, fontSize, lineHeight: baseLineHeight } = fitTextToBox(
               ctx, String(value), fw, fh, fontFamily, fontWeight, scale,
               w, field.fontSize, field.textWrap || "wrap", fStyle,
+              cardWidthMm || 85.6,
             )
             // Honour the user's lineHeight multiplier if set.
             const userLH = field.lineHeight && field.lineHeight > 0 ? field.lineHeight : 0
@@ -510,7 +516,8 @@ export async function generateJpgCard(
   formData: Record<string, string>,
   studentPhoto?: string,
   outputScale: number = 1,
-  flagImageUrl?: string
+  flagImageUrl?: string,
+  cardWidthMm: number = 85.6,
 ): Promise<string> {
   const canvas = document.createElement("canvas")
   const ctx = canvas.getContext("2d")
@@ -584,6 +591,8 @@ export async function generateJpgCard(
         const { lines, fontSize, lineHeight } = fitTextToBox(
           ctx, String(value), fw, fh, fontFamily, fontWeight, outputScale,
           w, field.fontSize, field.textWrap || "wrap",
+          "normal",
+          cardWidthMm || 85.6,
         )
 
         ctx.fillStyle = field.fontColor || "#000"
