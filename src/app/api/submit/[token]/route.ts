@@ -67,6 +67,104 @@ export async function GET(req: Request, { params }: { params: { token: string } 
       resolvedFieldConfig = []
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // CRITICAL: Align form field keys with the ACTUAL keys already stored
+    // in existing students' formData for this school. This guarantees that
+    // a parent's submission lands in the same columns as the rest of the
+    // database (Excel-imported rows), regardless of whether the template's
+    // fieldConfig was generated from JPG mappings (e.g. "studentName",
+    // "houseFlag", "rollNo") before the Excel import re-keyed everything
+    // to ("fullName", "flagColor", "grNo", ...).
+    //
+    // Strategy: collect the union of keys from all existing students, then
+    // for each form field, try to find an existing key that matches by
+    // fuzzy alias (same logic as the table view in the admin dashboard).
+    // If a match is found, rewrite the form field's `key` to that existing
+    // key so the submission slots into the right column.
+    // ─────────────────────────────────────────────────────────────────────
+    try {
+      const existingStudents = await prisma.student.findMany({
+        where: { schoolId: cls.school.id },
+        select: { formData: true },
+        take: 200, // bounded — 200 rows is plenty to learn the key vocabulary
+      })
+
+      if (existingStudents.length > 0) {
+        const existingKeyFreq: Record<string, number> = {}
+        for (const s of existingStudents) {
+          const fd = (s.formData as Record<string, unknown> | null) || {}
+          for (const k of Object.keys(fd)) {
+            const v = fd[k]
+            if (v != null && String(v).trim() !== "") {
+              existingKeyFreq[k] = (existingKeyFreq[k] || 0) + 1
+            }
+          }
+        }
+        const existingKeys = Object.keys(existingKeyFreq)
+
+        // Fuzzy alias groups — keys in the same group are considered the
+        // "same field" across schools, so a form key like "studentName" can
+        // be remapped to an existing data key like "fullName".
+        const ALIAS_GROUPS: string[][] = [
+          ["fullName", "name", "studentName", "Student Name", "Student_Name", "Full Name", "full_name", "student_name", "NAME", "Name"],
+          ["rollNo", "roll", "Roll No", "Roll No.", "RollNo", "roll_no"],
+          ["grNo", "GR NO", "GR No", "GR_NO", "GRNo", "gr_no", "Gr No"],
+          ["srNo", "NO", "No", "no", "sr_no", "Sr No"],
+          ["phone", "mobile", "Mobile", "MOBILE", "Phone", "mob", "MOB", "mob_father", "fatherPhone", "father_phone"],
+          ["flagColor", "houseFlag", "house_flag", "House", "house", "House Flag", "Flag", "Colour", "colour", "Color", "color"],
+          ["photoId", "Photo ID", "PHOTO NO.", "PHOTO NO", "Photo No", "Photo No.", "photo_id", "PhotoId", "photo_no"],
+          ["address", "Address", "ADDRESS", "addr", "Add", "Add:"],
+          ["fatherName", "father", "Father", "Father Name", "Father's Name", "father_name"],
+          ["motherName", "mother", "Mother", "Mother Name", "Mother's Name", "mother_name"],
+          ["dob", "DOB", "Date of Birth", "date_of_birth", "birthDate", "birthday"],
+          ["bloodGroup", "Blood Group", "blood_group", "BG", "bg"],
+          ["branch", "Branch", "BRANCH"],
+          ["section", "Section", "SECTION", "division", "Division"],
+        ]
+        const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
+        const findGroupFor = (key: string): string[] | null => {
+          const nk = normalize(key)
+          for (const grp of ALIAS_GROUPS) {
+            if (grp.some(k => normalize(k) === nk)) return grp
+          }
+          return null
+        }
+
+        resolvedFieldConfig = resolvedFieldConfig.map((f: any) => {
+          // 1) Exact key already in existing data → no change needed
+          if (existingKeys.includes(f.key)) return f
+
+          // 2) Case-insensitive / normalized match against existing keys
+          const nf = normalize(f.key)
+          const ciMatch = existingKeys.find(k => normalize(k) === nf)
+          if (ciMatch) return { ...f, key: ciMatch }
+
+          // 3) Alias-group match — pick the most-used existing key in the group
+          const grp = findGroupFor(f.key)
+          if (grp) {
+            const candidates = existingKeys
+              .filter(k => grp.some(g => normalize(g) === normalize(k)))
+              .sort((a, b) => (existingKeyFreq[b] || 0) - (existingKeyFreq[a] || 0))
+            if (candidates.length > 0) return { ...f, key: candidates[0] }
+          }
+
+          // 4) Label-based match — if any existing key has the same normalized
+          //    form as this field's label, use that key.
+          if (f.label) {
+            const nl = normalize(String(f.label))
+            const labelMatch = existingKeys.find(k => normalize(k) === nl)
+            if (labelMatch) return { ...f, key: labelMatch }
+          }
+
+          // No match — leave key as-is (new field that the existing data
+          // doesn't have yet).
+          return f
+        })
+      }
+    } catch (alignErr) {
+      console.error("Field-key alignment failed (non-fatal):", alignErr)
+    }
+
     // Detect flag/house field from EITHER fieldMappings (type=flag) OR fieldConfig key/label.
     const FLAG_FIELD_KEYS = ["flagColor", "houseFlag", "house_flag", "houseColor", "house_color"]
     const FLAG_LABEL_WORDS = ["house", "flag", "colour", "color"]

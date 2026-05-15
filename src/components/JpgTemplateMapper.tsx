@@ -1426,10 +1426,10 @@ export default function JpgTemplateMapper({
                 padding: "3px 10px", borderRadius: 6, background: "#1e293b", border: "1px solid #475569",
                 color: "#94a3b8", fontSize: 10, fontFamily: "monospace", display: "flex", gap: 8,
               }}>
-                <span>X: {selectedMapping.x.toFixed(1)}%</span>
-                <span>Y: {selectedMapping.y.toFixed(1)}%</span>
-                <span>W: {selectedMapping.width.toFixed(1)}%</span>
-                <span>H: {selectedMapping.height.toFixed(1)}%</span>
+                <span>X: {(selectedMapping.x ?? 0).toFixed(1)}%</span>
+                <span>Y: {(selectedMapping.y ?? 0).toFixed(1)}%</span>
+                <span>W: {(selectedMapping.width ?? 0).toFixed(1)}%</span>
+                <span>H: {(selectedMapping.height ?? 0).toFixed(1)}%</span>
               </div>
             )}
 
@@ -3255,14 +3255,14 @@ export default function JpgTemplateMapper({
                   >
                     <div>
                       <span style={{ fontSize: 10, color: "#94a3b8" }}>
-                        X: {selectedMapping.x.toFixed(1)}%
+                        X: {(selectedMapping.x ?? 0).toFixed(1)}%
                       </span>
                       <input
                         type="range"
                         min="0"
                         max="80"
                         step="0.5"
-                        value={selectedMapping.x}
+                        value={selectedMapping.x ?? 0}
                         onChange={(e) =>
                           updateMapping(selectedMapping.id, {
                             x: Number(e.target.value),
@@ -3273,14 +3273,14 @@ export default function JpgTemplateMapper({
                     </div>
                     <div>
                       <span style={{ fontSize: 10, color: "#94a3b8" }}>
-                        Y: {selectedMapping.y.toFixed(1)}%
+                        Y: {(selectedMapping.y ?? 0).toFixed(1)}%
                       </span>
                       <input
                         type="range"
                         min="0"
                         max="80"
                         step="0.5"
-                        value={selectedMapping.y}
+                        value={selectedMapping.y ?? 0}
                         onChange={(e) =>
                           updateMapping(selectedMapping.id, {
                             y: Number(e.target.value),
@@ -3291,14 +3291,14 @@ export default function JpgTemplateMapper({
                     </div>
                     <div>
                       <span style={{ fontSize: 10, color: "#94a3b8" }}>
-                        W: {selectedMapping.width.toFixed(1)}%
+                        W: {(selectedMapping.width ?? 0).toFixed(1)}%
                       </span>
                       <input
                         type="range"
                         min="5"
                         max="50"
                         step="0.5"
-                        value={selectedMapping.width}
+                        value={selectedMapping.width ?? 0}
                         onChange={(e) =>
                           updateMapping(selectedMapping.id, {
                             width: Number(e.target.value),
@@ -3309,14 +3309,14 @@ export default function JpgTemplateMapper({
                     </div>
                     <div>
                       <span style={{ fontSize: 10, color: "#94a3b8" }}>
-                        H: {selectedMapping.height.toFixed(1)}%
+                        H: {(selectedMapping.height ?? 0).toFixed(1)}%
                       </span>
                       <input
                         type="range"
                         min="5"
                         max="60"
                         step="0.5"
-                        value={selectedMapping.height}
+                        value={selectedMapping.height ?? 0}
                         onChange={(e) =>
                           updateMapping(selectedMapping.id, {
                             height: Number(e.target.value),
