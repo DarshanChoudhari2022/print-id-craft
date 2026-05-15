@@ -4,6 +4,7 @@ import { z } from "zod"
 import { rateLimit, getClientIp } from "@/lib/rate-limit"
 import { storageUpload, storagePublicUrl } from "@/lib/storage"
 import QRCode from "qrcode"
+import { computeAutoAssignedFields } from "@/lib/submit-fields"
 
 const submitSchema = z.object({
   formData: z.record(z.string(), z.any()),
@@ -122,6 +123,11 @@ export async function POST(req: Request, { params }: { params: { token: string }
         }
         const serialNumber = `${schoolCode}-${String(nextNum).padStart(4, "0")}`
 
+        // Auto-assigned keys (NO, PHOTO NO.) are computed from existing
+        // data per school so the parent never has to type them. They
+        // override anything the parent may have submitted for these keys.
+        const autoFields = await computeAutoAssignedFields(cls.school.id)
+
         student = await prisma.$transaction(async (tx) => {
           const newStudent = await tx.student.create({
             data: {
@@ -130,6 +136,7 @@ export async function POST(req: Request, { params }: { params: { token: string }
               serialNumber,
               formData: {
                 ...validated.formData,
+                ...autoFields,
                 class: cls.name,
               },
               photoUrl: validated.photoUrl || "",

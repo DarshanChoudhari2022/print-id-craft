@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { buildFormFields, type FormField } from "@/lib/submit-fields"
 
 /**
  * Public GET — resolves a school-wide registration token to the school
@@ -44,100 +45,39 @@ export async function GET(req: Request, { params }: { params: { token: string } 
       "no", "no.", "photo no", "photo no.", "photo id", "photo number",
     ])
 
-    let resolvedFieldConfig: any[]
+    // Build the public form's field list directly from the most-frequent
+    // keys in actual student data so labels match the admin table
+    // verbatim ("GR NO", "MOBILE", "Address", "Name", "House", …) and
+    // submissions slot into the same columns. Auto-managed keys are
+    // filtered out by buildFormFields(). For brand-new schools we fall
+    // back to the template's fieldConfig / fieldMappings.
+    const templateFallback: FormField[] = []
     if (rawFieldConf.length > 0) {
-      resolvedFieldConfig = rawFieldConf
-        .filter((f: any) =>
-          !FORM_SKIP_KEYS.has(f.key) &&
-          !FORM_SKIP_LABELS.has((f.label || "").toLowerCase().trim())
-        )
-        .map((f: any) => {
-          const k = (f.key || "").toLowerCase()
-          const l = (f.label || "").toLowerCase()
-          let formType = f.type || "text"
-          if (k === "phone" || k.includes("mob") || l.includes("mobile") || l.includes("phone")) formType = "tel"
-          return { key: f.key, label: f.label, type: formType, required: true }
-        })
+      for (const f of rawFieldConf) {
+        if (FORM_SKIP_KEYS.has(f.key)) continue
+        if (FORM_SKIP_LABELS.has((f.label || "").toLowerCase().trim())) continue
+        const k = (f.key || "").toLowerCase()
+        const l = (f.label || "").toLowerCase()
+        let formType: string = f.type || "text"
+        if (k === "phone" || k.includes("mob") || l.includes("mobile") || l.includes("phone")) formType = "tel"
+        templateFallback.push({ key: f.key, label: f.label, type: formType, required: true })
+      }
     } else if (rawMappings.length > 0) {
-      resolvedFieldConfig = rawMappings
-        .filter((m: any) => m.type !== "photo")
-        .map((m: any) => {
-          const k = (m.fieldKey || "").toLowerCase()
-          let formType = "text"
-          if (k.includes("phone") || k.includes("mob") || k === "mob_father" || k === "mother_phone") formType = "tel"
-          return { key: m.fieldKey, label: m.label, type: formType, required: true }
-        })
-    } else {
-      resolvedFieldConfig = []
+      for (const m of rawMappings) {
+        if (m.type === "photo") continue
+        const k = (m.fieldKey || "").toLowerCase()
+        let formType = "text"
+        if (k.includes("phone") || k.includes("mob") || k === "mob_father" || k === "mother_phone") formType = "tel"
+        templateFallback.push({ key: m.fieldKey, label: m.label, type: formType, required: true })
+      }
     }
 
-    // Align form keys with existing students' actual stored keys (same
-    // logic as the per-class endpoint) so submissions land in the right
-    // columns regardless of fieldConfig drift.
+    let resolvedFieldConfig: FormField[] = []
     try {
-      const existingStudents = await prisma.student.findMany({
-        where: { schoolId: school.id },
-        select: { formData: true },
-        take: 200,
-      })
-      if (existingStudents.length > 0) {
-        const existingKeyFreq: Record<string, number> = {}
-        for (const s of existingStudents) {
-          const fd = (s.formData as Record<string, unknown> | null) || {}
-          for (const k of Object.keys(fd)) {
-            const v = fd[k]
-            if (v != null && String(v).trim() !== "") {
-              existingKeyFreq[k] = (existingKeyFreq[k] || 0) + 1
-            }
-          }
-        }
-        const existingKeys = Object.keys(existingKeyFreq)
-        const ALIAS_GROUPS: string[][] = [
-          ["fullName", "name", "studentName", "Student Name", "Student_Name", "Full Name", "full_name", "student_name", "NAME", "Name"],
-          ["rollNo", "roll", "Roll No", "Roll No.", "RollNo", "roll_no"],
-          ["grNo", "GR NO", "GR No", "GR_NO", "GRNo", "gr_no", "Gr No"],
-          ["srNo", "NO", "No", "no", "sr_no", "Sr No"],
-          ["phone", "mobile", "Mobile", "MOBILE", "Phone", "mob", "MOB", "mob_father", "fatherPhone", "father_phone"],
-          ["flagColor", "houseFlag", "house_flag", "House", "house", "House Flag", "Flag", "Colour", "colour", "Color", "color"],
-          ["photoId", "Photo ID", "PHOTO NO.", "PHOTO NO", "Photo No", "Photo No.", "photo_id", "PhotoId", "photo_no"],
-          ["address", "Address", "ADDRESS", "addr", "Add", "Add:"],
-          ["fatherName", "father", "Father", "Father Name", "Father's Name", "father_name"],
-          ["motherName", "mother", "Mother", "Mother Name", "Mother's Name", "mother_name"],
-          ["dob", "DOB", "Date of Birth", "date_of_birth", "birthDate", "birthday"],
-          ["bloodGroup", "Blood Group", "blood_group", "BG", "bg"],
-          ["branch", "Branch", "BRANCH"],
-          ["section", "Section", "SECTION", "division", "Division"],
-        ]
-        const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
-        const findGroupFor = (key: string): string[] | null => {
-          const nk = normalize(key)
-          for (const grp of ALIAS_GROUPS) {
-            if (grp.some(k => normalize(k) === nk)) return grp
-          }
-          return null
-        }
-        resolvedFieldConfig = resolvedFieldConfig.map((f: any) => {
-          if (existingKeys.includes(f.key)) return f
-          const nf = normalize(f.key)
-          const ciMatch = existingKeys.find(k => normalize(k) === nf)
-          if (ciMatch) return { ...f, key: ciMatch }
-          const grp = findGroupFor(f.key)
-          if (grp) {
-            const candidates = existingKeys
-              .filter(k => grp.some(g => normalize(g) === normalize(k)))
-              .sort((a, b) => (existingKeyFreq[b] || 0) - (existingKeyFreq[a] || 0))
-            if (candidates.length > 0) return { ...f, key: candidates[0] }
-          }
-          if (f.label) {
-            const nl = normalize(String(f.label))
-            const labelMatch = existingKeys.find(k => normalize(k) === nl)
-            if (labelMatch) return { ...f, key: labelMatch }
-          }
-          return f
-        })
-      }
-    } catch (alignErr) {
-      console.error("Field-key alignment failed (non-fatal):", alignErr)
+      resolvedFieldConfig = await buildFormFields(school.id, templateFallback)
+    } catch (e) {
+      console.error("buildFormFields failed (non-fatal):", e)
+      resolvedFieldConfig = templateFallback
     }
 
     // House/flag colour vocabulary (same as per-class endpoint).

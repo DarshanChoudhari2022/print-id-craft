@@ -4,6 +4,7 @@ import { z } from "zod"
 import { rateLimit, getClientIp } from "@/lib/rate-limit"
 import { storageUpload, storagePublicUrl } from "@/lib/storage"
 import QRCode from "qrcode"
+import { computeAutoAssignedFields } from "@/lib/submit-fields"
 
 /**
  * Public POST — creates a student record from a school-wide registration
@@ -132,13 +133,16 @@ export async function POST(req: Request, { params }: { params: { token: string }
         }
         const serialNumber = `${schoolCode}-${String(nextNum).padStart(4, "0")}`
 
+        // Auto-assigned keys (NO, PHOTO NO.) — same logic as per-class endpoint.
+        const autoFields = await computeAutoAssignedFields(school.id)
+
         student = await prisma.$transaction(async (tx) => {
           const newStudent = await tx.student.create({
             data: {
               schoolId: school.id,
               classId: cls.id,
               serialNumber,
-              formData: { ...validated.formData, class: cls.name },
+              formData: { ...validated.formData, ...autoFields, class: cls.name },
               photoUrl: validated.photoUrl || "",
               status: "SUBMITTED",
             },
