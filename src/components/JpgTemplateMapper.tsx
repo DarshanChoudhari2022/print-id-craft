@@ -297,6 +297,33 @@ export default function JpgTemplateMapper({
   const dialogSnapshotRef = useRef<{ id: string; mapping: FieldMapping } | null>(null)
 
   // ── Professional Features State ──
+  // Editor image render width in CSS pixels. Used to scale per-field font
+  // sizes so they preview at the same proportional size as the final card.
+  // The renderer (BatchGenerator / JpgCardPreview) uses 600 px as the
+  // reference width; here we measure the actual <img> render width and
+  // scale `m.fontSize` by (renderedWidth / 600).
+  const EDITOR_REFERENCE_WIDTH = 600
+  const [editorImgWidth, setEditorImgWidth] = useState(EDITOR_REFERENCE_WIDTH)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const update = () => {
+      const w = imageRef.current?.getBoundingClientRect().width
+      if (w && w > 0) setEditorImgWidth(w)
+    }
+    update()
+    let ro: ResizeObserver | null = null
+    if (typeof ResizeObserver !== "undefined" && imageRef.current) {
+      ro = new ResizeObserver(update)
+      ro.observe(imageRef.current)
+    }
+    window.addEventListener("resize", update)
+    return () => {
+      window.removeEventListener("resize", update)
+      ro?.disconnect()
+    }
+  }, [imageUrl])
+  const fontScale = editorImgWidth / EDITOR_REFERENCE_WIDTH
+
   const [zoomLevel, setZoomLevel] = useState(100) // percentage
   const [showGrid, setShowGrid] = useState(false)
   const [snapToGrid, setSnapToGrid] = useState(false)
@@ -1771,7 +1798,7 @@ export default function JpgTemplateMapper({
                           ? formatDateValue(sampleValue, m.dateFormat)
                           : sampleValue
                       const baseStyle: React.CSSProperties = {
-                        fontSize: m.fontSize * 0.65,
+                        fontSize: m.fontSize * fontScale,
                         color: m.fontColor,
                         fontWeight: m.fontWeight,
                         fontFamily: m.fontFamily,

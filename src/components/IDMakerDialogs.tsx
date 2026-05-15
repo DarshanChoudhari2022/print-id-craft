@@ -410,10 +410,11 @@ export function IdSizeDialog({
 // 2. FONT DIALOG  (exact screenshot match)
 // ─────────────────────────────────────────────────────────────
 const FONT_LIST = [
-  "Microsoft Sans Serif", "Arial", "Helvetica", "Tahoma", "Verdana",
+  "Microsoft Sans Serif", "Arial", "Arial Narrow", "Helvetica", "Tahoma", "Verdana",
   "Times New Roman", "Georgia", "Courier New", "Impact", "Mohol",
   "Modern No. 20", "Monotype Corsiva", "Montserrat",
-  "Roboto", "Open Sans", "Lato", "Poppins", "Raleway",
+  "Roboto", "Roboto Condensed", "Open Sans", "Lato", "Poppins", "Raleway",
+  "Oswald", "PT Sans Narrow",
   "Noto Sans Devanagari", "Noto Sans",
 ]
 const FONT_STYLES = ["Regular", "Italic", "Bold", "Bold Italic"]

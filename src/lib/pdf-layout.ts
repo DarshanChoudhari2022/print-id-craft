@@ -201,7 +201,12 @@ export function calculateGridLayout(
   totalCards: number,
   customStartX?: number,
   customStartY?: number,
+  gapVMm?: number,
 ): GridLayout {
+  // Separate H/V gaps. Defaults to a single `gapMm` for both axes for
+  // backward compatibility with callers / tests that pass only one gap.
+  const gapH = gapMm
+  const gapV = typeof gapVMm === "number" && isFinite(gapVMm) && gapVMm >= 0 ? gapVMm : gapMm
   const printW = pageWidthMm - marginMm * 2
   const printH = pageHeightMm - marginMm * 2
   // When a custom start position is set, reduce available space so cards
@@ -215,12 +220,12 @@ export function calculateGridLayout(
   const availH = safeStartY !== undefined
     ? pageHeightMm - safeStartY
     : printH
-  const cols = Math.max(1, Math.floor((availW + gapMm) / (cardWidthMm + gapMm)))
-  const rows = Math.max(1, Math.floor((availH + gapMm) / (cardHeightMm + gapMm)))
+  const cols = Math.max(1, Math.floor((availW + gapH) / (cardWidthMm + gapH)))
+  const rows = Math.max(1, Math.floor((availH + gapV) / (cardHeightMm + gapV)))
   const cardsPerPage = cols * rows
   const totalPages = Math.ceil(totalCards / cardsPerPage)
-  const usedW = cols * cardWidthMm + (cols - 1) * gapMm
-  const usedH = rows * cardHeightMm + (rows - 1) * gapMm
+  const usedW = cols * cardWidthMm + (cols - 1) * gapH
+  const usedH = rows * cardHeightMm + (rows - 1) * gapV
   // Use custom start positions if provided, otherwise auto-center
   const startX = safeStartX !== undefined
     ? safeStartX

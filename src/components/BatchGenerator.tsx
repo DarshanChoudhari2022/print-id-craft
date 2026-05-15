@@ -974,8 +974,11 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           if (dimsChanged) {
             // Card dimensions changed (or were never recorded) — recalculate pitches
             // from the current card size, preserving any deliberate gap the user had.
-            const oldGapH = savedCW > 0 ? Math.max(0, saved.h2ndPosition - savedCW) : 0
-            const oldGapV = savedCH > 0 ? Math.max(0, saved.v2ndPosition - savedCH) : 0
+            // When no prior gap was recorded fall back to the new defaults
+            // (3 mm horizontal, 15 mm vertical) so freshly-resized cards still
+            // get reasonable spacing on the print sheet.
+            const oldGapH = savedCW > 0 ? Math.max(0, saved.h2ndPosition - savedCW) : 3
+            const oldGapV = savedCH > 0 ? Math.max(0, saved.v2ndPosition - savedCH) : 15
             setPrintConfig({ ...saved, h2ndPosition: w + oldGapH, v2ndPosition: h + oldGapV, cardWidthMm: w, cardHeightMm: h })
           } else {
             setPrintConfig(saved)
@@ -983,10 +986,11 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           setPrintConfigSaved(true)
         } else {
           // Seed Print Setup defaults from card dims if user hasn't customised.
+          // Default inter-card gap: 3 mm horizontal, 15 mm vertical (Aaryans spec).
           setPrintConfig(prev =>
             prev.h2ndPosition > 0 || prev.v2ndPosition > 0
               ? prev
-              : { ...prev, h2ndPosition: w, v2ndPosition: h }
+              : { ...prev, h2ndPosition: w + 3, v2ndPosition: h + 15, cardWidthMm: w, cardHeightMm: h }
           )
         }
       })
@@ -1757,7 +1761,8 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 const h = templateCardDims?.h || 88
                 const defaults: PrintConfig = {
                   paper: "A4 Horizontal", paperWidth: 297, paperHeight: 210,
-                  h1stPosition: 0, h2ndPosition: w, v1stPosition: 0, v2ndPosition: h,
+                  // 3 mm horizontal gap + 15 mm vertical gap between cards
+                  h1stPosition: 0, h2ndPosition: w + 3, v1stPosition: 0, v2ndPosition: h + 15,
                   cardWidthMm: w, cardHeightMm: h,
                 }
                 setPrintConfig(defaults)

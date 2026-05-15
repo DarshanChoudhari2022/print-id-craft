@@ -77,7 +77,9 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
   const [customCardH, setCustomCardH] = useState(initCardH)
 
   const [marginMm, setMarginMm] = useState(3) // outer page margin
-  const [gapMm, setGapMm] = useState(1) // gap between cards
+  // Separate H/V gaps between cards. Defaults: 3mm horizontal, 15mm vertical.
+  const [gapMm, setGapMm] = useState(3) // horizontal gap between cards (mm)
+  const [gapVMm, setGapVMm] = useState(15) // vertical gap between cards (mm)
   const [landscape, setLandscape] = useState(initLandscape) // portrait page for 2×5 layout
   const [includeBacks, setIncludeBacks] = useState(true)
   const [addCutMarks, setAddCutMarks] = useState(true)
@@ -121,8 +123,9 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
           pageW, pageH, cardW, cardH, marginMm, gapMm, cards.length,
           useCustomPosition ? cardPosX : undefined,
           useCustomPosition ? cardPosY : undefined,
+          gapVMm,
         ),
-    [pvcMode, pageW, pageH, cardW, cardH, marginMm, gapMm, cards.length, useCustomPosition, cardPosX, cardPosY]
+    [pvcMode, pageW, pageH, cardW, cardH, marginMm, gapMm, gapVMm, cards.length, useCustomPosition, cardPosX, cardPosY]
   )
 
   /* ── Live preview canvas ── */
@@ -160,7 +163,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
     // draw card slots
     const { cols, rows, startX, startY } = layout
     const effectiveGapH = pvcMode ? PVC_PRINT_CONFIG.gapH : gapMm
-    const effectiveGapV = pvcMode ? PVC_PRINT_CONFIG.gapV : gapMm
+    const effectiveGapV = pvcMode ? PVC_PRINT_CONFIG.gapV : gapVMm
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const idx = r * cols + c
@@ -229,7 +232,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
       cWidth / 2,
       cHeight - 4
     )
-  }, [layout, cards, pageW, pageH, cardW, cardH, marginMm, gapMm, addCutMarks, pvcMode, isMobile])
+  }, [layout, cards, pageW, pageH, cardW, cardH, marginMm, gapMm, gapVMm, addCutMarks, pvcMode, isMobile])
 
   /* ── PDF Generation ── */
   const generatePdf = useCallback(async () => {
@@ -323,7 +326,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
             const row = Math.floor(slot / cols)
             const col = slot % cols
             const pdfGapH = pvcMode ? PVC_PRINT_CONFIG.gapH : gapMm
-            const pdfGapV = pvcMode ? PVC_PRINT_CONFIG.gapV : gapMm
+            const pdfGapV = pvcMode ? PVC_PRINT_CONFIG.gapV : gapVMm
             const x = startX + col * (cardW + pdfGapH)
             const y = startY + row * (cardH + pdfGapV)
 
@@ -364,7 +367,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
             const col = slot % cols
             const mirroredCol = getMirroredCol(col, cols)
             const pdfGapH = pvcMode ? PVC_PRINT_CONFIG.gapH : gapMm
-            const pdfGapV = pvcMode ? PVC_PRINT_CONFIG.gapV : gapMm
+            const pdfGapV = pvcMode ? PVC_PRINT_CONFIG.gapV : gapVMm
             const x = startX + mirroredCol * (cardW + pdfGapH)
             const y = startY + row * (cardH + pdfGapV)
 
@@ -399,7 +402,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
     } finally {
       setGenerating(false)
     }
-  }, [cards, layout, pageW, pageH, cardW, cardH, marginMm, gapMm, addCutMarks, includeBacks, printSide, hasBackSide, schoolName, imageFormat])
+  }, [cards, layout, pageW, pageH, cardW, cardH, marginMm, gapMm, gapVMm, addCutMarks, includeBacks, printSide, hasBackSide, schoolName, imageFormat])
 
   /* ─── UI ─── */
   return (
@@ -514,6 +517,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
                         setCardPresetKey(preset.cardPresetKey)
                         setMarginMm(preset.marginMm)
                         setGapMm(preset.gapMm)
+                        setGapVMm(preset.gapMm)
                         setLandscape(preset.landscape)
                         setAddCutMarks(true)
                         if (preset.cardPresetKey !== "CUSTOM") {
@@ -672,15 +676,27 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
                   </div>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={labelStyle}>Card Gap</label>
+                  <label style={labelStyle}>Card Gap (H)</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <input
-                      type="range" min={0} max={20} step={1}
+                      type="range" min={0} max={30} step={1}
                       value={gapMm}
                       onChange={e => setGapMm(Number(e.target.value))}
                       style={{ flex: 1, accentColor: "#3b82f6" }}
                     />
                     <span style={valueTagStyle}>{gapMm}mm</span>
+                  </div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>Card Gap (V)</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input
+                      type="range" min={0} max={40} step={1}
+                      value={gapVMm}
+                      onChange={e => setGapVMm(Number(e.target.value))}
+                      style={{ flex: 1, accentColor: "#3b82f6" }}
+                    />
+                    <span style={valueTagStyle}>{gapVMm}mm</span>
                   </div>
                 </div>
               </div>
