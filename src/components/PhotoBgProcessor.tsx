@@ -238,41 +238,57 @@ export default function PhotoBgProcessor({ photoUrl, defaultBgColor, onProcessed
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.drawImage(img, 0, 0)
 
-      // Step 2: Refine edges — apply slight alpha feathering to reduce harsh cutout edges
-      // This smooths the semi-transparent boundary pixels for more natural compositing
+      // Step 2: Edge cleanup — produce a fully-plain background with no
+      // halo of the original wall colour bleeding around the subject.
+      //
+      // The previous approach (3×3 Gaussian alpha smoothing on boundary
+      // pixels) actually MADE the halo worse: semi-transparent pixels
+      // composite as `originalRGB * a + bgColor * (1 - a)`, so any pixel
+      // whose original RGB differed from the chosen bg colour shows up
+      // as a coloured fringe around the subject — exactly what the user
+      // is complaining about.
+      //
+      // New approach (per user request "background completely plain"):
+      //   1. Hard alpha threshold at 128 — every pixel is either fully
+      //      foreground (255) or fully background (0). No partial alpha
+      //      means no halo by construction.
+      //   2. 1-pixel erosion of the foreground mask — pulls the
+      //      silhouette inward by one pixel, dropping the fringe that
+      //      typically contains contaminated colour from the original
+      //      background.
+      //   3. Connected-component cleanup (Step 2b below, unchanged).
       try {
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
         const data = imageData.data
         const w = canvas.width
         const h = canvas.height
+        const total = w * h
 
-        // Create a copy of alpha channel for edge detection
-        const alphaOrig = new Uint8Array(w * h)
-        for (let i = 0; i < w * h; i++) {
-          alphaOrig[i] = data[i * 4 + 3]
+        // 1) Hard threshold the AI mask.
+        for (let i = 0; i < total; i++) {
+          data[i * 4 + 3] = data[i * 4 + 3] >= 128 ? 255 : 0
         }
 
-        // Apply 3x3 gaussian-style alpha smoothing on edge pixels only
-        // (pixels where alpha is between 10 and 245 — the boundary region)
-        for (let y = 1; y < h - 1; y++) {
-          for (let x = 1; x < w - 1; x++) {
+        // 2) 1-pixel erosion of the foreground mask. We mark every FG
+        //    pixel that has at least one BG neighbour and zero its alpha
+        //    in a single pass over a snapshot of the thresholded mask.
+        //    Boundary rows/columns are processed conservatively (treat
+        //    out-of-bounds as BG to also erode the image edge).
+        const fgMask = new Uint8Array(total)
+        for (let i = 0; i < total; i++) fgMask[i] = data[i * 4 + 3] === 255 ? 1 : 0
+
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
             const idx = y * w + x
-            const a = alphaOrig[idx]
-            // Only smooth boundary pixels
-            if (a > 10 && a < 245) {
-              // Sample 3x3 neighborhood
-              const sum =
-                alphaOrig[(y - 1) * w + (x - 1)] +
-                alphaOrig[(y - 1) * w + x] * 2 +
-                alphaOrig[(y - 1) * w + (x + 1)] +
-                alphaOrig[y * w + (x - 1)] * 2 +
-                alphaOrig[y * w + x] * 4 +
-                alphaOrig[y * w + (x + 1)] * 2 +
-                alphaOrig[(y + 1) * w + (x - 1)] +
-                alphaOrig[(y + 1) * w + x] * 2 +
-                alphaOrig[(y + 1) * w + (x + 1)]
-              data[idx * 4 + 3] = Math.round(sum / 16)
-            }
+            if (!fgMask[idx]) continue
+            // Any 4-neighbour is BG (or out-of-bounds) → this pixel is on
+            // the boundary; erode it.
+            const isEdge =
+              (x === 0)         || !fgMask[idx - 1] ||
+              (x === w - 1)     || !fgMask[idx + 1] ||
+              (y === 0)         || !fgMask[idx - w] ||
+              (y === h - 1)     || !fgMask[idx + w]
+            if (isEdge) data[idx * 4 + 3] = 0
           }
         }
 
