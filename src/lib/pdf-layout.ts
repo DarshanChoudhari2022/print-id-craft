@@ -299,7 +299,7 @@ export type DirectPdfOptions = {
   gapMm?: number
   /** Add crop/cut marks (default true) */
   addCutMarks?: boolean
-  /** Add a 50 mm ruler at the sheet edge to verify the printer did not scale the PDF (default true) */
+  /** Add horizontal and vertical rulers matching the first card's exact dimensions (default true) */
   showCalibrationScale?: boolean
   /** Optional filename suffix for chunked downloads, e.g. "001-100" */
   filenameSuffix?: string
@@ -412,28 +412,44 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
     d.line(x + w + off, y + h, x + w + off + cm, y + h); d.line(x + w, y + h + off, x + w, y + h + off + cm)
   }
 
-  // A physical ruler is more reliable than a screen preview: if this measures
-  // exactly 50 mm after printing, the cards on the same page are actual size.
+  // These rulers align with the first card: measuring them confirms the printer
+  // has not used "Fit to page" or any other scaling.
   const drawCalibrationScale = (d: typeof doc) => {
-    const scaleLength = Math.min(50, pageH - startY - 2)
-    if (startX < 6 || scaleLength < 20) return
-    const x = startX - 3.5
+    const canDrawVertical = startX >= 7
+    const canDrawHorizontal = startY >= 8
     d.setDrawColor(0, 0, 0)
     d.setTextColor(0, 0, 0)
     d.setLineWidth(0.12)
-    d.line(x, startY, x, startY + scaleLength)
-    for (let mm = 0; mm <= scaleLength; mm++) {
-      const major = mm % 10 === 0
-      const medium = mm % 5 === 0
-      const tick = major ? 2.5 : medium ? 1.8 : 1
-      d.line(x - tick, startY + mm, x, startY + mm)
-      if (major) {
-        d.setFontSize(2.2)
-        d.text(String(mm), x - 3, startY + mm + 0.7, { align: "right" })
+
+    if (canDrawHorizontal) {
+      const y = startY - 3.5
+      d.line(startX, y, startX + cardW, y)
+      for (let mm = 0; mm <= Math.floor(cardW); mm++) {
+        const major = mm % 10 === 0
+        const medium = mm % 5 === 0
+        const tick = major ? 3 : medium ? 2 : 1
+        d.line(startX + mm, y, startX + mm, y - tick)
+        if (major) {
+          d.setFontSize(3.2)
+          d.text(String(mm), startX + mm, y - 3.5, { align: "center" })
+        }
       }
     }
-    d.setFontSize(2.2)
-    d.text("50 mm scale", x - 3, Math.max(3, startY - 1), { align: "left" })
+
+    if (canDrawVertical) {
+      const x = startX - 3.5
+      d.line(x, startY, x, startY + cardH)
+      for (let mm = 0; mm <= Math.floor(cardH); mm++) {
+        const major = mm % 10 === 0 || mm === Math.floor(cardH)
+        const medium = mm % 5 === 0
+        const tick = major ? 3 : medium ? 2 : 1
+        d.line(x - tick, startY + mm, x, startY + mm)
+        if (major) {
+          d.setFontSize(3.2)
+          d.text(String(mm), x - 3.7, startY + mm + 0.8, { align: "right" })
+        }
+      }
+    }
   }
 
   let aliasCounter = 0

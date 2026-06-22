@@ -310,28 +310,44 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
         d.line(x + w, y + h + off, x + w, y + h + off + cm)
       }
 
-      // Printed at a true millimetre size. Measuring 50 mm here confirms the
-      // printer has not used "Fit to page" or any other scaling.
+      // Rulers aligned with the first card verify the printer did not use
+      // "Fit to page" or any other scaling.
       const drawCalibrationScale = () => {
-        const scaleLength = Math.min(50, pageH - startY - 2)
-        if (startX < 6 || scaleLength < 20) return
-        const x = startX - 3.5
+        const canDrawVertical = startX >= 7
+        const canDrawHorizontal = startY >= 8
         doc.setDrawColor(0, 0, 0)
         doc.setTextColor(0, 0, 0)
         doc.setLineWidth(0.12)
-        doc.line(x, startY, x, startY + scaleLength)
-        for (let mm = 0; mm <= scaleLength; mm++) {
-          const major = mm % 10 === 0
-          const medium = mm % 5 === 0
-          const tick = major ? 2.5 : medium ? 1.8 : 1
-          doc.line(x - tick, startY + mm, x, startY + mm)
-          if (major) {
-            doc.setFontSize(2.2)
-            doc.text(String(mm), x - 3, startY + mm + 0.7, { align: "right" })
+
+        if (canDrawHorizontal) {
+          const y = startY - 3.5
+          doc.line(startX, y, startX + cardW, y)
+          for (let mm = 0; mm <= Math.floor(cardW); mm++) {
+            const major = mm % 10 === 0
+            const medium = mm % 5 === 0
+            const tick = major ? 3 : medium ? 2 : 1
+            doc.line(startX + mm, y, startX + mm, y - tick)
+            if (major) {
+              doc.setFontSize(3.2)
+              doc.text(String(mm), startX + mm, y - 3.5, { align: "center" })
+            }
           }
         }
-        doc.setFontSize(2.2)
-        doc.text("50 mm scale", x - 3, Math.max(3, startY - 1), { align: "left" })
+
+        if (canDrawVertical) {
+          const x = startX - 3.5
+          doc.line(x, startY, x, startY + cardH)
+          for (let mm = 0; mm <= Math.floor(cardH); mm++) {
+            const major = mm % 10 === 0 || mm === Math.floor(cardH)
+            const medium = mm % 5 === 0
+            const tick = major ? 3 : medium ? 2 : 1
+            doc.line(x - tick, startY + mm, x, startY + mm)
+            if (major) {
+              doc.setFontSize(3.2)
+              doc.text(String(mm), x - 3.7, startY + mm + 0.8, { align: "right" })
+            }
+          }
+        }
       }
 
       // Image cache with unique aliases — jsPDF deduplicates images by alias,
@@ -851,10 +867,10 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
                   hint="Helps cut cards precisely"
                 />
                 <CheckboxOption
-                  label="Add 50 mm print scale"
+                  label="Add card-size rulers"
                   checked={showCalibrationScale}
                   onChange={setShowCalibrationScale}
-                  hint="Measure it after printing to confirm the card size is exact"
+                  hint="Shows exact horizontal and vertical millimetre scales for the first card"
                 />
                 {hasBackSide && (
                   <>
