@@ -82,6 +82,8 @@ type CardSettings = {
 
 type JpgTemplateMapperProps = {
   schoolId: string
+  /** The template being edited. Required for auto-saving class-specific settings. */
+  templateId?: string
   templateImageUrl: string | null
   fieldMappings: FieldMapping[]
   fieldConfig: { key: string; label: string; type: string; required: boolean }[]
@@ -189,6 +191,7 @@ function FixedWrapText({
 
 export default function JpgTemplateMapper({
   schoolId,
+  templateId,
   templateImageUrl: initialImageUrl,
   fieldMappings: initialMappings,
   fieldConfig,
@@ -459,20 +462,24 @@ export default function JpgTemplateMapper({
   // for this school without requiring an explicit "Save Template" click.
   const autoSaveCardSize = useCallback(async (width: number, height: number, orientation: "landscape" | "portrait", dpi?: number) => {
     try {
-      await fetch(`/api/schools/${schoolId}/template`, {
+      const templateQuery = templateId ? `?templateId=${encodeURIComponent(templateId)}` : ""
+      await fetch(`/api/schools/${schoolId}/template${templateQuery}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cardWidthMm: width,
           cardHeightMm: height,
           orientation: orientation === "landscape" ? "LANDSCAPE" : "PORTRAIT",
+          // Include the current lock state. Without this, a locked class
+          // template silently rejects a size update and appears to revert.
+          cardSizeLocked,
           ...(dpi ? { printDpi: dpi } : {}),
         }),
       })
     } catch (err) {
       console.error("Auto-save card size failed:", err)
     }
-  }, [schoolId])
+  }, [schoolId, templateId, cardSizeLocked])
 
   const handleImageUpload = async (file: File) => {
     if (!file.type.startsWith("image/")) {

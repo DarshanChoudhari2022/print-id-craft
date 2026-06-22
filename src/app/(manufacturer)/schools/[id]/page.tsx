@@ -2825,6 +2825,7 @@ export default function SchoolDetailPage() {
 
                   <JpgTemplateMapper
                     schoolId={schoolId}
+                    templateId={classTemplateEditor.templateId}
                     templateImageUrl={classTemplateEditor.templateData?.templateImageUrl || null}
                     fieldMappings={(classTemplateEditor.templateData?.fieldMappings as any) || []}
                     fieldConfig={(classTemplateEditor.templateData?.fieldConfig as any[]) || []}
@@ -4346,6 +4347,7 @@ export default function SchoolDetailPage() {
 
                 <JpgTemplateMapper
                   schoolId={schoolId}
+                  templateId={template.id}
                   templateImageUrl={template.templateImageUrl || null}
                   fieldMappings={(template.fieldMappings as any) || []}
                   fieldConfig={(template.fieldConfig as any[]) || []}
