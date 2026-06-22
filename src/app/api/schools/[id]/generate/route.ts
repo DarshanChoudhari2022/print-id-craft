@@ -68,7 +68,23 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
         photoUrl: true,
         photoPath: true,
         formData: true,
-        class: { select: { name: true } },
+        class: {
+          select: {
+            name: true,
+            // Keep each class's assigned template when generating all classes.
+            template: {
+              select: {
+                templateImageUrl: true,
+                fieldMappings: true,
+                backTemplateImageUrl: true,
+                backFieldMappings: true,
+                hasBackSide: true,
+                cardWidthMm: true,
+                cardHeightMm: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { serialNumber: "asc" },
     })
@@ -83,6 +99,8 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     // Build student render data
     const renderData = students.map((s) => {
       const formData = s.formData as Record<string, any>
+      // Classes without an assignment inherit the default school template.
+      const assignedTemplate = s.class.template || template
       return {
         id: s.id,
         serialNumber: s.serialNumber,
@@ -91,6 +109,15 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
         formData: {
           ...formData,
           class: formData.class || s.class.name,
+        },
+        template: {
+          templateImageUrl: assignedTemplate.templateImageUrl,
+          fieldMappings: assignedTemplate.fieldMappings,
+          backTemplateImageUrl: assignedTemplate.backTemplateImageUrl || null,
+          backFieldMappings: assignedTemplate.backFieldMappings || [],
+          hasBackSide: assignedTemplate.hasBackSide || false,
+          cardWidthMm: assignedTemplate.cardWidthMm || DEFAULT_CARD_WIDTH_MM,
+          cardHeightMm: assignedTemplate.cardHeightMm || DEFAULT_CARD_HEIGHT_MM,
         },
       }
     })

@@ -1326,11 +1326,23 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         return color ? flagImagesMap[color] : undefined
       }
 
-      // Pre-load template images
-      await getCachedImage(templateImageUrl)
-      if (hasBackSide && backTemplateImageUrl) {
-        await getCachedImage(backTemplateImageUrl)
+      // Pre-load every class template. This is essential when "All classes"
+      // is selected: each student's assigned class template must be rendered.
+      const templatesInUse = new Map<string, any>()
+      for (const student of students as any[]) {
+        const studentTemplate = student.template || {
+          templateImageUrl, fieldMappings, backTemplateImageUrl, backFieldMappings,
+          hasBackSide, cardWidthMm, cardHeightMm,
+        }
+        templatesInUse.set(studentTemplate.templateImageUrl, studentTemplate)
       }
+      await Promise.all(Array.from(templatesInUse.values()).flatMap((studentTemplate: any) => {
+        const images = [getCachedImage(studentTemplate.templateImageUrl)]
+        if (studentTemplate.hasBackSide && studentTemplate.backTemplateImageUrl) {
+          images.push(getCachedImage(studentTemplate.backTemplateImageUrl))
+        }
+        return images
+      }))
 
       // ──── CDR (SVG) PATH ────
       // ──── PDF PRINT PATH ────
@@ -1348,11 +1360,29 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           const chunk = students.slice(i, i + CHUNK_SIZE)
           const promises = chunk.map(async (student: any) => {
             try {
+              const studentTemplate = student.template || {
+                templateImageUrl, fieldMappings, backTemplateImageUrl, backFieldMappings,
+                hasBackSide, cardWidthMm, cardHeightMm,
+              }
               // Renders at 685×1181 px (300 DPI, 58×100 mm cutter) as PNG
-              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+              const frontDataUrl = await renderIdCard(
+                studentTemplate.templateImageUrl,
+                studentTemplate.fieldMappings,
+                student,
+                getFlagUrl(student),
+                studentTemplate.cardWidthMm,
+                studentTemplate.cardHeightMm,
+              )
               let backDataUrl: string | undefined
-              if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
-                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+              if (studentTemplate.hasBackSide && studentTemplate.backTemplateImageUrl && studentTemplate.backFieldMappings?.length > 0) {
+                backDataUrl = await renderIdCard(
+                  studentTemplate.backTemplateImageUrl,
+                  studentTemplate.backFieldMappings,
+                  student,
+                  getFlagUrl(student),
+                  studentTemplate.cardWidthMm,
+                  studentTemplate.cardHeightMm,
+                )
               }
               return { serialNumber: student.serialNumber, frontDataUrl, backDataUrl }
             } catch (err) {
