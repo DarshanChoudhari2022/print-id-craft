@@ -87,6 +87,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
   const [landscape, setLandscape] = useState(initLandscape) // portrait page for 2×5 layout
   const [includeBacks, setIncludeBacks] = useState(true)
   const [addCutMarks, setAddCutMarks] = useState(true)
+  const [showCalibrationScale, setShowCalibrationScale] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [printSide, setPrintSide] = useState<"both" | "front" | "back">("both")
   const [imageFormat, setImageFormat] = useState<"jpeg" | "png">("png") // PNG for lossless print
@@ -309,6 +310,30 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
         d.line(x + w, y + h + off, x + w, y + h + off + cm)
       }
 
+      // Printed at a true millimetre size. Measuring 50 mm here confirms the
+      // printer has not used "Fit to page" or any other scaling.
+      const drawCalibrationScale = () => {
+        const scaleLength = Math.min(50, pageH - startY - 2)
+        if (startX < 6 || scaleLength < 20) return
+        const x = startX - 3.5
+        doc.setDrawColor(0, 0, 0)
+        doc.setTextColor(0, 0, 0)
+        doc.setLineWidth(0.12)
+        doc.line(x, startY, x, startY + scaleLength)
+        for (let mm = 0; mm <= scaleLength; mm++) {
+          const major = mm % 10 === 0
+          const medium = mm % 5 === 0
+          const tick = major ? 2.5 : medium ? 1.8 : 1
+          doc.line(x - tick, startY + mm, x, startY + mm)
+          if (major) {
+            doc.setFontSize(2.2)
+            doc.text(String(mm), x - 3, startY + mm + 0.7, { align: "right" })
+          }
+        }
+        doc.setFontSize(2.2)
+        doc.text("50 mm scale", x - 3, Math.max(3, startY - 1), { align: "left" })
+      }
+
       // Image cache with unique aliases — jsPDF deduplicates images by alias,
       // so identical images are only stored once in the PDF.
       let aliasCounter = 0
@@ -322,6 +347,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
           doc.setFontSize(6)
           doc.setTextColor(200, 200, 200)
           doc.text(`${schoolName} - Front Side - Page ${pageIdx + 1}`, pageW / 2, 4, { align: "center" })
+          if (showCalibrationScale) drawCalibrationScale()
 
           for (let slot = 0; slot < cardsPerPage; slot++) {
             const cardIdx = pageIdx * cardsPerPage + slot
@@ -361,6 +387,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
           doc.setFontSize(6)
           doc.setTextColor(200, 200, 200)
           doc.text(`${schoolName} - Back Side - Page ${pageIdx + 1}`, pageW / 2, 4, { align: "center" })
+          if (showCalibrationScale) drawCalibrationScale()
 
           for (let slot = 0; slot < cardsPerPage; slot++) {
             const cardIdx = pageIdx * cardsPerPage + slot
@@ -406,7 +433,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
     } finally {
       setGenerating(false)
     }
-  }, [cards, layout, pageW, pageH, cardW, cardH, marginMm, gapMm, gapVMm, addCutMarks, includeBacks, printSide, hasBackSide, schoolName, imageFormat])
+  }, [cards, layout, pageW, pageH, cardW, cardH, marginMm, gapMm, gapVMm, addCutMarks, showCalibrationScale, includeBacks, printSide, hasBackSide, schoolName, imageFormat])
 
   /* ─── UI ─── */
   return (
@@ -822,6 +849,12 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
                   checked={addCutMarks}
                   onChange={setAddCutMarks}
                   hint="Helps cut cards precisely"
+                />
+                <CheckboxOption
+                  label="Add 50 mm print scale"
+                  checked={showCalibrationScale}
+                  onChange={setShowCalibrationScale}
+                  hint="Measure it after printing to confirm the card size is exact"
                 />
                 {hasBackSide && (
                   <>

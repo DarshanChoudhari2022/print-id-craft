@@ -299,6 +299,8 @@ export type DirectPdfOptions = {
   gapMm?: number
   /** Add crop/cut marks (default true) */
   addCutMarks?: boolean
+  /** Add a 50 mm ruler at the sheet edge to verify the printer did not scale the PDF (default true) */
+  showCalibrationScale?: boolean
   /** Optional filename suffix for chunked downloads, e.g. "001-100" */
   filenameSuffix?: string
 }
@@ -319,6 +321,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
     hPitch: _hPitch, vPitch: _vPitch,
     marginMm = 3, gapMm = 1,
     addCutMarks = true,
+    showCalibrationScale = true,
     filenameSuffix,
   } = opts
 
@@ -409,6 +412,30 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
     d.line(x + w + off, y + h, x + w + off + cm, y + h); d.line(x + w, y + h + off, x + w, y + h + off + cm)
   }
 
+  // A physical ruler is more reliable than a screen preview: if this measures
+  // exactly 50 mm after printing, the cards on the same page are actual size.
+  const drawCalibrationScale = (d: typeof doc) => {
+    const scaleLength = Math.min(50, pageH - startY - 2)
+    if (startX < 6 || scaleLength < 20) return
+    const x = startX - 3.5
+    d.setDrawColor(0, 0, 0)
+    d.setTextColor(0, 0, 0)
+    d.setLineWidth(0.12)
+    d.line(x, startY, x, startY + scaleLength)
+    for (let mm = 0; mm <= scaleLength; mm++) {
+      const major = mm % 10 === 0
+      const medium = mm % 5 === 0
+      const tick = major ? 2.5 : medium ? 1.8 : 1
+      d.line(x - tick, startY + mm, x, startY + mm)
+      if (major) {
+        d.setFontSize(2.2)
+        d.text(String(mm), x - 3, startY + mm + 0.7, { align: "right" })
+      }
+    }
+    d.setFontSize(2.2)
+    d.text("50 mm scale", x - 3, Math.max(3, startY - 1), { align: "left" })
+  }
+
   let aliasCounter = 0
 
   // Front pages
@@ -417,6 +444,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
 
     doc.setFontSize(6); doc.setTextColor(200, 200, 200)
     doc.text(`${schoolName} - Front Side - Page ${pageIdx + 1}`, pageW / 2, 4, { align: "center" })
+    if (showCalibrationScale) drawCalibrationScale(doc)
 
     for (let slot = 0; slot < cardsPerPage; slot++) {
       const cardIdx = pageIdx * cardsPerPage + slot
@@ -444,6 +472,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
       doc.addPage([pageW, pageH])
       doc.setFontSize(6); doc.setTextColor(200, 200, 200)
       doc.text(`${schoolName} - Back Side - Page ${pageIdx + 1}`, pageW / 2, 4, { align: "center" })
+      if (showCalibrationScale) drawCalibrationScale(doc)
 
       for (let slot = 0; slot < cardsPerPage; slot++) {
         const cardIdx = pageIdx * cardsPerPage + slot
