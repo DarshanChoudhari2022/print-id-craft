@@ -353,7 +353,15 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
   // Compute start positions (auto-center if no custom offset)
   const usedW = cols * hPitch - (hPitch - cardW) // = cols * cardW + (cols-1) * gap
   const usedH = rows * vPitch - (vPitch - cardH)
-  const startX = hasCustomX ? h1stPosition : marginMm + (availW - usedW) / 2
+  // Reserve 7 mm at the left edge for the vertical dimension ruler. The grid
+  // is shifted right only within the existing auto-centering whitespace, so
+  // card dimensions and inter-card pitch never change.
+  const centeredStartX = marginMm + (availW - usedW) / 2
+  const startX = hasCustomX
+    ? h1stPosition
+    : showCalibrationScale
+      ? Math.max(7, centeredStartX)
+      : centeredStartX
   const startY = hasCustomY ? v1stPosition : marginMm + (availH - usedH) / 2
 
   console.log(`[PDF] page ${pageW}×${pageH}mm · card ${cardW}×${cardH}mm · pitch ${hPitch}×${vPitch}mm · grid ${cols}×${rows} · start (${startX.toFixed(1)}, ${startY.toFixed(1)})`)

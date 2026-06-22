@@ -121,17 +121,22 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
   const hasBackSide = cards.some(c => !!c.backDataUrl)
 
   /* ── Grid layout calculator ── */
-  const layout = useMemo(
-    () => pvcMode
+  const layout = useMemo(() => {
+    const calculated = pvcMode
       ? calculatePvcLayout(cards.length)
       : calculateGridLayout(
           pageW, pageH, cardW, cardH, marginMm, gapMm, cards.length,
           useCustomPosition ? cardPosX : undefined,
           useCustomPosition ? cardPosY : undefined,
           gapVMm,
-        ),
-    [pvcMode, pageW, pageH, cardW, cardH, marginMm, gapMm, gapVMm, cards.length, useCustomPosition, cardPosX, cardPosY]
-  )
+        )
+    // Keep 7 mm clear on the left for the printed vertical ruler. This only
+    // uses whitespace from auto-centering and never resizes the cards.
+    if (showCalibrationScale && !useCustomPosition && calculated.startX < 7) {
+      return { ...calculated, startX: 7 }
+    }
+    return calculated
+  }, [pvcMode, pageW, pageH, cardW, cardH, marginMm, gapMm, gapVMm, cards.length, useCustomPosition, cardPosX, cardPosY, showCalibrationScale])
 
   /* ── Live preview canvas ── */
   useEffect(() => {
