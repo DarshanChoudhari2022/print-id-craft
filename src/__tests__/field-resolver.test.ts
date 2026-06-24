@@ -379,5 +379,16 @@ describe("resolveFieldValue", () => {
       expect(DIVISIONS).toHaveLength(13)
       expect(DIVISIONS[0]).toBe("A")
     })
+
+    it("resolves class and division separately when hasDivisionPlaceholder is true", () => {
+      expect(resolveDisplayFieldValue({ classGrade: "V", division: "A" }, "class", true)).toBe("V")
+      expect(resolveDisplayFieldValue({ classGrade: "VI", division: "B" }, "class", true)).toBe("VI")
+      expect(resolveDisplayFieldValue({ classGrade: "VI", division: "B" }, "division", true)).toBe("B")
+    })
+
+    it("resolves class and division separately from legacy stored class when hasDivisionPlaceholder is true", () => {
+      expect(resolveDisplayFieldValue({ class: "V - A" }, "class", true)).toBe("V")
+      expect(resolveDisplayFieldValue({ class: "VI - B" }, "division", true)).toBe("B")
+    })
   })
 })

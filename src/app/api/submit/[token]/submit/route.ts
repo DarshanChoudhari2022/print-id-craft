@@ -15,7 +15,7 @@ import { getNextStudentSerial } from "@/lib/student-serial"
 import { reportError, reportSlowOperation } from "@/lib/observability"
 import { checkDuplicateSubmission } from "@/lib/submit-fields"
 import { buildStudentIndexData } from "@/lib/student-index"
-import { validateAndBuildClassFields } from "@/lib/section-class"
+import { validateAndBuildClassFields, templateHasDivisionPlaceholder } from "@/lib/section-class"
 import { recordPublicSubmissionAudit } from "@/lib/submission-audit"
 import { getTemplateForClass } from "@/lib/template-resolver"
 
@@ -75,6 +75,9 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
     const validated = publicSubmitSchema.parse(body)
     const formData = validated.formData as Record<string, string>
     const template = await getTemplateForClass(cls.id)
+    const rawMappings = (template?.fieldMappings || []) as any[]
+    const rawFieldConf = (template?.fieldConfig || []) as any[]
+    const needsDivision = templateHasDivisionPlaceholder(rawMappings, rawFieldConf)
     const requiredFields = await getPublicSubmissionFields(cls.school.id, template)
     const fixedBranch = (template?.printConfig as { fixedBranch?: string } | null)?.fixedBranch || ""
     const formDataWithBranch = applyFixedBranchToFormData(formData, fixedBranch, requiredFields)
@@ -83,7 +86,8 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
       formDataWithBranch,
       cls.name,
       cls.classOptions,
-      cls.sectionType
+      cls.sectionType,
+      needsDivision
     )
     if (!classFields.ok) {
       return NextResponse.json({ error: classFields.error }, { status: 400 })

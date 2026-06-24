@@ -14,7 +14,7 @@ import {
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
 
-const sectionTypeSchema = z.enum(["PRE_PRIMARY", "PRIMARY", "SECONDARY"])
+const sectionTypeSchema = z.enum(["PRE_PRIMARY", "PRIMARY", "SECONDARY", "NURSERY_TO_X"])
 
 const classSchema = z.object({
   name: z.string().min(1, "Section name is required"),

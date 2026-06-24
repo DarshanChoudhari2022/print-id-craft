@@ -6,18 +6,21 @@ export const DIVISIONS = [
 
 export type Division = (typeof DIVISIONS)[number]
 
-export type SectionType = "PRE_PRIMARY" | "PRIMARY" | "SECONDARY"
+import type { SectionType as PrismaSectionType } from "@prisma/client"
+export type SectionType = PrismaSectionType | "NURSERY_TO_X"
 
 export const SECTION_TYPE_LABELS: Record<SectionType, string> = {
   PRE_PRIMARY: "Pre Primary",
   PRIMARY: "Primary",
   SECONDARY: "Secondary",
+  NURSERY_TO_X: "Nursery to X",
 }
 
 export const DEFAULT_CLASS_OPTIONS: Record<SectionType, string[]> = {
   PRE_PRIMARY: ["Nursery", "LKG", "UKG"],
   PRIMARY: ["I", "II", "III", "IV", "V"],
   SECONDARY: ["VI", "VII", "VIII", "IX", "X"],
+  NURSERY_TO_X: ["Nursery", "LKG", "UKG", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"],
 }
 
 /** Combine grade + division for the card placeholder (e.g. VI + B -> VI - B). */
@@ -50,9 +53,21 @@ export function resolveEffectiveClassOptions(
   return []
 }
 
-export function resolveClassDisplayValue(fd: Record<string, string>): string {
+export function resolveClassDisplayValue(
+  fd: Record<string, string>,
+  hasDivisionPlaceholder?: boolean
+): string {
   const grade = String(fd.classGrade || fd.CLASSGRADE || "").trim()
   const division = String(fd.division || fd.DIVISION || "").trim().toUpperCase()
+
+  if (hasDivisionPlaceholder) {
+    if (grade) return grade
+    const stored = String(fd.class || fd.classSection || "").trim()
+    const legacy = stored.match(/^(.+?)\s*-\s*([A-M])$/i)
+    if (legacy) return legacy[1].trim()
+    return stored
+  }
+
   if (grade && division) return formatClassSection(grade, division)
   if (grade) return grade
 
@@ -71,11 +86,23 @@ export function isClassDivisionFieldKey(fieldKey: string): boolean {
   return nk === "class" || nk === "classsection" || nk === "classdivision"
 }
 
-export function resolveDivisionDisplayValue(fd: Record<string, string>): string {
+export function resolveDivisionDisplayValue(
+  fd: Record<string, string>,
+  hasDivisionPlaceholder?: boolean
+): string {
+  if (hasDivisionPlaceholder) {
+    const division = String(fd.division || fd.DIVISION || "").trim().toUpperCase()
+    if (division) return division
+    const stored = String(fd.class || fd.classSection || "").trim()
+    const legacy = stored.match(/^(.+?)\s*-\s*([A-M])$/i)
+    if (legacy) return legacy[2].toUpperCase()
+    return ""
+  }
+
   const grade = String(fd.classGrade || fd.CLASSGRADE || "").trim()
   if (grade) return ""
 
-  const classVal = resolveClassDisplayValue(fd)
+  const classVal = resolveClassDisplayValue(fd, false)
   if (classVal && /\s-\s*[A-M]$/i.test(classVal)) return ""
 
   return String(fd.division || fd.DIVISION || "").trim().toUpperCase()
@@ -133,6 +160,29 @@ export function isValidDivision(value: string): value is Division {
   return (DIVISIONS as readonly string[]).includes(value.toUpperCase())
 }
 
+/**
+ * Detect whether a template has a separate "division" placeholder in its
+ * fieldMappings or fieldConfig. When false, the public form should show
+ * only a Class dropdown (no Division) and store the grade directly.
+ */
+export function templateHasDivisionPlaceholder(
+  fieldMappings: any[],
+  fieldConfig: any[]
+): boolean {
+  const DIVISION_KEYS = new Set(["division", "div", "section"])
+  for (const m of fieldMappings) {
+    const fk = String(m.fieldKey || "").toLowerCase().replace(/[^a-z0-9]/g, "")
+    if (DIVISION_KEYS.has(fk)) return true
+  }
+  for (const f of fieldConfig) {
+    const fk = String(f.key || "").toLowerCase().replace(/[^a-z0-9]/g, "")
+    if (DIVISION_KEYS.has(fk)) return true
+    const fl = String(f.label || "").toLowerCase().replace(/[^a-z0-9]/g, "")
+    if (DIVISION_KEYS.has(fl)) return true
+  }
+  return false
+}
+
 export type ClassFormValidation =
   | { ok: true; class: string; classGrade: string; division: string }
   | { ok: false; error: string }
@@ -140,12 +190,14 @@ export type ClassFormValidation =
 /**
  * Resolve the value stored in formData.class at submit time.
  * Legacy sections (empty classOptions) keep the fixed section name.
+ * When needsDivision is false, division is optional and class = classGrade.
  */
 export function validateAndBuildClassFields(
   formData: Record<string, string>,
   sectionName: string,
   classOptions: unknown,
-  sectionType?: SectionType | null
+  sectionType?: SectionType | null,
+  needsDivision: boolean = true
 ): ClassFormValidation {
   const options = resolveEffectiveClassOptions(classOptions, sectionType, sectionName)
   if (options.length === 0) {
@@ -158,20 +210,31 @@ export function validateAndBuildClassFields(
   if (!classGrade) {
     return { ok: false, error: "Please select a class." }
   }
-  if (!division) {
-    return { ok: false, error: "Please select a division." }
-  }
   if (!options.includes(classGrade)) {
     return { ok: false, error: "Invalid class selection." }
   }
-  if (!isValidDivision(division)) {
-    return { ok: false, error: "Invalid division selection." }
+
+  // When division is required (template has a division placeholder)
+  if (needsDivision) {
+    if (!division) {
+      return { ok: false, error: "Please select a division." }
+    }
+    if (!isValidDivision(division)) {
+      return { ok: false, error: "Invalid division selection." }
+    }
+    return {
+      ok: true,
+      class: formatClassSection(classGrade, division),
+      classGrade,
+      division,
+    }
   }
 
+  // Division not needed — class value is just the grade
   return {
     ok: true,
-    class: formatClassSection(classGrade, division),
+    class: classGrade,
     classGrade,
-    division,
+    division: division || "",
   }
 }

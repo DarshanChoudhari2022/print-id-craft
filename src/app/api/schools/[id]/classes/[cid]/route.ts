@@ -9,7 +9,7 @@ import {
   type SectionType,
 } from "@/lib/section-class"
 
-const sectionTypeSchema = z.enum(["PRE_PRIMARY", "PRIMARY", "SECONDARY"])
+const sectionTypeSchema = z.enum(["PRE_PRIMARY", "PRIMARY", "SECONDARY", "NURSERY_TO_X"])
 
 const updateClassSchema = z.object({
   isActive: z.boolean().optional(),

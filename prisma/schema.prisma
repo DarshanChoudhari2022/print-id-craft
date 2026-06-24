@@ -116,6 +116,7 @@ enum SectionType {
   PRE_PRIMARY
   PRIMARY
   SECONDARY
+  NURSERY_TO_X
 }
 
 model Student {

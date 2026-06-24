@@ -462,7 +462,10 @@ async function renderIdCard(
       }
     } else {
       const pId = field.fieldKey === "photoId" ? "photoid" : field.fieldKey
-      const val = resolveDisplayFieldValue(student.formData, pId) || 
+      const hasDivisionPlaceholder = fieldMappings.some(
+        (x) => x.type !== "photo" && x.type !== "flag" && (x.fieldKey === "division" || x.fieldKey === "div")
+      )
+      const val = resolveDisplayFieldValue(student.formData, pId, hasDivisionPlaceholder) || 
                   (field.fieldKey === "class" ? student.className : 
                    field.fieldKey === "serialNumber" ? student.serialNumber : "")
       
@@ -619,7 +622,10 @@ async function renderIdCardSvg(
       }
     } else {
       const pId = field.fieldKey === "photoId" ? "photoid" : field.fieldKey
-      const val = resolveDisplayFieldValue(student.formData, pId) ||
+      const hasDivisionPlaceholder = fieldMappings.some(
+        (x) => x.type !== "photo" && x.type !== "flag" && (x.fieldKey === "division" || x.fieldKey === "div")
+      )
+      const val = resolveDisplayFieldValue(student.formData, pId, hasDivisionPlaceholder) ||
                   (field.fieldKey === "class" ? student.className :
                    field.fieldKey === "serialNumber" ? student.serialNumber : "")
       const value = String(val || "").trim()

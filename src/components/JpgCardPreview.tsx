@@ -179,8 +179,12 @@ export function resolveFieldValue(fd: Record<string, string>, fieldKey: string):
   return resolveFieldValueShared(fd, fieldKey)
 }
 
-function resolveCardFieldValue(fd: Record<string, string>, fieldKey: string): string {
-  return resolveDisplayFieldValueShared(fd, fieldKey)
+function resolveCardFieldValue(
+  fd: Record<string, string>,
+  fieldKey: string,
+  hasDivisionPlaceholder?: boolean
+): string {
+  return resolveDisplayFieldValueShared(fd, fieldKey, hasDivisionPlaceholder)
 }
 
 /**
@@ -431,7 +435,10 @@ export default function JpgCardPreview({
           }
         } else {
           // Apply dateFormat + textTransform before rendering (matches mapper preview).
-          let value = resolveCardFieldValue(formData, field.fieldKey)
+          const hasDivisionPlaceholder = fieldMappings.some(
+            (x) => x.type !== "photo" && x.type !== "flag" && (x.fieldKey === "division" || x.fieldKey === "div")
+          )
+          let value = resolveCardFieldValue(formData, field.fieldKey, hasDivisionPlaceholder)
           if (field.dateFormat && value) value = formatDateValue(value, field.dateFormat)
           const transform = field.textTransform || "none"
           if (transform === "uppercase") value = value.toUpperCase()
@@ -626,7 +633,10 @@ export async function generateJpgCard(
         ctx.drawImage(flagImg, 0, 0, flagImg.naturalWidth, flagImg.naturalHeight, fx, fy, fw, fh)
       } catch {}
     } else if (field.type === "text") {
-      const value = resolveCardFieldValue(formData, field.fieldKey)
+      const hasDivisionPlaceholder = fieldMappings.some(
+        (x) => x.type !== "photo" && x.type !== "flag" && (x.fieldKey === "division" || x.fieldKey === "div")
+      )
+      const value = resolveCardFieldValue(formData, field.fieldKey, hasDivisionPlaceholder)
       if (value) {
         const padding = 4 * outputScale
         const fontFamily = field.fontFamily || "Arial"

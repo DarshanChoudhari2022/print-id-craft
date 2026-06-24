@@ -14,7 +14,7 @@ import { getNextStudentSerial } from "@/lib/student-serial"
 import { reportError, reportSlowOperation } from "@/lib/observability"
 import { checkDuplicateSubmission } from "@/lib/submit-fields"
 import { buildStudentIndexData } from "@/lib/student-index"
-import { validateAndBuildClassFields } from "@/lib/section-class"
+import { validateAndBuildClassFields, templateHasDivisionPlaceholder } from "@/lib/section-class"
 import { recordPublicSubmissionAudit } from "@/lib/submission-audit"
 import { getDefaultTemplate } from "@/lib/template-resolver"
 
@@ -89,11 +89,17 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
 
     const formData = validated.formData as Record<string, string>
 
+    const needsDivision = templateHasDivisionPlaceholder(
+      (template?.fieldMappings || []) as any[],
+      (template?.fieldConfig || []) as any[]
+    )
+
     const classFields = validateAndBuildClassFields(
       formData,
       cls.name,
       cls.classOptions,
-      cls.sectionType
+      cls.sectionType,
+      needsDivision
     )
     if (!classFields.ok) {
       return NextResponse.json({ error: classFields.error }, { status: 400 })

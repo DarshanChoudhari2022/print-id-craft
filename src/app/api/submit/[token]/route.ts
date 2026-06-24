@@ -10,6 +10,7 @@ import { getTemplateForClass } from "@/lib/template-resolver"
 import {
   DIVISIONS,
   resolveEffectiveClassOptions,
+  templateHasDivisionPlaceholder,
 } from "@/lib/section-class"
 
 export async function GET(req: Request, props: { params: Promise<{ token: string }> }) {
@@ -195,6 +196,7 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
       cls.name
     )
     const usesClassPicker = classOptions.length > 0
+    const needsDivision = usesClassPicker && templateHasDivisionPlaceholder(rawMappings, rawFieldConf)
     const fixedBranch = ((template?.printConfig as { fixedBranch?: string } | null)?.fixedBranch || "").trim()
     const publicFieldConfig = fixedBranch
       ? resolvedFieldConfig.filter((f) => getFieldRole(f.key, f.label, f.role) !== "branch")
@@ -214,7 +216,8 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
         classId: cls.id,
         usesClassPicker,
         classOptions,
-        divisions: usesClassPicker ? [...DIVISIONS] : [],
+        needsDivision,
+        divisions: needsDivision ? [...DIVISIONS] : [],
         fieldConfig: publicFieldConfig,
         frontLayout: template?.frontLayout || [],
         backLayout: template?.backLayout || [],

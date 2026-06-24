@@ -1,0 +1,9 @@
+{
+  "typescript.tsconfig": "tsconfig.json",
+  "eslint.workingDirectories": [
+    {
+      "directory": ".",
+      "changeProcessCWD": true
+    }
+  ]
+}

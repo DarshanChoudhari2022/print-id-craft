@@ -364,13 +364,17 @@ export function isPrefixedAddressField(fieldKey: string): boolean {
  * raw resolved value. Special display-only placeholders can add fixed prefixes
  * while still pulling the underlying student data from the canonical field.
  */
-export function resolveDisplayFieldValue(fd: Record<string, string>, fieldKey: string): string {
+export function resolveDisplayFieldValue(
+  fd: Record<string, string>,
+  fieldKey: string,
+  hasDivisionPlaceholder?: boolean
+): string {
   const nk = normalizeKey(fieldKey)
   if (nk === "class" || nk === "classsection" || nk === "classdivision") {
-    return resolveClassDisplayValue(fd)
+    return resolveClassDisplayValue(fd, hasDivisionPlaceholder)
   }
   if (nk === "division" || nk === "div") {
-    return resolveDivisionDisplayValue(fd)
+    return resolveDivisionDisplayValue(fd, hasDivisionPlaceholder)
   }
 
   const prefix = PREFIXED_ADDRESS_FIELDS[nk]

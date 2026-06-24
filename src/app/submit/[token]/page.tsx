@@ -89,6 +89,7 @@ type FormConfig = {
   classId: string
   usesClassPicker?: boolean
   classOptions?: string[]
+  needsDivision?: boolean
   divisions?: string[]
   fieldConfig: FieldConfig[]
   frontLayout: TemplateElement[]
@@ -784,7 +785,7 @@ export default function SubmitPage() {
     if (!config) return "Form is not ready yet. Please try again."
     if (config.usesClassPicker) {
       if (!formData.classGrade?.trim()) return "Please select a class."
-      if (!formData.division?.trim()) return "Please select a division."
+      if (config.needsDivision && !formData.division?.trim()) return "Please select a division."
     }
     for (const f of config.fieldConfig) {
       if (f.key === "class") continue
@@ -820,7 +821,7 @@ export default function SubmitPage() {
           showMissingField("classGrade", "Please select a class.")
           return
         }
-        if (!formData.division?.trim()) {
+        if (config.needsDivision && !formData.division?.trim()) {
           showMissingField("division", "Please select a division.")
           return
         }
@@ -1627,7 +1628,7 @@ export default function SubmitPage() {
                           setFormData((prev) => ({
                             ...prev,
                             classGrade,
-                            class: formatClassSection(classGrade, prev.division || ""),
+                            class: config.needsDivision ? formatClassSection(classGrade, prev.division || "") : classGrade,
                           }))
                         }}
                         style={{
@@ -1645,42 +1646,46 @@ export default function SubmitPage() {
                         ))}
                       </select>
                     </div>
-                    <div className="form-group" data-field-key="division" style={getMissingFieldStyle("division")}>
-                      <label>
-                        Division <span style={{ color: '#ef4444' }}>*</span>
-                      </label>
-                      <select
-                        required
-                        value={formData.division || ""}
-                        onChange={(e) => {
-                          const division = e.target.value
-                          if (missingFieldKey === "division") setMissingFieldKey("")
-                          setFormData((prev) => ({
-                            ...prev,
-                            division,
-                            class: formatClassSection(prev.classGrade || "", division),
-                          }))
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '11px 12px',
-                          fontSize: 14,
-                          border: '1.5px solid #cbd5e1',
-                          borderRadius: 10,
-                          background: 'white',
-                        }}
-                      >
-                        <option value="">— Choose division —</option>
-                        {(config.divisions || []).map((opt) => (
-                          <option key={opt} value={opt}>{opt}</option>
-                        ))}
-                      </select>
-                      {formData.class && (
-                        <span style={{ fontSize: 11, color: '#64748b', marginTop: 4, display: 'block' }}>
+                    {config.needsDivision && (
+                      <div className="form-group" data-field-key="division" style={getMissingFieldStyle("division")}>
+                        <label>
+                          Division <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        <select
+                          required
+                          value={formData.division || ""}
+                          onChange={(e) => {
+                            const division = e.target.value
+                            if (missingFieldKey === "division") setMissingFieldKey("")
+                            setFormData((prev) => ({
+                              ...prev,
+                              division,
+                              class: formatClassSection(prev.classGrade || "", division),
+                            }))
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '11px 12px',
+                            fontSize: 14,
+                            border: '1.5px solid #cbd5e1',
+                            borderRadius: 10,
+                            background: 'white',
+                          }}
+                        >
+                          <option value="">— Choose division —</option>
+                          {(config.divisions || []).map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {formData.class && (
+                      <div style={{ marginTop: 4, marginBottom: 12 }}>
+                        <span style={{ fontSize: 11, color: '#64748b', display: 'block' }}>
                           Will appear on ID card as: <strong>{formData.class}</strong>
                         </span>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </>
                 ) : config?.className ? (
                   /* Legacy fixed-class link — read only */

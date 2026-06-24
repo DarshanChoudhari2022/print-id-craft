@@ -4,7 +4,12 @@ import { buildFormFields, type FormField } from "@/lib/submit-fields"
 import { migrateTemplateToPt } from "@/lib/font-size-units"
 import { getDefaultTemplate } from "@/lib/template-resolver"
 import { DEFAULT_CARD_HEIGHT_MM, DEFAULT_CARD_WIDTH_MM } from "@/lib/card-dimensions"
-import { DIVISIONS, parseClassOptions, resolveEffectiveClassOptions } from "@/lib/section-class"
+import {
+  DIVISIONS,
+  parseClassOptions,
+  resolveEffectiveClassOptions,
+  templateHasDivisionPlaceholder,
+} from "@/lib/section-class"
 
 /**
  * Public GET — resolves a school-wide registration token to the school
@@ -133,12 +138,16 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
     }
     const flagColors = Array.from(flagColorSet).sort((a, b) => a.localeCompare(b))
 
+    const needsDivision = templateHasDivisionPlaceholder(rawMappings, rawFieldConf)
+
     return NextResponse.json({
       success: true,
       data: {
         schoolName: school.name,
         schoolLogo: school.logoUrl,
         schoolId: school.id,
+        needsDivision,
+        divisions: needsDivision ? [...DIVISIONS] : [],
         // Class dropdown — parent picks one before submitting.
         classes: school.classes.map(c => {
           const classOptions = resolveEffectiveClassOptions(c.classOptions, c.sectionType, c.name)
