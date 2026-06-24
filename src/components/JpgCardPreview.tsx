@@ -344,7 +344,9 @@ export default function JpgCardPreview({
       if (cardWidthMm && cardHeightMm && cardWidthMm > 0 && cardHeightMm > 0) {
         const base = printCanvasSize(cardWidthMm, cardHeightMm, PREVIEW_DPI)
         w = base.widthPx * scale
-        h = base.heightPx * scale
+        // Maintain the template image's natural aspect ratio to match the editor exactly
+        // and prevent photo squash/stretch.
+        h = (img.naturalHeight / img.naturalWidth) * w
       } else {
         w = img.naturalWidth * scale
         h = img.naturalHeight * scale
@@ -379,14 +381,13 @@ export default function JpgCardPreview({
               const photoAspect = photoImg.naturalWidth / photoImg.naturalHeight
               const boxAspect = fw / fh
               let dx: number, dy: number, dw: number, dh: number
-              if (photoAspect > boxAspect) {
-                // Photo is wider → fit width, center vertically
+              // Cover logic: scale photo so it fills the box completely
+              if (photoAspect < boxAspect) {
                 dw = fw
                 dh = fw / photoAspect
                 dx = fx
                 dy = fy + (fh - dh) / 2
               } else {
-                // Photo is taller → fit height, center horizontally
                 dh = fh
                 dw = fh * photoAspect
                 dx = fx + (fw - dw) / 2

@@ -571,7 +571,9 @@ async function renderIdCardSvg(
   let w: number
   let h: number
   if (cardWidthMm && cardHeightMm && cardWidthMm > 0 && cardHeightMm > 0) {
-    ;({ widthPx: w, heightPx: h } = printCanvasSize(cardWidthMm, cardHeightMm))
+    ;({ widthPx: w } = printCanvasSize(cardWidthMm, cardHeightMm))
+    // Maintain the template image's natural aspect ratio so it matches the editor exactly
+    h = (templateImg.naturalHeight / templateImg.naturalWidth) * w
   } else {
     w = templateImg.naturalWidth
     h = templateImg.naturalHeight
