@@ -173,12 +173,15 @@ export function templateHasDivisionPlaceholder(
   for (const m of fieldMappings) {
     const fk = String(m.fieldKey || "").toLowerCase().replace(/[^a-z0-9]/g, "")
     if (DIVISION_KEYS.has(fk)) return true
+    if (isClassDivisionFieldKey(m.fieldKey)) return true
   }
   for (const f of fieldConfig) {
     const fk = String(f.key || "").toLowerCase().replace(/[^a-z0-9]/g, "")
     if (DIVISION_KEYS.has(fk)) return true
+    if (isClassDivisionFieldKey(f.key)) return true
     const fl = String(f.label || "").toLowerCase().replace(/[^a-z0-9]/g, "")
     if (DIVISION_KEYS.has(fl)) return true
+    if (fl.includes("class") && fl.includes("division")) return true
   }
   return false
 }

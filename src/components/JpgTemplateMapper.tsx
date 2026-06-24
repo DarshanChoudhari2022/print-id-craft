@@ -3466,6 +3466,7 @@ export default function JpgTemplateMapper({
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {[
                 { key: "name", label: "Student Name" },
+                { key: "division", label: "Division" },
                 { key: "branch", label: "Branch" },
                 { key: "rollNo", label: "Roll No. / NO" },
                 { key: "father", label: "Father's Mobile No." },

@@ -17,6 +17,7 @@ import {
   DIVISIONS,
   formatClassSection,
   validateAndBuildClassFields,
+  templateHasDivisionPlaceholder,
 } from "@/lib/section-class"
 
 /* ══════════════════════════════════════════════════════════════
@@ -389,6 +390,22 @@ describe("resolveFieldValue", () => {
     it("resolves class and division separately from legacy stored class when hasDivisionPlaceholder is true", () => {
       expect(resolveDisplayFieldValue({ class: "V - A" }, "class", true)).toBe("V")
       expect(resolveDisplayFieldValue({ class: "VI - B" }, "division", true)).toBe("B")
+    })
+
+    it("detects division requirement from template placeholders", () => {
+      // 1. Separate division placeholder
+      expect(templateHasDivisionPlaceholder([{ fieldKey: "division" }], [])).toBe(true)
+      expect(templateHasDivisionPlaceholder([{ fieldKey: "div" }], [])).toBe(true)
+      expect(templateHasDivisionPlaceholder([], [{ key: "section", label: "Section" }])).toBe(true)
+
+      // 2. Combined Class - Division placeholder
+      expect(templateHasDivisionPlaceholder([{ fieldKey: "class" }], [])).toBe(true)
+      expect(templateHasDivisionPlaceholder([{ fieldKey: "classSection" }], [])).toBe(true)
+      expect(templateHasDivisionPlaceholder([], [{ key: "classDivision", label: "Class - Division" }])).toBe(true)
+
+      // 3. Neither
+      expect(templateHasDivisionPlaceholder([{ fieldKey: "name" }], [])).toBe(false)
+      expect(templateHasDivisionPlaceholder([], [{ key: "fatherName", label: "Father Name" }])).toBe(false)
     })
   })
 })
