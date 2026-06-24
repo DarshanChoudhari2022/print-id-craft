@@ -7,10 +7,10 @@ import dynamic from "next/dynamic"
 import { prepareStudentPhotoForUpload } from "@/lib/client-photo-upload"
 import {
   DEFAULT_CLASS_OPTIONS,
-  DIVISIONS,
   SECTION_TYPE_LABELS,
   formatClassSection,
   resolveEffectiveClassOptions,
+  resolveEffectiveDivisionOptions,
   type SectionType,
 } from "@/lib/section-class"
 import { photoCacheVersion, studentPhotoUrl as buildStudentPhotoUrl } from "@/lib/student-photo-url"
@@ -158,6 +158,7 @@ type ClassData = {
   templateId: string | null
   sectionType: SectionType | null
   classOptions: string[]
+  divisionOptions: string[]
   template: { id: string; name: string; templateImageUrl: string | null } | null
   _count: { students: number }
   studentBreakdown?: {
@@ -303,6 +304,11 @@ export default function SchoolDetailPage() {
   const [editingClassOptionsDraft, setEditingClassOptionsDraft] = useState("")
   const [editingSectionTypeDraft, setEditingSectionTypeDraft] = useState<SectionType | "">("")
   const [savingClassOptions, setSavingClassOptions] = useState(false)
+
+  // Inline division-options editor (A, B, C… per section)
+  const [editingDivisionOptionsFor, setEditingDivisionOptionsFor] = useState<string | null>(null)
+  const [editingDivisionOptionsDraft, setEditingDivisionOptionsDraft] = useState("")
+  const [savingDivisionOptions, setSavingDivisionOptions] = useState(false)
 
   // Inline expiry editor (per-row): which class is being edited + its draft value
   const [editingExpiryFor, setEditingExpiryFor] = useState<string | null>(null)
@@ -704,6 +710,7 @@ export default function SchoolDetailPage() {
       selectedStudentSection.sectionType,
       selectedStudentSection.name
     )
+    const divisions = resolveEffectiveDivisionOptions(selectedStudentSection.divisionOptions)
     const seen = new Set<string>()
     const options: Array<{ value: string; label: string }> = []
 
@@ -718,11 +725,11 @@ export default function SchoolDetailPage() {
     }
 
     for (const grade of grades) {
-      for (const div of DIVISIONS) addOption(grade, div)
+      for (const div of divisions) addOption(grade, div)
     }
 
     for (const { label } of selectedStudentSection.studentBreakdown?.byClass || []) {
-      const parsed = label.match(/^(.+?)\s*-+\s*([A-M])$/i)
+      const parsed = label.match(/^(.+?)\s*-+\s*([a-zA-Z0-9]+)$/i)
       if (parsed) addOption(parsed[1].trim(), parsed[2].toUpperCase(), label)
       else if (label && label !== "Unassigned") addOption(label, "", label)
     }
@@ -772,6 +779,40 @@ export default function SchoolDetailPage() {
       toast.error(e?.message || "Could not save class options.")
     } finally {
       setSavingClassOptions(false)
+    }
+  }
+
+  const startEditDivisionOptions = (cls: ClassData) => {
+    setEditingDivisionOptionsFor(cls.id)
+    setEditingDivisionOptionsDraft((cls.divisionOptions || []).join(", "))
+  }
+
+  const cancelEditDivisionOptions = () => {
+    setEditingDivisionOptionsFor(null)
+    setEditingDivisionOptionsDraft("")
+  }
+
+  const saveEditDivisionOptions = async (cid: string) => {
+    const divisionOptions = editingDivisionOptionsDraft
+      .split(/[,;\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    setSavingDivisionOptions(true)
+    try {
+      const res = await fetch(`/api/schools/${schoolId}/classes/${cid}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ divisionOptions }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed")
+      toast.success(divisionOptions.length === 0 ? "Divisions reset to default (A–M)." : "Custom divisions saved.")
+      cancelEditDivisionOptions()
+      fetchClasses()
+    } catch (e: any) {
+      toast.error(e?.message || "Could not save division options.")
+    } finally {
+      setSavingDivisionOptions(false)
     }
   }
 
@@ -2633,6 +2674,14 @@ export default function SchoolDetailPage() {
                           >
                             📚 Edit Classes
                           </button>
+                          <button
+                            className="btn btn-outline"
+                            onClick={() => startEditDivisionOptions(cls)}
+                            style={{ fontSize: 11, padding: '5px 10px' }}
+                            title="Configure custom division list (e.g. A, B, C or custom names) for this section"
+                          >
+                            🏷️ Edit Divisions
+                          </button>
                           <button className="btn btn-outline" onClick={() => copyLink(cls.linkToken)} style={{ fontSize: 11, padding: '5px 10px' }}>📋 Copy</button>
                           <button className="btn btn-outline" onClick={() => shareWhatsApp(cls.linkToken, cls.name)} style={{ fontSize: 11, padding: '5px 10px', color: '#22c55e', borderColor: '#22c55e' }}>💬 WhatsApp</button>
                           <button className="btn btn-outline" onClick={() => shareEmail(cls.linkToken, cls.name)} style={{ fontSize: 11, padding: '5px 10px' }}>📧 Email</button>
@@ -2692,6 +2741,46 @@ export default function SchoolDetailPage() {
                               <button type="button" className="btn btn-outline" onClick={cancelEditClassOptions} style={{ fontSize: 11, padding: '4px 10px' }}>Cancel</button>
                               <button type="button" className="btn btn-primary" disabled={savingClassOptions} onClick={() => saveEditClassOptions(cls.id)} style={{ fontSize: 11, padding: '4px 10px' }}>
                                 {savingClassOptions ? "Saving…" : "Save"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {editingDivisionOptionsFor === cls.id && (
+                          <div
+                            style={{
+                              marginTop: 8,
+                              padding: 10,
+                              background: '#fdf4ff',
+                              border: '1px solid #e9d5ff',
+                              borderRadius: 8,
+                              textAlign: 'left',
+                            }}
+                          >
+                            <div style={{ fontSize: 11, fontWeight: 700, color: '#7e22ce', marginBottom: 8 }}>
+                              Custom divisions for {cls.name}
+                            </div>
+                            <input
+                              value={editingDivisionOptionsDraft}
+                              onChange={(e) => setEditingDivisionOptionsDraft(e.target.value)}
+                              placeholder="e.g. A, B, C, D  (leave empty for default A–M)"
+                              style={{ width: '100%', padding: '8px 10px', fontSize: 12, borderRadius: 6, border: '1px solid #d8b4fe', marginBottom: 8 }}
+                            />
+                            <div style={{ fontSize: 10, color: '#7c3aed', marginBottom: 8 }}>
+                              Comma-separated. Leave empty to use defaults (A–M). Current: {cls.divisionOptions.length > 0 ? cls.divisionOptions.join(', ') : 'Default (A–M)'}
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              <button
+                                type="button"
+                                className="btn btn-outline"
+                                onClick={() => { setEditingDivisionOptionsDraft(''); }}
+                                style={{ fontSize: 11, padding: '4px 10px' }}
+                                title="Clear to reset to default A–M divisions"
+                              >
+                                Reset to Default
+                              </button>
+                              <button type="button" className="btn btn-outline" onClick={cancelEditDivisionOptions} style={{ fontSize: 11, padding: '4px 10px' }}>Cancel</button>
+                              <button type="button" className="btn btn-primary" disabled={savingDivisionOptions} onClick={() => saveEditDivisionOptions(cls.id)} style={{ fontSize: 11, padding: '4px 10px' }}>
+                                {savingDivisionOptions ? 'Saving…' : 'Save'}
                               </button>
                             </div>
                           </div>

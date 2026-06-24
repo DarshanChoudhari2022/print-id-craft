@@ -63,7 +63,7 @@ export function resolveClassDisplayValue(
   if (hasDivisionPlaceholder) {
     if (grade) return grade
     const stored = String(fd.class || fd.classSection || "").trim()
-    const legacy = stored.match(/^(.+?)\s*-\s*([A-M])$/i)
+    const legacy = stored.match(/^(.+?)\s*-\s*([a-zA-Z0-9]+)$/i)
     if (legacy) return legacy[1].trim()
     return stored
   }
@@ -73,7 +73,7 @@ export function resolveClassDisplayValue(
 
   const stored = String(fd.class || fd.classSection || "").trim()
   if (stored) {
-    const legacy = stored.match(/^(.+?)\s*-\s*([A-M])$/i)
+    const legacy = stored.match(/^(.+?)\s*-\s*([a-zA-Z0-9]+)$/i)
     if (legacy) return formatClassSection(legacy[1].trim(), legacy[2])
     return stored
   }
@@ -94,7 +94,7 @@ export function resolveDivisionDisplayValue(
     const division = String(fd.division || fd.DIVISION || "").trim().toUpperCase()
     if (division) return division
     const stored = String(fd.class || fd.classSection || "").trim()
-    const legacy = stored.match(/^(.+?)\s*-\s*([A-M])$/i)
+    const legacy = stored.match(/^(.+?)\s*-\s*([a-zA-Z0-9]+)$/i)
     if (legacy) return legacy[2].toUpperCase()
     return ""
   }
@@ -103,7 +103,7 @@ export function resolveDivisionDisplayValue(
   if (grade) return ""
 
   const classVal = resolveClassDisplayValue(fd, false)
-  if (classVal && /\s-\s*[A-M]$/i.test(classVal)) return ""
+  if (classVal && /\s-\s*[a-zA-Z0-9]+$/i.test(classVal)) return ""
 
   return String(fd.division || fd.DIVISION || "").trim().toUpperCase()
 }
@@ -124,7 +124,7 @@ export function aggregateSectionStudentCounts(
     const fd = (student.formData || {}) as Record<string, string>
     const label = resolveClassDisplayValue(fd) || "Unassigned"
     const grade = String(fd.classGrade || fd.CLASSGRADE || "").trim()
-      || label.replace(/\s*-\s*[A-M]$/i, "").trim()
+      || label.replace(/\s*-\s*[a-zA-Z0-9]+$/i, "").trim()
       || "Unassigned"
 
     byClass.set(label, (byClass.get(label) || 0) + 1)
@@ -150,6 +150,14 @@ export function aggregateSectionStudentCounts(
 export function parseClassOptions(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
   return raw.map(String).map((s) => s.trim()).filter(Boolean)
+}
+
+export function resolveEffectiveDivisionOptions(
+  divisionOptions: unknown
+): string[] {
+  const parsed = parseClassOptions(divisionOptions)
+  if (parsed.length > 0) return parsed
+  return [...DIVISIONS]
 }
 
 export function sectionUsesClassPicker(classOptions: unknown): boolean {
@@ -200,7 +208,8 @@ export function validateAndBuildClassFields(
   sectionName: string,
   classOptions: unknown,
   sectionType?: SectionType | null,
-  needsDivision: boolean = true
+  needsDivision: boolean = true,
+  divisionOptions?: unknown
 ): ClassFormValidation {
   const options = resolveEffectiveClassOptions(classOptions, sectionType, sectionName)
   if (options.length === 0) {
@@ -222,7 +231,8 @@ export function validateAndBuildClassFields(
     if (!division) {
       return { ok: false, error: "Please select a division." }
     }
-    if (!isValidDivision(division)) {
+    const validDivs = resolveEffectiveDivisionOptions(divisionOptions)
+    if (!validDivs.map((d) => d.toUpperCase()).includes(division)) {
       return { ok: false, error: "Invalid division selection." }
     }
     return {

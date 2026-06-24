@@ -87,7 +87,8 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
       cls.name,
       cls.classOptions,
       cls.sectionType,
-      needsDivision
+      needsDivision,
+      cls.divisionOptions
     )
     if (!classFields.ok) {
       return NextResponse.json({ error: classFields.error }, { status: 400 })

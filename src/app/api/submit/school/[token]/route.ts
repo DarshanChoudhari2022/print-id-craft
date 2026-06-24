@@ -26,7 +26,7 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
         classes: {
           where: { isActive: true },
           orderBy: { name: "asc" },
-          select: { id: true, name: true, expiresAt: true, classOptions: true, sectionType: true },
+          select: { id: true, name: true, expiresAt: true, classOptions: true, sectionType: true, divisionOptions: true },
         },
       },
     })

@@ -10,6 +10,7 @@ import { getTemplateForClass } from "@/lib/template-resolver"
 import {
   DIVISIONS,
   resolveEffectiveClassOptions,
+  resolveEffectiveDivisionOptions,
   templateHasDivisionPlaceholder,
 } from "@/lib/section-class"
 
@@ -217,7 +218,7 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
         usesClassPicker,
         classOptions,
         needsDivision,
-        divisions: needsDivision ? [...DIVISIONS] : [],
+        divisions: needsDivision ? resolveEffectiveDivisionOptions(cls.divisionOptions) : [],
         fieldConfig: publicFieldConfig,
         frontLayout: template?.frontLayout || [],
         backLayout: template?.backLayout || [],

@@ -18,6 +18,7 @@ const updateClassSchema = z.object({
   templateId: z.string().nullable().optional(),
   sectionType: sectionTypeSchema.optional().nullable(),
   classOptions: z.array(z.string()).optional(),
+  divisionOptions: z.array(z.string()).optional(),
 })
 
 export async function PUT(req: Request, props: { params: Promise<{ id: string; cid: string }> }) {
@@ -54,6 +55,9 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string; c
     } else if (validated.sectionType) {
       updateData.classOptions = DEFAULT_CLASS_OPTIONS[validated.sectionType as SectionType]
     }
+    if (validated.divisionOptions !== undefined) {
+      updateData.divisionOptions = validated.divisionOptions
+    }
 
     const cls = await prisma.class.update({
       where: { id: params.cid, schoolId: params.id },
@@ -62,7 +66,11 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string; c
 
     return NextResponse.json({
       success: true,
-      data: { ...cls, classOptions: parseClassOptions(cls.classOptions) },
+      data: {
+        ...cls,
+        classOptions: parseClassOptions(cls.classOptions),
+        divisionOptions: parseClassOptions(cls.divisionOptions),
+      },
     })
   } catch (error) {
     if (error instanceof z.ZodError) {

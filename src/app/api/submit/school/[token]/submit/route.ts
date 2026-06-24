@@ -77,7 +77,7 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
     // Verify the class belongs to this school and is still open.
     const cls = await prisma.class.findFirst({
       where: { id: validated.classId, schoolId: school.id, isActive: true },
-      select: { id: true, name: true, expiresAt: true, classOptions: true, sectionType: true },
+      select: { id: true, name: true, expiresAt: true, classOptions: true, sectionType: true, divisionOptions: true },
     })
     if (!cls) {
       return NextResponse.json({ error: "Selected class is not available." }, { status: 400 })
@@ -99,7 +99,8 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
       cls.name,
       cls.classOptions,
       cls.sectionType,
-      needsDivision
+      needsDivision,
+      cls.divisionOptions
     )
     if (!classFields.ok) {
       return NextResponse.json({ error: classFields.error }, { status: 400 })

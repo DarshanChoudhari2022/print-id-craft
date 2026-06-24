@@ -21,6 +21,7 @@ const classSchema = z.object({
   expiresAt: z.string().optional().nullable(),
   sectionType: sectionTypeSchema.optional().nullable(),
   classOptions: z.array(z.string()).optional(),
+  divisionOptions: z.array(z.string()).optional(),
 })
 
 function parsePagination(req: Request) {
@@ -55,6 +56,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
         templateId: true,
         sectionType: true,
         classOptions: true,
+        divisionOptions: true,
         createdAt: true,
         _count: { select: { students: true } },
       },
@@ -114,6 +116,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     const classes = baseClasses.map((entry) => ({
       ...entry,
       classOptions: parseClassOptions(entry.classOptions),
+      divisionOptions: parseClassOptions(entry.divisionOptions),
       template: entry.templateId ? templatesById.get(entry.templateId) || null : null,
       teachers: teachersByClassId.get(entry.id) || [],
       studentBreakdown: aggregateSectionStudentCounts(sectionStudents, entry.id),
@@ -179,12 +182,17 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         expiresAt,
         sectionType: sectionType || null,
         classOptions: classOptions ?? [],
+        divisionOptions: validated.divisionOptions ?? [],
       },
     })
 
     return NextResponse.json({
       success: true,
-      data: { ...newClass, classOptions: parseClassOptions(newClass.classOptions) },
+      data: {
+        ...newClass,
+        classOptions: parseClassOptions(newClass.classOptions),
+        divisionOptions: parseClassOptions(newClass.divisionOptions),
+      },
     }, { status: 201 })
   } catch (error) {
     console.error(`POST /api/schools/${params.id}/classes error:`, error)
