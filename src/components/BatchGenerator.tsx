@@ -421,20 +421,22 @@ async function renderIdCard(
       if (student.photoUrl) {
         const photoImg = await getCachedImage(student.photoUrl)
         if (photoImg) {
-          // Cover-fit: fill the entire box, crop overflow
+          // Contain-fit: scale to fit entirely inside the box, no cropping.
           const photoAspect = photoImg.naturalWidth / photoImg.naturalHeight
           const boxAspect = fw / fh
           let dx: number, dy: number, dw: number, dh: number
           if (photoAspect > boxAspect) {
-            dh = fh
-            dw = fh * photoAspect
-            dx = fx + (fw - dw) / 2
-            dy = fy
-          } else {
+            // Photo is wider → fit width, center vertically
             dw = fw
             dh = fw / photoAspect
             dx = fx
             dy = fy + (fh - dh) / 2
+          } else {
+            // Photo is taller → fit height, center horizontally
+            dh = fh
+            dw = fh * photoAspect
+            dx = fx + (fw - dw) / 2
+            dy = fy
           }
           ctx.save()
           pathRoundedRect(ctx, fx, fy, fw, fh, radiusPx)

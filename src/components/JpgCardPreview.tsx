@@ -375,23 +375,22 @@ export default function JpgCardPreview({
           if (studentPhoto) {
             try {
               const photoImg = await loadImage(studentPhoto)
-              // Cover-fit: fill the entire box, crop overflow.
-              // The clip path handles hiding any overflow.
+              // Contain-fit: scale to fit entirely inside the box, no cropping.
               const photoAspect = photoImg.naturalWidth / photoImg.naturalHeight
               const boxAspect = fw / fh
               let dx: number, dy: number, dw: number, dh: number
               if (photoAspect > boxAspect) {
-                // Photo is wider → fit height, center horizontally
-                dh = fh
-                dw = fh * photoAspect
-                dx = fx + (fw - dw) / 2
-                dy = fy
-              } else {
-                // Photo is taller → fit width, center vertically
+                // Photo is wider → fit width, center vertically
                 dw = fw
                 dh = fw / photoAspect
                 dx = fx
                 dy = fy + (fh - dh) / 2
+              } else {
+                // Photo is taller → fit height, center horizontally
+                dh = fh
+                dw = fh * photoAspect
+                dx = fx + (fw - dw) / 2
+                dy = fy
               }
               ctx.save()
               pathRoundedRect(ctx, fx, fy, fw, fh, radiusPx)
@@ -595,16 +594,16 @@ export async function generateJpgCard(
       if (studentPhoto) {
         try {
           const photoImg = await loadImage(studentPhoto)
-          // Cover-fit: fill the entire box, crop overflow
+          // Contain-fit: scale to fit entirely inside the box, no cropping.
           const photoAspect = photoImg.naturalWidth / photoImg.naturalHeight
           const boxAspect = fw / fh
           let dx: number, dy: number, dw: number, dh: number
           if (photoAspect > boxAspect) {
-            dh = fh; dw = fh * photoAspect
-            dx = fx + (fw - dw) / 2; dy = fy
-          } else {
             dw = fw; dh = fw / photoAspect
             dx = fx; dy = fy + (fh - dh) / 2
+          } else {
+            dh = fh; dw = fh * photoAspect
+            dx = fx + (fw - dw) / 2; dy = fy
           }
           ctx.save()
           pathRoundedRect(ctx, fx, fy, fw, fh, radiusPx)
