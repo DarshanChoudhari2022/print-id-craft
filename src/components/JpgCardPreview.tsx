@@ -386,7 +386,8 @@ export default function JpgCardPreview({
                 dw = fw
                 dh = fw / photoAspect
                 dx = fx
-                dy = fy + (fh - dh) / 2
+                // Align to top so head/hair isn't cropped (equivalent to object-position: top)
+                dy = fy
               } else {
                 dh = fh
                 dw = fh * photoAspect

@@ -608,7 +608,7 @@ async function renderIdCardSvg(
           : `<rect x="${fx}" y="${fy}" width="${fw}" height="${fh}" />`
 
         lines.push(`  <defs><clipPath id="${clipId}">${clipRect}</clipPath></defs>`)
-        lines.push(`  <image href="${photoDataUrl}" x="${fx}" y="${fy}" width="${fw}" height="${fh}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})" />`)
+        lines.push(`  <image href="${photoDataUrl}" x="${fx}" y="${fy}" width="${fw}" height="${fh}" preserveAspectRatio="xMidYMin slice" clip-path="url(#${clipId})" />`)
 
         if (borderPx > 0) {
           const borderColor = field.photoBorderColor || "#000000"
