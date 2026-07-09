@@ -229,6 +229,9 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
         // JPG template data for card preview
         templateImageUrl: template?.templateImageUrl || null,
         fieldMappings: rawMappings,
+        backTemplateImageUrl: template?.backTemplateImageUrl || null,
+        backFieldMappings: (template?.backFieldMappings as any[]) || [],
+        hasBackSide: template?.hasBackSide || false,
         // Photo background color for auto-replacement
         photoBgColor: template?.photoBgColor || "#FFFFFF",
         // Available house/flag colours for dropdown in public form

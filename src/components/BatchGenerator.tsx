@@ -1384,7 +1384,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 studentTemplate.cardHeightMm,
               )
               let backDataUrl: string | undefined
-              if (studentTemplate.hasBackSide && studentTemplate.backTemplateImageUrl && studentTemplate.backFieldMappings?.length > 0) {
+              if (studentTemplate.hasBackSide && studentTemplate.backTemplateImageUrl) {
                 backDataUrl = await renderIdCard(
                   studentTemplate.backTemplateImageUrl,
                   studentTemplate.backFieldMappings,
@@ -1495,7 +1495,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 id: student.id,
               }
 
-              if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
+              if (hasBackSide && backTemplateImageUrl) {
                 const backSvg = await renderIdCardSvg(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
                 result.back = { name: `${student.serialNumber}_back.svg`, svgContent: backSvg }
               }
@@ -1520,7 +1520,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
               try {
                 const previewFront = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
                 let previewBack: string | undefined
-                if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
+                if (hasBackSide && backTemplateImageUrl) {
                   previewBack = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
                 }
                 previewData.push({ serialNumber: student.serialNumber, frontDataUrl: previewFront, backDataUrl: previewBack })
@@ -1572,7 +1572,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             try {
               const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
               let backDataUrl: string | undefined
-              if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
+              if (hasBackSide && backTemplateImageUrl) {
                 backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
               }
               return { serialNumber: student.serialNumber, frontDataUrl, backDataUrl, id: student.id }
@@ -1678,7 +1678,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             try {
               const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
               let backDataUrl: string | undefined
-              if (hasBackSide && backTemplateImageUrl && backFieldMappings?.length > 0) {
+              if (hasBackSide && backTemplateImageUrl) {
                 backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
               }
               return {

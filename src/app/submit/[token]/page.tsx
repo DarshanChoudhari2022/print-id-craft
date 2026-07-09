@@ -100,6 +100,9 @@ type FormConfig = {
   // JPG template fields
   templateImageUrl: string | null
   fieldMappings: any[]
+  backTemplateImageUrl?: string | null
+  backFieldMappings?: any[]
+  hasBackSide?: boolean
   // Photo background color
   photoBgColor: string
   // Available house/flag colours (from other students in this school) — used to
@@ -746,8 +749,33 @@ export default function SubmitPage() {
   }, [formData, result?.serialNumber])
 
   const downloadRenderedPreview = useCallback(async () => {
-    const canvas = successPreviewRef.current?.querySelector("canvas")
-    if (!canvas) throw new Error("Preview image is not ready yet")
+    const canvases = Array.from(successPreviewRef.current?.querySelectorAll("canvas") || [])
+    if (canvases.length === 0) throw new Error("Preview image is not ready yet")
+
+    const canvas = canvases.length === 1 ? canvases[0] : (() => {
+      const gap = 24
+      const labelH = 30
+      const width = canvases.reduce((sum, c) => sum + c.width, 0) + gap * (canvases.length - 1)
+      const height = Math.max(...canvases.map((c) => c.height)) + labelH
+      const combined = document.createElement("canvas")
+      combined.width = width
+      combined.height = height
+      const ctx = combined.getContext("2d")
+      if (!ctx) return canvases[0]
+      ctx.fillStyle = "#ffffff"
+      ctx.fillRect(0, 0, width, height)
+      ctx.fillStyle = "#0f172a"
+      ctx.font = "bold 18px Arial"
+      ctx.textAlign = "center"
+      ctx.textBaseline = "middle"
+      let x = 0
+      canvases.forEach((source, idx) => {
+        ctx.fillText(idx === 0 ? "FRONT" : "BACK", x + source.width / 2, labelH / 2)
+        ctx.drawImage(source, x, labelH)
+        x += source.width + gap
+      })
+      return combined
+    })()
 
     const blob = await new Promise<Blob | null>((resolve) => {
       try {
@@ -1041,17 +1069,35 @@ export default function SubmitPage() {
           {config && (
             <div style={{ marginBottom: 24 }}>
               {config.templateImageUrl && config.fieldMappings?.length > 0 ? (
-                <div ref={successPreviewRef} style={{ display: 'flex', justifyContent: 'center' }}>
-                  <JpgCardPreview
-                    templateImageUrl={config.templateImageUrl}
-                    fieldMappings={config.fieldMappings}
-                    formData={formData}
-                    studentPhoto={croppedPhoto}
-                    scale={1}
-                    watermark="Wise Melon"
-                    cardWidthMm={(config as any).cardWidthMm}
-                    cardHeightMm={(config as any).cardHeightMm}
-                  />
+                <div ref={successPreviewRef} style={{ display: 'flex', justifyContent: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textAlign: 'center' }}>FRONT</div>
+                    <JpgCardPreview
+                      templateImageUrl={config.templateImageUrl}
+                      fieldMappings={config.fieldMappings}
+                      formData={formData}
+                      studentPhoto={croppedPhoto}
+                      scale={1}
+                      watermark="Wise Melon"
+                      cardWidthMm={(config as any).cardWidthMm}
+                      cardHeightMm={(config as any).cardHeightMm}
+                    />
+                  </div>
+                  {config.hasBackSide && config.backTemplateImageUrl && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textAlign: 'center' }}>BACK</div>
+                      <JpgCardPreview
+                        templateImageUrl={config.backTemplateImageUrl}
+                        fieldMappings={config.backFieldMappings || []}
+                        formData={formData}
+                        studentPhoto={croppedPhoto}
+                        scale={1}
+                        watermark="Wise Melon"
+                        cardWidthMm={(config as any).cardWidthMm}
+                        cardHeightMm={(config as any).cardHeightMm}
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div style={{ background: '#f8fafc', borderRadius: 12, padding: 20, border: '1px solid #e2e8f0', textAlign: 'center' }}>
@@ -1328,16 +1374,36 @@ export default function SubmitPage() {
               <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Card Preview</div>
               <div style={{ background: '#f8fafc', borderRadius: 12, padding: 16, border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                 {config?.templateImageUrl && config?.fieldMappings?.length > 0 ? (
-                  <JpgCardPreview
-                    templateImageUrl={config.templateImageUrl}
-                    fieldMappings={config.fieldMappings}
-                    formData={formData}
-                    studentPhoto={croppedPhoto}
-                    scale={1}
-                    watermark="Wise Melon"
-                    cardWidthMm={(config as any).cardWidthMm}
-                    cardHeightMm={(config as any).cardHeightMm}
-                  />
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap', width: '100%' }}>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textAlign: 'center' }}>FRONT</div>
+                      <JpgCardPreview
+                        templateImageUrl={config.templateImageUrl}
+                        fieldMappings={config.fieldMappings}
+                        formData={formData}
+                        studentPhoto={croppedPhoto}
+                        scale={1}
+                        watermark="Wise Melon"
+                        cardWidthMm={(config as any).cardWidthMm}
+                        cardHeightMm={(config as any).cardHeightMm}
+                      />
+                    </div>
+                    {config.hasBackSide && config.backTemplateImageUrl && (
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6, textAlign: 'center' }}>BACK</div>
+                        <JpgCardPreview
+                          templateImageUrl={config.backTemplateImageUrl}
+                          fieldMappings={config.backFieldMappings || []}
+                          formData={formData}
+                          studentPhoto={croppedPhoto}
+                          scale={1}
+                          watermark="Wise Melon"
+                          cardWidthMm={(config as any).cardWidthMm}
+                          cardHeightMm={(config as any).cardHeightMm}
+                        />
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 12, background: '#f1f5f9', padding: 3, borderRadius: 8, width: '100%' }}>
