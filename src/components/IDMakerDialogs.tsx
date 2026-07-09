@@ -886,7 +886,7 @@ export function ColorPickerDialog({
 // ─────────────────────────────────────────────────────────────
 // 6. WRAP TEXT DIALOG  (Do you want to use Wrap text? + rows per field)
 // ─────────────────────────────────────────────────────────────
-export type WrapMode = "nowrap" | "multiline" | "wrap"
+export type WrapMode = "nowrap" | "multiline" | "wrap" | "centeredWrap"
 export type WrapTextConfig = {
   /** @deprecated Use `mode` instead. Kept for backwards compatibility — true == "wrap" (auto-fit), false == "nowrap". */
   wrap: boolean
@@ -929,6 +929,15 @@ export function WrapTextDialog({
             <b>Auto-fit (best for names)</b>
             <div style={{ fontSize: 11, color: "#555" }}>
               Long names automatically shrink to fit on a single line — full text is always visible, never truncated with &quot;...&quot;.
+            </div>
+          </span>
+        </label>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8, cursor: "pointer" }}>
+          <input type="radio" name="wrap" checked={mode === "centeredWrap"} onChange={() => setMode("centeredWrap")} style={{ marginTop: 3 }} />
+          <span>
+            <b>Centered Wrap</b>
+            <div style={{ fontSize: 11, color: "#555" }}>
+              Long text wraps into lines and centers every line, like a two-line student name.
             </div>
           </span>
         </label>

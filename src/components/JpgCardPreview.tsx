@@ -32,7 +32,7 @@ type FieldMapping = {
   //                  matches legacy behaviour).
   //   "multiline" → wraps onto multiple lines AT THE USER'S CHOSEN font size.
   //                  Used for long addresses where shrinking would be illegible.
-  textWrap?: "nowrap" | "wrap" | "multiline"
+  textWrap?: "nowrap" | "wrap" | "multiline" | "centeredWrap"
   // Enhanced text formatting — must match JpgTemplateMapper.tsx's FieldMapping.
   fontStyle?: "normal" | "italic"
   textDecoration?: "none" | "underline" | "line-through"
@@ -216,7 +216,7 @@ function fitTextToBox(
   scale: number,
   canvasW: number,
   userFontSizePt?: number,
-  wrapMode: "nowrap" | "wrap" | "multiline" = "wrap",
+  wrapMode: "nowrap" | "wrap" | "multiline" | "centeredWrap" = "wrap",
   fontStyle: string = "normal",
   cardWidthMm: number = DEFAULT_CARD_WIDTH_MM,
 ): { lines: string[]; fontSize: number; lineHeight: number } {
@@ -268,9 +268,9 @@ function fitTextToBox(
       : boxH * 0.6
 
   // ── MULTILINE: preserve the user's font size, wrap to as many lines as needed.
-  if (wrapMode === "multiline") {
+  if (wrapMode === "multiline" || wrapMode === "centeredWrap") {
     const lines = wrap(userPx)
-    return { lines, fontSize: userPx, lineHeight: userPx * 1.2 }
+    return { lines, fontSize: userPx, lineHeight: userPx * (wrapMode === "centeredWrap" ? 1.15 : 1.2) }
   }
 
   // ── NO WRAP: single line at the user's font size, truncate with "…".
@@ -468,7 +468,7 @@ export default function JpgCardPreview({
             }
 
             ctx.fillStyle = field.fontColor || "#000"
-            const align = field.textAlign || "left"
+            const align = field.textWrap === "centeredWrap" ? "center" : (field.textAlign || "left")
             ctx.textAlign = align
             ctx.textBaseline = "middle"
             ctx.save()
@@ -650,7 +650,7 @@ export async function generateJpgCard(
         )
 
         ctx.fillStyle = field.fontColor || "#000"
-        const align = field.textAlign || "left"
+        const align = field.textWrap === "centeredWrap" ? "center" : (field.textAlign || "left")
         ctx.textAlign = align
         ctx.textBaseline = "middle"
         ctx.save()

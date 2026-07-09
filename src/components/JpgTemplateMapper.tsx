@@ -52,7 +52,7 @@ type FieldMapping = {
   // New properties for enhanced text formatting
   fontStyle?: "normal" | "italic" // italic support
   textDecoration?: "none" | "underline" | "line-through" // underline/strikethrough
-  textWrap?: "nowrap" | "wrap" | "multiline" // text wrapping (nowrap=truncate, wrap=auto-shrink to one line, multiline=wrap to next line preserving font size)
+  textWrap?: "nowrap" | "wrap" | "multiline" | "centeredWrap" // text wrapping (centeredWrap=wrap lines and center each line)
   letterSpacing?: number // letter spacing in px
   lineHeight?: number // line height multiplier
   textTransform?: "none" | "uppercase" | "lowercase" | "capitalize"
@@ -167,9 +167,11 @@ const SAMPLE_DATA: Record<string, string> = {
 function FixedWrapText({
   text,
   style,
+  centered = false,
 }: {
   text: string
   style: React.CSSProperties
+  centered?: boolean
 }) {
   return (
     <span
@@ -182,6 +184,7 @@ function FixedWrapText({
         width: "100%",
         height: "100%",
         display: "block",
+        textAlign: centered ? "center" : style.textAlign,
       }}
     >
       {text}
@@ -1791,11 +1794,12 @@ export default function JpgTemplateMapper({
                         )
                       }
                       // "wrap" mode → keep selected font size and wrap text inside the box.
-                      if (m.textWrap === "wrap") {
+                      if (m.textWrap === "wrap" || m.textWrap === "centeredWrap") {
                         return (
                           <FixedWrapText
                             text={displayText}
                             style={baseStyle}
+                            centered={m.textWrap === "centeredWrap"}
                           />
                         )
                       }
@@ -2764,7 +2768,7 @@ export default function JpgTemplateMapper({
                       Text Wrap
                     </label>
                     <div style={{ display: "flex", gap: 6 }}>
-                      {(["nowrap", "multiline", "wrap"] as const).map((mode) => (
+                      {(["nowrap", "multiline", "wrap", "centeredWrap"] as const).map((mode) => (
                         <button
                           key={mode}
                           onClick={() =>
@@ -2792,13 +2796,15 @@ export default function JpgTemplateMapper({
                             cursor: "pointer",
                           }}
                         >
-                          {mode === "nowrap" ? "No Wrap" : mode === "multiline" ? "↵ Multi-line" : "↔ Auto-fit"}
+                          {mode === "nowrap" ? "No Wrap" : mode === "multiline" ? "↵ Multi-line" : mode === "centeredWrap" ? "↵ Centered" : "↔ Auto-fit"}
                         </button>
                       ))}
                     </div>
                     <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
                       {(selectedMapping.textWrap || "nowrap") === "multiline"
                         ? "Text wraps to the next line and keeps your chosen font size — best for long addresses."
+                        : (selectedMapping.textWrap || "nowrap") === "centeredWrap"
+                        ? "Text wraps to multiple lines and centers each line — best for names like the sample."
                         : (selectedMapping.textWrap || "nowrap") === "wrap"
                         ? "Long text auto-shrinks to fit on one line — full name always visible, no \"...\""
                         : "Text stays on a single line; long text is truncated with \"...\""}

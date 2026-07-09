@@ -388,10 +388,10 @@ export function resolveDisplayFieldValue(
 export function getCardTextWrapMode(
   fieldKey: string,
   configured?: string
-): "nowrap" | "wrap" | "multiline" {
+): "nowrap" | "wrap" | "multiline" | "centeredWrap" {
   const nk = normalizeKey(fieldKey)
   if (nk === "class" || nk === "classsection" || nk === "classdivision" || nk === "division") return "wrap"
-  if (configured === "nowrap" || configured === "wrap" || configured === "multiline") {
+  if (configured === "nowrap" || configured === "wrap" || configured === "multiline" || configured === "centeredWrap") {
     return configured
   }
   return "wrap"

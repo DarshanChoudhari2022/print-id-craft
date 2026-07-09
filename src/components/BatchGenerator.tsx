@@ -37,7 +37,7 @@ type FieldMapping = {
   //   "nowrap"    → single line at the user's chosen size, truncated with "…".
   //   "wrap"      → legacy auto-fit (shrink to one line, then wrap+shrink).
   //   "multiline" → wrap onto multiple lines AT THE USER'S CHOSEN size (no shrink).
-  textWrap?: "nowrap" | "wrap" | "multiline"
+  textWrap?: "nowrap" | "wrap" | "multiline" | "centeredWrap"
   // Enhanced text formatting — must match JpgTemplateMapper.tsx's FieldMapping.
   fontStyle?: "normal" | "italic"
   textDecoration?: "none" | "underline" | "line-through"
@@ -286,7 +286,7 @@ function fitTextToBoxCanvas(
   fontWeight: string,
   canvasW: number = 0,
   userFontSizePt?: number,
-  wrapMode: "nowrap" | "wrap" | "multiline" = "wrap",
+  wrapMode: "nowrap" | "wrap" | "multiline" | "centeredWrap" = "wrap",
   fontStyle: string = "normal",
   cardWidthMm: number = DEFAULT_CARD_WIDTH_MM,
 ): { lines: string[]; fontSize: number; lineHeight: number } {
@@ -337,9 +337,9 @@ function fitTextToBoxCanvas(
       : boxH * 0.6
 
   // ── MULTILINE → keep the user's font size, wrap to as many lines as needed.
-  if (wrapMode === "multiline") {
+  if (wrapMode === "multiline" || wrapMode === "centeredWrap") {
     const lines = wrap(userPx)
-    return { lines, fontSize: userPx, lineHeight: userPx * 1.2 }
+    return { lines, fontSize: userPx, lineHeight: userPx * (wrapMode === "centeredWrap" ? 1.15 : 1.2) }
   }
 
   // ── NO WRAP → single line at user font size, truncate with "…".
@@ -501,7 +501,7 @@ async function renderIdCard(
         }
 
         ctx.fillStyle = field.fontColor || "#000"
-        const align = field.textAlign || "left"
+        const align = field.textWrap === "centeredWrap" ? "center" : (field.textAlign || "left")
         ctx.textAlign = align
         ctx.textBaseline = "middle"
         ctx.save()
@@ -635,9 +635,10 @@ async function renderIdCardSvg(
       const value = String(val || "").trim()
       if (value) {
         const wrapMode = getCardTextWrapMode(field.fieldKey, (field as any).textWrap)
-        const textAnchor = field.textAlign === "center" ? "middle" : field.textAlign === "right" ? "end" : "start"
+        const effectiveTextAlign = wrapMode === "centeredWrap" ? "center" : field.textAlign
+        const textAnchor = effectiveTextAlign === "center" ? "middle" : effectiveTextAlign === "right" ? "end" : "start"
         const padding = 4
-        const textX = field.textAlign === "center" ? fx + fw / 2 : field.textAlign === "right" ? fx + fw - padding : fx + padding
+        const textX = effectiveTextAlign === "center" ? fx + fw / 2 : effectiveTextAlign === "right" ? fx + fw - padding : fx + padding
         const fontWeight = field.fontWeight || "normal"
         const fontFamily = field.fontFamily || "Arial"
         const fill = field.fontColor || "#000"
@@ -656,7 +657,7 @@ async function renderIdCardSvg(
         const escape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 
         // ── MULTILINE → keep user font size, wrap onto <tspan> rows.
-        if (wrapMode === "multiline") {
+        if (wrapMode === "multiline" || wrapMode === "centeredWrap") {
           const maxWidth = Math.max(1, fw - padding * 2)
           const mctx = getMeasureCtx()
           const fontPrefix = fontWeight === "bold" ? "bold " : ""
@@ -674,9 +675,10 @@ async function renderIdCardSvg(
           } else {
             wrappedLines.push(value)
           }
-          const lineHeight = userPx * 1.2
-          // Top-align so first line is visible even if it overflows.
-          const firstLineY = fy + padding + userPx
+          const lineHeight = userPx * (wrapMode === "centeredWrap" ? 1.15 : 1.2)
+          const firstLineY = wrapMode === "centeredWrap"
+            ? fy + (fh - wrappedLines.length * lineHeight) / 2 + userPx
+            : fy + padding + userPx
           const tspans = wrappedLines
             .map((ln, i) => `<tspan x="${textX.toFixed(1)}" y="${(firstLineY + i * lineHeight).toFixed(1)}">${escape(ln)}</tspan>`)
             .join("")
