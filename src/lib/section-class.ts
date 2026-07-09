@@ -7,13 +7,14 @@ export const DIVISIONS = [
 export type Division = (typeof DIVISIONS)[number]
 
 import type { SectionType as PrismaSectionType } from "@prisma/client"
-export type SectionType = PrismaSectionType | "NURSERY_TO_X"
+export type SectionType = PrismaSectionType | "NURSERY_TO_X" | "NURSERY_TO_XII"
 
 export const SECTION_TYPE_LABELS: Record<SectionType, string> = {
   PRE_PRIMARY: "Pre Primary",
   PRIMARY: "Primary",
   SECONDARY: "Secondary",
   NURSERY_TO_X: "Nursery to X",
+  NURSERY_TO_XII: "Nursery to 12th",
 }
 
 export const DEFAULT_CLASS_OPTIONS: Record<SectionType, string[]> = {
@@ -21,6 +22,7 @@ export const DEFAULT_CLASS_OPTIONS: Record<SectionType, string[]> = {
   PRIMARY: ["I", "II", "III", "IV", "V"],
   SECONDARY: ["VI", "VII", "VIII", "IX", "X"],
   NURSERY_TO_X: ["Nursery", "LKG", "UKG", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"],
+  NURSERY_TO_XII: ["Nursery", "LKG", "UKG", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"],
 }
 
 /** Combine grade + division for the card placeholder (e.g. VI + B -> VI - B). */
