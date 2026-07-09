@@ -5,9 +5,10 @@ import { migrateTemplateToPt } from "@/lib/font-size-units"
 import { getDefaultTemplate } from "@/lib/template-resolver"
 import { DEFAULT_CARD_HEIGHT_MM, DEFAULT_CARD_WIDTH_MM } from "@/lib/card-dimensions"
 import {
-  DIVISIONS,
+  isDivisionDisabled,
   parseClassOptions,
   resolveEffectiveClassOptions,
+  resolveEffectiveDivisionOptions,
   templateHasDivisionPlaceholder,
 } from "@/lib/section-class"
 
@@ -138,7 +139,7 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
     }
     const flagColors = Array.from(flagColorSet).sort((a, b) => a.localeCompare(b))
 
-    const needsDivision = templateHasDivisionPlaceholder(rawMappings, rawFieldConf)
+    const templateNeedsDivision = templateHasDivisionPlaceholder(rawMappings, rawFieldConf)
 
     return NextResponse.json({
       success: true,
@@ -146,24 +147,30 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
         schoolName: school.name,
         schoolLogo: school.logoUrl,
         schoolId: school.id,
-        needsDivision,
-        divisions: needsDivision ? [...DIVISIONS] : [],
+        needsDivision: templateNeedsDivision,
+        divisions: templateNeedsDivision ? resolveEffectiveDivisionOptions(undefined) : [],
         // Class dropdown — parent picks one before submitting.
         classes: school.classes.map(c => {
           const classOptions = resolveEffectiveClassOptions(c.classOptions, c.sectionType, c.name)
+          const classDivDisabled = isDivisionDisabled(c.divisionOptions)
+          const classNeedsDivision = templateNeedsDivision && !classDivDisabled
           return {
             id: c.id,
             name: c.name,
             classOptions,
             usesClassPicker: classOptions.length > 0,
             expired: !!(c.expiresAt && new Date() > c.expiresAt),
+            needsDivision: classNeedsDivision,
+            divisions: classNeedsDivision ? resolveEffectiveDivisionOptions(c.divisionOptions) : [],
           }
         }).filter(c => !c.expired)
-          .map(({ id, name, classOptions, usesClassPicker }) => ({
+          .map(({ id, name, classOptions, usesClassPicker, needsDivision, divisions }) => ({
             id,
             name,
             classOptions,
             usesClassPicker,
+            needsDivision,
+            divisions,
           })),
         fieldConfig: resolvedFieldConfig,
         frontLayout: template?.frontLayout || [],

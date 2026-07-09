@@ -15,7 +15,7 @@ import { getNextStudentSerial } from "@/lib/student-serial"
 import { reportError, reportSlowOperation } from "@/lib/observability"
 import { checkDuplicateSubmission } from "@/lib/submit-fields"
 import { buildStudentIndexData } from "@/lib/student-index"
-import { validateAndBuildClassFields, templateHasDivisionPlaceholder } from "@/lib/section-class"
+import { validateAndBuildClassFields, templateHasDivisionPlaceholder, isDivisionDisabled } from "@/lib/section-class"
 import { recordPublicSubmissionAudit } from "@/lib/submission-audit"
 import { getTemplateForClass } from "@/lib/template-resolver"
 
@@ -77,7 +77,7 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
     const template = await getTemplateForClass(cls.id)
     const rawMappings = (template?.fieldMappings || []) as any[]
     const rawFieldConf = (template?.fieldConfig || []) as any[]
-    const needsDivision = templateHasDivisionPlaceholder(rawMappings, rawFieldConf)
+    const needsDivision = templateHasDivisionPlaceholder(rawMappings, rawFieldConf) && !isDivisionDisabled(cls.divisionOptions)
     const requiredFields = await getPublicSubmissionFields(cls.school.id, template)
     const fixedBranch = (template?.printConfig as { fixedBranch?: string } | null)?.fixedBranch || ""
     const formDataWithBranch = applyFixedBranchToFormData(formData, fixedBranch, requiredFields)

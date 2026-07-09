@@ -14,7 +14,7 @@ import { getNextStudentSerial } from "@/lib/student-serial"
 import { reportError, reportSlowOperation } from "@/lib/observability"
 import { checkDuplicateSubmission } from "@/lib/submit-fields"
 import { buildStudentIndexData } from "@/lib/student-index"
-import { validateAndBuildClassFields, templateHasDivisionPlaceholder } from "@/lib/section-class"
+import { validateAndBuildClassFields, templateHasDivisionPlaceholder, isDivisionDisabled } from "@/lib/section-class"
 import { recordPublicSubmissionAudit } from "@/lib/submission-audit"
 import { getDefaultTemplate } from "@/lib/template-resolver"
 
@@ -92,7 +92,7 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
     const needsDivision = templateHasDivisionPlaceholder(
       (template?.fieldMappings || []) as any[],
       (template?.fieldConfig || []) as any[]
-    )
+    ) && !isDivisionDisabled(cls.divisionOptions)
 
     const classFields = validateAndBuildClassFields(
       formData,

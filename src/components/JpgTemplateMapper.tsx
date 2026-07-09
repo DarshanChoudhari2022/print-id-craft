@@ -505,6 +505,9 @@ export default function JpgTemplateMapper({
   // Convert label → unique key: "Mob.- Father -" → "mob_father"
   const labelToKey = (label: string): string => {
     const normalizedLabel = label.toLowerCase().replace(/[^a-z0-9]/g, "")
+    if (normalizedLabel === "class") {
+      return "classGrade"
+    }
     if (["address", "addressprefix", "addresswithlabel", "addresslabel"].includes(normalizedLabel)) {
       return "addressWithLabel"
     }

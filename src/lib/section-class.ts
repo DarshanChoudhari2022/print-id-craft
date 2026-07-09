@@ -154,9 +154,22 @@ export function parseClassOptions(raw: unknown): string[] {
   return raw.map(String).map((s) => s.trim()).filter(Boolean)
 }
 
+/**
+ * Sentinel value stored in divisionOptions to indicate the section
+ * has classes only — no division picker shown to parents.
+ */
+export const DIVISION_NONE = "NONE"
+
+/** Returns true when the section is configured for class-only (no divisions). */
+export function isDivisionDisabled(divisionOptions: unknown): boolean {
+  const parsed = parseClassOptions(divisionOptions)
+  return parsed.length === 1 && parsed[0].toUpperCase() === DIVISION_NONE
+}
+
 export function resolveEffectiveDivisionOptions(
   divisionOptions: unknown
 ): string[] {
+  if (isDivisionDisabled(divisionOptions)) return []
   const parsed = parseClassOptions(divisionOptions)
   if (parsed.length > 0) return parsed
   return [...DIVISIONS]
