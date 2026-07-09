@@ -97,18 +97,46 @@ export default function TeacherDashboard() {
     setFetchError(false)
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const res = await fetch(`/api/teacher/dashboard?_t=${Date.now()}`, {
-          cache: "no-store",
-          headers: { "Cache-Control": "no-cache" }
-        })
-        // If unauthorized (expired session), redirect to login
-        if (res.status === 401) {
-          signOut({ callbackUrl: "/login" })
-          return
-        }
-        const json = await res.json()
-        if (json.success && json.data) {
-          setData(json.data)
+        const pageSize = 200
+        const cacheBust = Date.now()
+        let page = 1
+        let firstPageData: DashboardData | null = null
+        let allStudents: StudentData[] = []
+        let totalStudents: number | null = null
+        let totalPages = 1
+
+        do {
+          const res = await fetch(`/api/teacher/dashboard?page=${page}&limit=${pageSize}&_t=${cacheBust}`, {
+            cache: "no-store",
+            headers: { "Cache-Control": "no-cache" }
+          })
+          // If unauthorized (expired session), redirect to login
+          if (res.status === 401) {
+            signOut({ callbackUrl: "/login" })
+            return
+          }
+          const json = await res.json()
+          if (!json.success || !json.data) {
+            throw new Error(json.error || "Dashboard data fetch failed")
+          }
+
+          if (!firstPageData) firstPageData = json.data
+          allStudents = allStudents.concat(json.data.students || [])
+          const resolvedTotal = json.pagination?.total ?? json.data.stats?.total ?? allStudents.length
+          totalStudents = resolvedTotal
+          totalPages = json.pagination?.pages ?? Math.ceil(resolvedTotal / pageSize)
+          page += 1
+        } while (page <= totalPages && allStudents.length < (totalStudents ?? 0))
+
+        if (firstPageData) {
+          setData({
+            ...firstPageData,
+            students: allStudents,
+            stats: {
+              ...firstPageData.stats,
+              total: totalStudents ?? firstPageData.stats.total,
+            },
+          })
           setFetchError(false)
           setLoading(false)
           return

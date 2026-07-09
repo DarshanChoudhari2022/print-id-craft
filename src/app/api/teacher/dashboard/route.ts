@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
           submittedAt: true,
           class: { select: { name: true, linkToken: true } },
         },
-        orderBy: { submittedAt: "desc" },
+        orderBy: [{ submittedAt: "desc" }, { id: "asc" }],
         take: limit,
         skip,
       }), []),
