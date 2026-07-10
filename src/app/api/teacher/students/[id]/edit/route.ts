@@ -4,7 +4,10 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { buildStudentIndexData } from "@/lib/student-index"
 import { withStudentPhotoUrl } from "@/lib/student-photo-url"
-import { updateTeacherStudentWithPhotoAiFallback } from "@/lib/teacher-student-edit"
+import {
+  TEACHER_EDIT_AUTH_SELECT,
+  updateTeacherStudentWithPhotoAiFallback,
+} from "@/lib/teacher-student-edit"
 import { PHOTO_BG_STATUS, type PhotoBgStatus } from "@/lib/photo-bg-status"
 
 export const dynamic = "force-dynamic"
@@ -56,7 +59,10 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
       whereClause.classId = session.user.classId
     }
 
-    const student = await prisma.student.findFirst({ where: whereClause })
+    const student = await prisma.student.findFirst({
+      where: whereClause,
+      select: TEACHER_EDIT_AUTH_SELECT,
+    })
     if (!student) {
       return NextResponse.json({ error: "Student not found or not authorized" }, { status: 404 })
     }
