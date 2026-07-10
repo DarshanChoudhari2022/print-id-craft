@@ -274,6 +274,9 @@ export default function SchoolDetailPage() {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
   const [school, setSchool] = useState<SchoolDetail | null>(null)
+  const [editingSchoolName, setEditingSchoolName] = useState(false)
+  const [schoolNameDraft, setSchoolNameDraft] = useState("")
+  const [savingSchoolName, setSavingSchoolName] = useState(false)
   const [classes, setClasses] = useState<ClassData[]>([])
   const [classesLoadError, setClassesLoadError] = useState(false)
   const [students, setStudents] = useState<StudentData[]>([])
@@ -436,6 +439,51 @@ export default function SchoolDetailPage() {
       const data = await res.json()
       if (data.success) setSchool(data.data)
     } catch (err) { console.error(err) }
+  }
+
+  const startEditingSchoolName = () => {
+    if (!school) return
+    setSchoolNameDraft(school.name)
+    setEditingSchoolName(true)
+  }
+
+  const cancelEditingSchoolName = () => {
+    setSchoolNameDraft("")
+    setEditingSchoolName(false)
+  }
+
+  const saveSchoolName = async () => {
+    if (!school) return
+    const nextName = schoolNameDraft.trim()
+    if (nextName.length < 2) {
+      toast.error("School name must be at least 2 characters.")
+      return
+    }
+    if (nextName === school.name) {
+      cancelEditingSchoolName()
+      return
+    }
+
+    setSavingSchoolName(true)
+    try {
+      const res = await fetch(`/api/schools/${schoolId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nextName }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to update school name")
+      }
+      setSchool((prev) => prev ? { ...prev, name: data.data.name || nextName } : prev)
+      setEditingSchoolName(false)
+      setSchoolNameDraft("")
+      toast.success("School name updated.")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update school name")
+    } finally {
+      setSavingSchoolName(false)
+    }
   }
 
   const fetchSchoolTemplates = async () => {
@@ -2192,8 +2240,67 @@ export default function SchoolDetailPage() {
             <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #1B4F8A)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: 'white', flexShrink: 0 }}>
               {school.name.charAt(0)}
             </div>
-            <div style={{ minWidth: 0 }}>
-              <h1 style={{ fontSize: 'min(20px, 5vw)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{school.name}</h1>
+            <div style={{ minWidth: 0, flex: '1 1 auto' }}>
+              {editingSchoolName ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <input
+                    value={schoolNameDraft}
+                    onChange={(e) => setSchoolNameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveSchoolName()
+                      if (e.key === "Escape") cancelEditingSchoolName()
+                    }}
+                    autoFocus
+                    disabled={savingSchoolName}
+                    style={{
+                      height: 36,
+                      minWidth: 280,
+                      maxWidth: 'min(620px, 70vw)',
+                      padding: '0 10px',
+                      border: '1.5px solid #3b82f6',
+                      borderRadius: 8,
+                      fontSize: 18,
+                      fontWeight: 700,
+                      color: '#0f172a',
+                      outline: 'none',
+                    }}
+                  />
+                  <button className="btn btn-primary" onClick={saveSchoolName} disabled={savingSchoolName} style={{ fontSize: 12, padding: '8px 12px' }}>
+                    {savingSchoolName ? "Saving..." : "Save"}
+                  </button>
+                  <button className="btn btn-outline" onClick={cancelEditingSchoolName} disabled={savingSchoolName} style={{ fontSize: 12, padding: '8px 12px' }}>
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <h1 style={{ fontSize: 'min(20px, 5vw)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{school.name}</h1>
+                  <button
+                    type="button"
+                    onClick={startEditingSchoolName}
+                    title="Edit school name"
+                    aria-label="Edit school name"
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 8,
+                      border: '1px solid #e2e8f0',
+                      background: 'white',
+                      color: '#64748b',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                    </svg>
+                  </button>
+                </div>
+              )}
               <p style={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{school.address || school.contactEmail}</p>
             </div>
           </div>
