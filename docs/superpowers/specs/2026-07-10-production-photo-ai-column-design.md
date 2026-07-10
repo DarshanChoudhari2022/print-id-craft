@@ -13,7 +13,7 @@ Production returns `Internal Server Error` when saving teacher edits because the
    ALTER TABLE "Student" ADD COLUMN "photoAiRunCount" INTEGER NOT NULL DEFAULT 0;
    ```
 
-3. Change Vercel's build command to run `npm run db:migrate:deploy && npm run build`, ensuring future checked-in migrations are applied before application code that depends on them is deployed.
+3. Change Vercel's build command to run `DIRECT_URL=$DATABASE_URL npm run db:migrate:deploy && npm run build`. This reuses Vercel's existing database connection for the CLI without adding or copying another secret, while ensuring future checked-in migrations run before dependent application code.
 4. Narrow the teacher edit authorization lookup to select only `id` and `classId`. This avoids reading unrelated optional columns during rolling deployments and keeps authorization behavior unchanged.
 
 ## Safety
