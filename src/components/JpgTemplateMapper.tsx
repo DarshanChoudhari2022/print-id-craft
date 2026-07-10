@@ -3753,17 +3753,68 @@ export default function JpgTemplateMapper({
                     )}
                   </button>
                 ))}
-                {/* Native color picker for custom colors */}
-                <div style={{ position: "relative" }}>
+              </div>
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 10,
+                  border: "1px solid #d8b4fe",
+                  borderRadius: 10,
+                  background: "rgba(255,255,255,0.65)",
+                }}
+              >
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "#6d28d9",
+                    marginBottom: 8,
+                  }}
+                >
+                  Custom colour
+                </label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <input
                     type="color"
                     value={photoBgColor}
-                    onChange={(e) => setPhotoBgColor(e.target.value)}
+                    onChange={(e) => setPhotoBgColor(e.target.value.toUpperCase())}
                     style={{
-                      width: 36, height: 36, border: "2px solid #d1d5db",
-                      borderRadius: 8, cursor: "pointer", padding: 2,
+                      width: 44,
+                      height: 40,
+                      border: "2px solid #a855f7",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      padding: 2,
+                      flexShrink: 0,
                     }}
-                    title="Pick custom color"
+                    title="Pick custom student photo background colour"
+                  />
+                  <input
+                    type="text"
+                    value={photoBgColor.toUpperCase()}
+                    onChange={(e) => {
+                      const value = e.target.value.trim().toUpperCase()
+                      if (/^#[0-9A-F]{0,6}$/.test(value)) setPhotoBgColor(value)
+                    }}
+                    onBlur={(e) => {
+                      const value = e.target.value.trim().toUpperCase()
+                      if (!/^#[0-9A-F]{6}$/.test(value)) setPhotoBgColor("#FFFFFF")
+                    }}
+                    maxLength={7}
+                    style={{
+                      height: 40,
+                      width: 110,
+                      padding: "0 10px",
+                      border: "1.5px solid #d8b4fe",
+                      borderRadius: 8,
+                      color: "#581c87",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      fontFamily: "monospace",
+                      outline: "none",
+                    }}
+                    aria-label="Custom student photo background colour"
                   />
                 </div>
               </div>
