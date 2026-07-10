@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { DEFAULT_CARD_HEIGHT_MM, DEFAULT_CARD_WIDTH_MM } from "@/lib/card-dimensions"
 import { APP_BUILD_ID } from "@/lib/app-build-id"
-import { buildFormFields, buildTemplateFallbackFields, checkSubmissionStatus, type FormField } from "@/lib/submit-fields"
+import { buildFormFields, checkSubmissionStatus, type FormField } from "@/lib/submit-fields"
 import { computeSubmitFormRevision } from "@/lib/submit-draft"
 import { migrateTemplateToPt } from "@/lib/font-size-units"
 import { getFieldRole, inferFieldRole, resolveFieldValue, sortFieldsByRole } from "@/lib/field-resolver"
@@ -100,6 +100,10 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
     const rawMappings = (template?.fieldMappings || []) as any[]
     const rawFieldConf = (template?.fieldConfig || []) as any[]
 
+    // Keys/labels that students should not fill in (system-managed or auto-filled)
+    const FORM_SKIP_KEYS = new Set(["class", "classSection", "classGrade", "division", "photoUrl", "srNo", "photoId"])
+    const FORM_SKIP_LABELS = new Set(["class", "class-section", "photo url", "photourl", "no", "no.", "photo no", "photo no.", "photo id", "photo number"])
+
     // ─────────────────────────────────────────────────────────────────────
     // Form-field derivation. When the school already has student data,
     // we REBUILD the form's field list directly from the keys present
@@ -115,7 +119,29 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
     // For brand-new schools with no submissions yet we fall back to the
     // template's fieldConfig / fieldMappings.
     // ─────────────────────────────────────────────────────────────────────
-    const templateFallback: FormField[] = buildTemplateFallbackFields(template)
+    const templateFallback: FormField[] = []
+    if (rawFieldConf.length > 0) {
+      for (const f of rawFieldConf) {
+        if (FORM_SKIP_KEYS.has(f.key)) continue
+        if (FORM_SKIP_LABELS.has((f.label || "").toLowerCase().trim())) continue
+        const k = (f.key || "").toLowerCase()
+        const l = (f.label || "").toLowerCase()
+        let formType: string = f.type || "text"
+        if (k === "phone" || k.includes("mob") || l.includes("mobile") || l.includes("phone")) formType = "tel"
+        const role = f.role || inferFieldRole(f.key, f.label)
+        templateFallback.push({ key: f.key, label: f.label, type: formType, required: true, role })
+      }
+    } else if (rawMappings.length > 0) {
+      for (const m of rawMappings) {
+        if (m.type === "photo") continue
+        const k = (m.fieldKey || "").toLowerCase()
+        let formType = "text"
+        if (k.includes("phone") || k.includes("mob") || k === "mob_father" || k === "mother_phone") formType = "tel"
+        const role = inferFieldRole(m.fieldKey, m.label)
+        templateFallback.push({ key: m.fieldKey, label: m.label, type: formType, required: true, role })
+      }
+    }
+
     let resolvedFieldConfig: FormField[] = []
     try {
       resolvedFieldConfig = await buildFormFields(cls.school.id, templateFallback)

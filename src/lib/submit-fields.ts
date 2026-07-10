@@ -129,12 +129,6 @@ export function buildTemplateFallbackFields(template: any): FormField[] {
   const rawMappings = (template?.fieldMappings || []) as any[]
   const rawFieldConf = (template?.fieldConfig || []) as any[]
   const fallback: FormField[] = []
-  const optionalMappingKeys = new Set(
-    rawMappings
-      .filter((m) => m.type !== "photo" && m.required === false)
-      .map((m) => normalizeKey(m.fieldKey || ""))
-      .filter(Boolean)
-  )
 
   if (rawFieldConf.length > 0) {
     for (const f of rawFieldConf) {
@@ -144,8 +138,7 @@ export function buildTemplateFallbackFields(template: any): FormField[] {
       const l = (f.label || "").toLowerCase()
       let formType: string = f.type || "text"
       if (k === "phone" || k.includes("mob") || l.includes("mobile") || l.includes("phone")) formType = "tel"
-      const optionalFromMapping = optionalMappingKeys.has(normalizeKey(f.key || ""))
-      fallback.push({ key: f.key, label: f.label, type: formType, required: !optionalFromMapping && f.required !== false, role: f.role })
+      fallback.push({ key: f.key, label: f.label, type: formType, required: f.required !== false, role: f.role })
     }
   } else if (rawMappings.length > 0) {
     for (const m of rawMappings) {
@@ -153,7 +146,7 @@ export function buildTemplateFallbackFields(template: any): FormField[] {
       const k = (m.fieldKey || "").toLowerCase()
       let formType = "text"
       if (k.includes("phone") || k.includes("mob") || k === "mob_father" || k === "mother_phone") formType = "tel"
-      fallback.push({ key: m.fieldKey, label: m.label, type: formType, required: m.required !== false })
+      fallback.push({ key: m.fieldKey, label: m.label, type: formType, required: true })
     }
   }
 

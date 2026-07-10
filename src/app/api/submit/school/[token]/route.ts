@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { buildFormFields, buildTemplateFallbackFields, type FormField } from "@/lib/submit-fields"
+import { buildFormFields, type FormField } from "@/lib/submit-fields"
 import { migrateTemplateToPt } from "@/lib/font-size-units"
 import { getDefaultTemplate } from "@/lib/template-resolver"
 import { DEFAULT_CARD_HEIGHT_MM, DEFAULT_CARD_WIDTH_MM } from "@/lib/card-dimensions"
@@ -70,13 +70,38 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
     const rawFieldConf = (template?.fieldConfig || []) as any[]
 
     // Same skip rules as the per-class endpoint — keeps behaviour consistent.
+    const FORM_SKIP_KEYS = new Set(["class", "classSection", "classGrade", "division", "photoUrl", "srNo", "photoId"])
+    const FORM_SKIP_LABELS = new Set([
+      "class", "class-section", "photo url", "photourl",
+      "no", "no.", "photo no", "photo no.", "photo id", "photo number",
+    ])
+
     // Build the public form's field list directly from the most-frequent
     // keys in actual student data so labels match the admin table
     // verbatim ("GR NO", "MOBILE", "Address", "Name", "House", …) and
     // submissions slot into the same columns. Auto-managed keys are
     // filtered out by buildFormFields(). For brand-new schools we fall
     // back to the template's fieldConfig / fieldMappings.
-    const templateFallback: FormField[] = buildTemplateFallbackFields(template)
+    const templateFallback: FormField[] = []
+    if (rawFieldConf.length > 0) {
+      for (const f of rawFieldConf) {
+        if (FORM_SKIP_KEYS.has(f.key)) continue
+        if (FORM_SKIP_LABELS.has((f.label || "").toLowerCase().trim())) continue
+        const k = (f.key || "").toLowerCase()
+        const l = (f.label || "").toLowerCase()
+        let formType: string = f.type || "text"
+        if (k === "phone" || k.includes("mob") || l.includes("mobile") || l.includes("phone")) formType = "tel"
+        templateFallback.push({ key: f.key, label: f.label, type: formType, required: true })
+      }
+    } else if (rawMappings.length > 0) {
+      for (const m of rawMappings) {
+        if (m.type === "photo") continue
+        const k = (m.fieldKey || "").toLowerCase()
+        let formType = "text"
+        if (k.includes("phone") || k.includes("mob") || k === "mob_father" || k === "mother_phone") formType = "tel"
+        templateFallback.push({ key: m.fieldKey, label: m.label, type: formType, required: true })
+      }
+    }
 
     let resolvedFieldConfig: FormField[] = []
     try {
