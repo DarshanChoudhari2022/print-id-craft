@@ -40,6 +40,7 @@ type FieldMapping = {
   fieldKey: string
   label: string
   type: "text" | "photo" | "flag"
+  required?: boolean
   x: number // percentage from left
   y: number // percentage from top
   width: number // percentage of image width
@@ -389,6 +390,7 @@ export default function JpgTemplateMapper({
 
   // Custom field creation
   const [newFieldLabel, setNewFieldLabel] = useState("")
+  const [newOptionalFieldLabel, setNewOptionalFieldLabel] = useState("")
   const [newFieldType, setNewFieldType] = useState<"text" | "tel">("text")
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -531,6 +533,7 @@ export default function JpgTemplateMapper({
     label: string,
     type: "text" | "photo" | "flag" = "text",
     initialRadius?: number,
+    required = true,
   ) => {
     // Prevent duplicate fieldKeys
     if (mappings.find((m) => m.fieldKey === fieldKey)) {
@@ -547,6 +550,7 @@ export default function JpgTemplateMapper({
       fieldKey,
       label,
       type,
+      required,
       x: type === "photo" ? 5 : type === "flag" ? 75 : 40,
       y: type === "photo" ? 25 : type === "flag" ? 5 : 30 + mappings.filter((m) => m.type === "text").length * 6,
       width: type === "photo" ? (isCircularPhoto ? 20 : 18) : type === "flag" ? 12 : isPrefixedAddress ? 55 : 30,
@@ -577,6 +581,14 @@ export default function JpgTemplateMapper({
     const key = labelToKey(label)
     addFieldMapping(key, label, "text")
     setNewFieldLabel("")
+  }
+
+  const addOptionalCustomField = () => {
+    const label = newOptionalFieldLabel.trim()
+    if (!label) return
+    const key = labelToKey(label)
+    addFieldMapping(key, label, "text", undefined, false)
+    setNewOptionalFieldLabel("")
   }
 
   const removeFieldMapping = (id: string) => {
@@ -3582,6 +3594,68 @@ export default function JpgTemplateMapper({
                   fontSize: 13,
                   fontWeight: 600,
                   cursor: newFieldLabel.trim() ? "pointer" : "default",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                + Add
+              </button>
+            </div>
+          </div>
+
+          {/* Not Compulsory Custom Field Creator */}
+          <div
+            style={{
+              background: "white",
+              borderRadius: 14,
+              border: "1px solid #bbf7d0",
+              padding: 16,
+            }}
+          >
+            <h4
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#14532d",
+                marginBottom: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span style={{ fontSize: 16 }}>+</span> Add Not Compulsory Field
+            </h4>
+            <p style={{ fontSize: 11, color: "#64748b", marginBottom: 10 }}>
+              Use this for fields like PEN that parents may leave blank in the live form.
+            </p>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                type="text"
+                value={newOptionalFieldLabel}
+                onChange={(e) => setNewOptionalFieldLabel(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addOptionalCustomField()}
+                placeholder="e.g. PEN, Alternate No."
+                style={{
+                  flex: 1,
+                  height: 36,
+                  padding: "0 10px",
+                  border: "1.5px solid #bbf7d0",
+                  borderRadius: 8,
+                  fontSize: 13,
+                }}
+              />
+              <button
+                onClick={addOptionalCustomField}
+                disabled={!newOptionalFieldLabel.trim()}
+                style={{
+                  height: 36,
+                  padding: "0 14px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: newOptionalFieldLabel.trim() ? "#16a34a" : "#e2e8f0",
+                  color: newOptionalFieldLabel.trim() ? "white" : "#94a3b8",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: newOptionalFieldLabel.trim() ? "pointer" : "default",
                   whiteSpace: "nowrap",
                 }}
               >

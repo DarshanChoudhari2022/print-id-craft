@@ -45,7 +45,7 @@ function deriveFieldConfigFromMappings(fieldMappings: any[]): any[] {
         key: m.fieldKey,
         label: m.label,
         type: formType,
-        required: true,
+        required: m.required !== false,
         ...(role ? { role } : {}),
       }
     })

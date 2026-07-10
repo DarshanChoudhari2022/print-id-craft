@@ -11,7 +11,7 @@ import {
   sortFieldsByRole,
   isPrefixedAddressField,
 } from "@/lib/field-resolver"
-import { extractIdentityFields } from "@/lib/submit-fields"
+import { buildTemplateFallbackFields, extractIdentityFields } from "@/lib/submit-fields"
 import {
   DEFAULT_CLASS_OPTIONS,
   DIVISIONS,
@@ -317,6 +317,23 @@ describe("resolveFieldValue", () => {
       expect(id.father).toBe("Ramesh Patel")
       expect(id.roll).toBe("108")
       expect(id.dob).toBe("2016-03-15")
+    })
+  })
+
+  describe("buildTemplateFallbackFields", () => {
+    it("keeps PEN optional when the mapping is marked not required", () => {
+      const fields = buildTemplateFallbackFields({
+        fieldConfig: [
+          { key: "PEN", label: "PEN", type: "text", required: true },
+        ],
+        fieldMappings: [
+          { fieldKey: "PEN", label: "PEN", type: "text", required: false },
+        ],
+      })
+
+      expect(fields).toEqual([
+        expect.objectContaining({ key: "PEN", required: false }),
+      ])
     })
   })
 
