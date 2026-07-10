@@ -27,7 +27,6 @@ type StudentData = {
   originalPhotoUrl?: string
   originalPhotoPath?: string
   photoBgStatus?: string
-  photoAiRunCount?: number
   formData: any
   status: string
   flagNote: string | null
@@ -104,7 +103,6 @@ export default function TeacherDashboard() {
   const [editPhotoBgStatus, setEditPhotoBgStatus] = useState<PhotoBgStatus>("")
   const [showEditPhotoWorkflow, setShowEditPhotoWorkflow] = useState(false)
   const [updatingStatusIds, setUpdatingStatusIds] = useState<Set<string>>(new Set())
-  const [runningPhotoAiIds, setRunningPhotoAiIds] = useState<Set<string>>(new Set())
 
   // Add class state
   const [newClassName, setNewClassName] = useState("")
@@ -388,42 +386,6 @@ export default function TeacherDashboard() {
     setEditPhotoPreview(student.photoUrl || "")
     setEditPhotoBgStatus("")
     setShowEditPhotoWorkflow(false)
-  }
-
-  const applyUpdatedStudent = (updated: StudentData) => {
-    setData((current) => current ? {
-      ...current,
-      students: current.students.map((student) => student.id === updated.id ? { ...student, ...updated } : student),
-    } : current)
-    setSelectedStudent((current) => current?.id === updated.id ? { ...current, ...updated } : current)
-    setEditingStudent((current) => current?.id === updated.id ? { ...current, ...updated } : current)
-  }
-
-  const handleRunPhotoAi = async (student: StudentData) => {
-    if (!student.photoUrl && !student.photoPath) {
-      toast.error("No photo available for AI processing")
-      return
-    }
-    if (runningPhotoAiIds.has(student.id)) return
-    setRunningPhotoAiIds((current) => new Set(current).add(student.id))
-    try {
-      const res = await fetch(`/api/schools/${getSchoolId()}/students/${student.id}/run-photo-ai`, {
-        method: "POST",
-      })
-      const json = await res.json()
-      if (!res.ok || !json.success) throw new Error(json.error || "AI photo processing failed")
-      applyUpdatedStudent(json.data)
-      toast.success(`AI photo processed. Run count: ${json.data.photoAiRunCount || 1}`)
-    } catch (err: any) {
-      console.error(err)
-      toast.error(err?.message || "AI photo processing failed")
-    } finally {
-      setRunningPhotoAiIds((current) => {
-        const next = new Set(current)
-        next.delete(student.id)
-        return next
-      })
-    }
   }
 
   const handleDeleteStudent = async (sid: string) => {
@@ -901,7 +863,6 @@ export default function TeacherDashboard() {
                     const fd = s.formData as any
                     const studentName = fd.fullName || fd["Full Name"] || fd["Student Name"] || fd.Student_Name || fd.name || "—"
                     const statusBusy = updatingStatusIds.has(s.id)
-                    const photoAiBusy = runningPhotoAiIds.has(s.id)
                     return (
                       <tr key={s.id}>
                         <td>
@@ -942,15 +903,6 @@ export default function TeacherDashboard() {
                         <td style={{ textAlign: 'right' }}>
                           <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                             <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', color: '#6366f1', borderColor: '#6366f1' }} onClick={() => setSelectedStudent(s)}>👁</button>
-                            <button
-                              className="btn btn-outline"
-                              disabled={photoAiBusy || (!s.photoUrl && !s.photoPath)}
-                              style={{ fontSize: 10, padding: '4px 7px', color: '#7c3aed', borderColor: '#8b5cf6', opacity: photoAiBusy || (!s.photoUrl && !s.photoPath) ? 0.5 : 1, fontWeight: 700 }}
-                              onClick={() => handleRunPhotoAi(s)}
-                              title={`Run live-form API AI. AI runs: ${s.photoAiRunCount || 0}`}
-                            >
-                              {photoAiBusy ? "AI..." : `API AI ${s.photoAiRunCount || 0}`}
-                            </button>
                             {s.status !== "APPROVED" && s.status !== "PRINTED" && (
                               <button className="btn btn-outline" disabled={statusBusy} style={{ fontSize: 11, padding: '4px 8px', color: '#22c55e', borderColor: '#22c55e', opacity: statusBusy ? 0.5 : 1 }} onClick={() => handleApprove(s.id)}>✓</button>
                             )}
@@ -1312,14 +1264,6 @@ export default function TeacherDashboard() {
 
                   {/* Action Buttons */}
                   <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20, borderTop: '1px solid #e2e8f0', paddingTop: 16, flexWrap: 'wrap' }}>
-                    <button
-                      className="btn btn-outline"
-                      disabled={runningPhotoAiIds.has(selectedStudent.id) || (!selectedStudent.photoUrl && !selectedStudent.photoPath)}
-                      style={{ fontSize: 13, color: '#7c3aed', borderColor: '#8b5cf6', opacity: runningPhotoAiIds.has(selectedStudent.id) || (!selectedStudent.photoUrl && !selectedStudent.photoPath) ? 0.5 : 1 }}
-                      onClick={() => handleRunPhotoAi(selectedStudent)}
-                    >
-                      {runningPhotoAiIds.has(selectedStudent.id) ? "Running API AI..." : `Run API AI (${selectedStudent.photoAiRunCount || 0})`}
-                    </button>
                     {selectedStudent.status !== "APPROVED" && selectedStudent.status !== "PRINTED" && (
                       <button className="btn btn-primary" style={{ fontSize: 13, background: 'linear-gradient(135deg, #22c55e, #16a34a)' }} onClick={() => { handleApprove(selectedStudent.id); setSelectedStudent(null) }}>✓ Approve</button>
                     )}

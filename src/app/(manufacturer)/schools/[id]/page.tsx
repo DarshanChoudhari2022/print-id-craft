@@ -278,7 +278,6 @@ export default function SchoolDetailPage() {
   const [classes, setClasses] = useState<ClassData[]>([])
   const [classesLoadError, setClassesLoadError] = useState(false)
   const [students, setStudents] = useState<StudentData[]>([])
-  const [runningPhotoAiIds, setRunningPhotoAiIds] = useState<Set<string>>(new Set())
   const [batches, setBatches] = useState<BatchData[]>([])
   const [loading, setLoading] = useState(true)
   const [studentPage, setStudentPage] = useState(1)
@@ -1857,33 +1856,6 @@ export default function SchoolDetailPage() {
     })
   }, [])
 
-  const handleRunApiPhotoAi = async (student: StudentData) => {
-    if (!studentHasPhoto(student)) {
-      toast.error("No photo available for AI processing")
-      return
-    }
-    if (runningPhotoAiIds.has(student.id)) return
-    setRunningPhotoAiIds((current) => new Set(current).add(student.id))
-    try {
-      const res = await fetch(`/api/schools/${schoolId}/students/${student.id}/run-photo-ai`, {
-        method: "POST",
-      })
-      const data = await res.json()
-      if (!res.ok || !data.success) throw new Error(data.error || "AI photo processing failed")
-      applyUpdatedStudentInState(data.data)
-      toast.success(`API AI completed. Run count: ${data.data.photoAiRunCount || 1}`)
-    } catch (error: any) {
-      console.error(error)
-      toast.error(error?.message || "AI photo processing failed")
-    } finally {
-      setRunningPhotoAiIds((current) => {
-        const next = new Set(current)
-        next.delete(student.id)
-        return next
-      })
-    }
-  }
-
   const openReprocessModal = async () => {
     if (!classFilter) {
       toast.error("Select a section/class first, then process photos for that class.")
@@ -3344,7 +3316,6 @@ export default function SchoolDetailPage() {
                       const displayPhotoUrl = getStudentPhotoUrl(s)
                       const photoCacheKey = studentPhotoCacheKey(s)
                       const hasPhoto = studentHasPhoto(s)
-                      const apiAiBusy = runningPhotoAiIds.has(s.id)
                       const isNameColumn = (k: string) => ["fullName", "name", "studentName"].includes(k)
 
                       return (
@@ -3451,15 +3422,6 @@ export default function SchoolDetailPage() {
                                 title={hasPhoto ? "AI plain background" : "No photo uploaded yet"}
                               >
                                 AI
-                              </button>
-                              <button
-                                className="btn btn-outline"
-                                style={{ fontSize: 10, padding: '4px 7px', borderColor: '#a855f7', color: '#7e22ce', fontWeight: 700, minWidth: 44, opacity: apiAiBusy || !hasPhoto ? 0.5 : 1 }}
-                                onClick={() => handleRunApiPhotoAi(s)}
-                                disabled={apiAiBusy || !hasPhoto}
-                                title={hasPhoto ? `Run live-form API AI. AI runs: ${s.photoAiRunCount || 0}` : "No photo uploaded yet"}
-                              >
-                                {apiAiBusy ? "API..." : `API ${s.photoAiRunCount || 0}`}
                               </button>
                               {hasPhoto && (
                                 <a
@@ -4903,14 +4865,6 @@ export default function SchoolDetailPage() {
                     onClick={() => openBgEditorForStudent(selectedStudent)}
                   >
                     AI Background
-                  </button>
-                  <button
-                    className="btn btn-outline"
-                    style={{ fontSize: 13, borderColor: '#a855f7', color: '#7e22ce', opacity: runningPhotoAiIds.has(selectedStudent.id) || !studentHasPhoto(selectedStudent) ? 0.5 : 1 }}
-                    disabled={runningPhotoAiIds.has(selectedStudent.id) || !studentHasPhoto(selectedStudent)}
-                    onClick={() => handleRunApiPhotoAi(selectedStudent)}
-                  >
-                    {runningPhotoAiIds.has(selectedStudent.id) ? "Running API AI..." : `Run API AI (${selectedStudent.photoAiRunCount || 0})`}
                   </button>
                   {studentHasPhoto(selectedStudent) && (
                     <a

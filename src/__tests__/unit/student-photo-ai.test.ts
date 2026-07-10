@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   buildProcessedPhotoPath,
   contentTypeFromPhotoPath,
+  isApiAiProcessingModel,
   nextAiRunCount,
 } from "@/lib/student-photo-ai"
 
@@ -10,6 +11,12 @@ describe("student photo API AI helpers", () => {
     expect(nextAiRunCount(null)).toBe(1)
     expect(nextAiRunCount(undefined)).toBe(1)
     expect(nextAiRunCount(3)).toBe(4)
+  })
+
+  it("counts only manufacturer saves made with the API AI model", () => {
+    expect(isApiAiProcessingModel("removebg")).toBe(true)
+    expect(isApiAiProcessingModel("gemini")).toBe(false)
+    expect(isApiAiProcessingModel(null)).toBe(false)
   })
 
   it("builds a stable processed photo path for a run", () => {

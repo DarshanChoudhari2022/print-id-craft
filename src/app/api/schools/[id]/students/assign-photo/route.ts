@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { storageDownload, storageUpload, storagePublicUrl, ensureBucket } from "@/lib/storage"
 import { PHOTO_BG_STATUS, type PhotoBgStatus } from "@/lib/photo-bg-status"
+import { isApiAiProcessingModel } from "@/lib/student-photo-ai"
 import { withStudentPhotoUrl } from "@/lib/student-photo-url"
 
 const BUCKET = "student-photos"
@@ -21,6 +22,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     const studentId = formData.get("studentId") as string
     const photo = formData.get("photo") as File | null
     const photoBgStatusRaw = (formData.get("photoBgStatus") as string) || ""
+    const processingModel = formData.get("processingModel") as string | null
     const photoBgStatus: PhotoBgStatus | undefined =
       photoBgStatusRaw === PHOTO_BG_STATUS.REPROCESSED ? PHOTO_BG_STATUS.REPROCESSED : undefined
     const isAiProcessed = photoBgStatus === PHOTO_BG_STATUS.REPROCESSED
@@ -98,6 +100,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         originalPhotoUrl: originalUrl,
         originalPhotoPath: originalPath,
         ...(photoBgStatus ? { photoBgStatus } : {}),
+        ...(isApiAiProcessingModel(processingModel) ? { photoAiRunCount: { increment: 1 } } : {}),
       },
       select: {
         id: true,

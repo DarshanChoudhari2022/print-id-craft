@@ -22,7 +22,7 @@ import {
   scorePlainBackgroundFromMaskBlobs,
 } from "@/lib/photo-background"
 
-export type BgModelChoice = "gemini" | "isnet" | "birefnet" | "bria-rmbg2"
+export type BgModelChoice = "gemini" | "removebg" | "isnet" | "birefnet" | "bria-rmbg2"
 
 export const BG_WORK_MAX_DIM = 1024
 export const BG_JPEG_QUALITY = 0.88
@@ -141,12 +141,13 @@ async function removeBackgroundWithServerModel(blob: Blob, bgColor: string, mode
  */
 async function removeBackgroundWithServerGemini(
   blob: Blob,
-  bgColor: string
+  bgColor: string,
+  model: "gemini" | "removebg" = "gemini"
 ): Promise<string> {
   const form = new FormData()
   form.append("image", blob, "photo.jpg")
   form.append("bgColor", bgColor)
-  form.append("model", "gemini")
+  form.append("model", model)
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), SERVER_REMOVE_TIMEOUT_MS)
@@ -157,11 +158,13 @@ async function removeBackgroundWithServerGemini(
   }).finally(() => clearTimeout(timer))
 
   if (response.status === 503) {
-    throw new Error("Google AI is not configured — set GEMINI_API_KEY")
+    throw new Error(model === "removebg"
+      ? "API AI background removal is not configured"
+      : "Google AI is not configured — set GEMINI_API_KEY")
   }
   if (!response.ok) {
     const detail = await response.json().catch(() => ({ error: "" }))
-    throw new Error(detail?.error || "Google AI background removal failed")
+    throw new Error(detail?.error || `${model === "removebg" ? "API AI" : "Google AI"} background removal failed`)
   }
 
   // Gemini returns the fully composited image — convert to data URL
@@ -188,6 +191,13 @@ async function obtainBestAiResult(
   model: BgModelChoice,
   onProgress?: BgProcessProgress
 ): Promise<{ type: "composited"; dataUrl: string } | { type: "mask"; maskBlob: Blob }> {
+
+  if (model === "removebg") {
+    onProgress?.("Sending to API AI…", 18)
+    const dataUrl = await removeBackgroundWithServerGemini(workBlob, bgColor, "removebg")
+    onProgress?.("API AI processing complete", 90)
+    return { type: "composited", dataUrl }
+  }
 
   // ── Gemini: fully composited image from server ────────────────────────
   if (model === "gemini") {

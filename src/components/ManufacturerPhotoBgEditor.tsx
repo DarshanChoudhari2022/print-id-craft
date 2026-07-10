@@ -5,6 +5,7 @@ import { processPhotoBackgroundLocal, type BgModelChoice } from "@/lib/photo-bg-
 import { prepareStudentPhotoForUpload } from "@/lib/client-photo-upload"
 import { preloadBgRemovalModel } from "@/lib/photo-background"
 import { cacheBustPhotoUrl } from "@/lib/student-photo-url"
+import { MANUFACTURER_BG_MODEL_OPTIONS } from "@/lib/manufacturer-bg-models"
 
 type Props = {
   schoolId: string
@@ -16,29 +17,6 @@ type Props = {
   onSaved: (photoUrl: string, photoPath?: string, bgColor?: string, updatedAt?: string) => void
   onClose: () => void
 }
-
-const MODEL_OPTIONS: { value: BgModelChoice; label: string; desc: string }[] = [
-  {
-    value: "bria-rmbg2",
-    label: "✨ BRIA RMBG-2.0",
-    desc: "Ultra precision — best for hair, ponytails, and braids. Requires internet.",
-  },
-  {
-    value: "gemini",
-    label: "☁️ Google AI (Gemini)",
-    desc: "Premium quality — handles hair perfectly. Requires internet.",
-  },
-  {
-    value: "birefnet",
-    label: "☁️ Cloud AI (BiRefNet)",
-    desc: "Alternative quality — fast cloud processing. Requires internet.",
-  },
-  {
-    value: "isnet",
-    label: "💻 Local ISNet",
-    desc: "Runs on this PC. First use downloads ~170MB. Works offline.",
-  },
-]
 
 export default function ManufacturerPhotoBgEditor({
   schoolId,
@@ -94,6 +72,7 @@ export default function ManufacturerPhotoBgEditor({
       fd.append("photo", file)
       fd.append("studentId", studentId)
       fd.append("photoBgStatus", "REPROCESSED")
+      fd.append("processingModel", selectedModel)
       const res = await fetch(`/api/schools/${schoolId}/students/assign-photo`, {
         method: "POST",
         body: fd,
@@ -108,7 +87,7 @@ export default function ManufacturerPhotoBgEditor({
     } finally {
       setSaving(false)
     }
-  }, [bgColor, onBgColorCommit, onSaved, schoolId, studentId])
+  }, [bgColor, onBgColorCommit, onSaved, schoolId, selectedModel, studentId])
 
   const runProcessing = useCallback(async () => {
     if (!photoUrl) return
@@ -185,7 +164,7 @@ export default function ManufacturerPhotoBgEditor({
     await saveProcessedPhoto(processedUrl)
   }
 
-  const modelInfo = MODEL_OPTIONS.find((m) => m.value === selectedModel)
+  const modelInfo = MANUFACTURER_BG_MODEL_OPTIONS.find((m) => m.value === selectedModel)
 
   return (
     <div
@@ -219,7 +198,7 @@ export default function ManufacturerPhotoBgEditor({
           <div style={{
             display: "flex", gap: 8, marginBottom: 16,
           }}>
-            {MODEL_OPTIONS.map((opt) => (
+            {MANUFACTURER_BG_MODEL_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => { setSelectedModel(opt.value); setProcessedUrl(null); setMaskUrl(null); setError("") }}

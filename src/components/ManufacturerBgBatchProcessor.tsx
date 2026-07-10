@@ -5,6 +5,7 @@ import { processPhotoBackgroundLocal, type BgModelChoice } from "@/lib/photo-bg-
 import { prepareStudentPhotoForUpload } from "@/lib/client-photo-upload"
 import { preloadBgRemovalModel } from "@/lib/photo-background"
 import { cacheBustPhotoUrl } from "@/lib/student-photo-url"
+import { MANUFACTURER_BG_MODEL_OPTIONS } from "@/lib/manufacturer-bg-models"
 
 export type BatchStudent = {
   id: string
@@ -23,29 +24,6 @@ type Props = {
   onComplete: (stats: { processed: number; failed: number }) => void
   onClose: () => void
 }
-
-const MODEL_OPTIONS: { value: BgModelChoice; label: string; desc: string }[] = [
-  {
-    value: "bria-rmbg2",
-    label: "✨ BRIA RMBG-2.0",
-    desc: "Ultra precision — best for hair, ponytails, and braids. Requires internet.",
-  },
-  {
-    value: "gemini",
-    label: "☁️ Google AI (Gemini)",
-    desc: "Premium quality — handles hair perfectly. Requires internet.",
-  },
-  {
-    value: "birefnet",
-    label: "☁️ Cloud AI (BiRefNet)",
-    desc: "Alternative quality — fast cloud processing. Requires internet.",
-  },
-  {
-    value: "isnet",
-    label: "💻 Local ISNet",
-    desc: "Runs on this PC. First use downloads ~170MB. Works offline.",
-  },
-]
 
 export default function ManufacturerBgBatchProcessor({
   schoolId,
@@ -95,6 +73,7 @@ export default function ManufacturerBgBatchProcessor({
       fd.append("photo", file)
       fd.append("studentId", student.id)
       fd.append("photoBgStatus", "REPROCESSED")
+      fd.append("processingModel", selectedModel)
       const res = await fetch(`/api/schools/${schoolId}/students/assign-photo`, {
         method: "POST",
         body: fd,
@@ -165,12 +144,18 @@ export default function ManufacturerBgBatchProcessor({
 
   const total = students.length
   const overallPct = total > 0 ? Math.round(((currentIdx + (itemProgress / 100)) / total) * 100) : 0
+  const selectedModelInfo = MANUFACTURER_BG_MODEL_OPTIONS.find((option) => option.value === selectedModel)
+  const modelDescription = selectedModel === "isnet"
+    ? (modelReady
+        ? "Local AI model ready on this PC. Processing runs entirely in your browser."
+        : "Downloading AI model on first use (~170MB, best quality). Cached for future runs.")
+    : selectedModelInfo?.desc
 
   return (
     <div style={{ padding: "8px 0" }}>
       {/* ─── Model selector ─────────────────────────────────────────── */}
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        {MODEL_OPTIONS.map((opt) => (
+        {MANUFACTURER_BG_MODEL_OPTIONS.map((opt) => (
           <button
             key={opt.value}
             onClick={() => setSelectedModel(opt.value)}
@@ -201,22 +186,14 @@ export default function ManufacturerBgBatchProcessor({
 
       <div style={{
         padding: 14,
-        background: selectedModel === "bria-rmbg2" ? "#fdf4ff" : selectedModel === "gemini" ? "#faf5ff" : selectedModel === "birefnet" ? "#eff6ff" : (modelReady ? "#f0fdf4" : "#fffbeb"),
+        background: selectedModel === "removebg" ? "#fff7ed" : selectedModel === "bria-rmbg2" ? "#fdf4ff" : selectedModel === "gemini" ? "#faf5ff" : selectedModel === "birefnet" ? "#eff6ff" : (modelReady ? "#f0fdf4" : "#fffbeb"),
         borderRadius: 10,
-        border: `1px solid ${selectedModel === "bria-rmbg2" ? "#f5d0fe" : selectedModel === "gemini" ? "#e9d5ff" : selectedModel === "birefnet" ? "#bfdbfe" : (modelReady ? "#bbf7d0" : "#fde68a")}`,
+        border: `1px solid ${selectedModel === "removebg" ? "#fed7aa" : selectedModel === "bria-rmbg2" ? "#f5d0fe" : selectedModel === "gemini" ? "#e9d5ff" : selectedModel === "birefnet" ? "#bfdbfe" : (modelReady ? "#bbf7d0" : "#fde68a")}`,
         fontSize: 12,
-        color: selectedModel === "bria-rmbg2" ? "#86198f" : selectedModel === "gemini" ? "#701a75" : selectedModel === "birefnet" ? "#1e40af" : (modelReady ? "#166534" : "#92400e"),
+        color: selectedModel === "removebg" ? "#9a3412" : selectedModel === "bria-rmbg2" ? "#86198f" : selectedModel === "gemini" ? "#701a75" : selectedModel === "birefnet" ? "#1e40af" : (modelReady ? "#166534" : "#92400e"),
         marginBottom: 16, lineHeight: 1.5,
       }}>
-        {selectedModel === "bria-rmbg2"
-          ? "Using BRIA RMBG-2.0 for ultra-high precision cutout matting. Photos are sent to the server for processing."
-          : selectedModel === "gemini"
-            ? "Using Google Gemini AI for premium quality. Photos are sent to the server for processing."
-            : selectedModel === "birefnet"
-              ? "Using Cloud AI (BiRefNet) for cloud processing. Photos are sent to the server."
-              : modelReady
-                ? "Local AI model ready on this PC. Processing runs entirely in your browser."
-                : "Downloading AI model on first use (~170MB, best quality). Cached for future runs."}
+        {modelDescription}
         {" "}Each processed photo is saved automatically.
       </div>
 
