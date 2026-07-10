@@ -11,7 +11,7 @@ import {
   sortFieldsByRole,
   isPrefixedAddressField,
 } from "@/lib/field-resolver"
-import { buildTemplateFallbackFields, extractIdentityFields } from "@/lib/submit-fields"
+import { buildFormFields, buildTemplateFallbackFields, extractIdentityFields } from "@/lib/submit-fields"
 import {
   DEFAULT_CLASS_OPTIONS,
   DIVISIONS,
@@ -19,6 +19,7 @@ import {
   validateAndBuildClassFields,
   templateHasDivisionPlaceholder,
 } from "@/lib/section-class"
+import { prisma } from "@/lib/prisma"
 
 /* ══════════════════════════════════════════════════════════════
  * normalizeKey — key normalization
@@ -332,6 +333,38 @@ describe("resolveFieldValue", () => {
       expect(fields).toEqual([
         expect.objectContaining({ key: "adhar_no", required: false }),
         expect.objectContaining({ key: "name", required: true }),
+      ])
+    })
+
+    it("keeps optional template fields optional when existing student data contains the same key", async () => {
+      ;(prisma.student.findMany as any).mockResolvedValue([
+        { formData: { PEN: "12345", Name: "Asha" } },
+        { formData: { PEN: "67890", Name: "Neha" } },
+      ])
+
+      const fields = await buildFormFields("school-1", [
+        { key: "PEN", label: "PEN", type: "text", required: false },
+        { key: "Name", label: "Name", type: "text", required: true },
+      ])
+
+      expect(fields).toEqual([
+        expect.objectContaining({ key: "PEN", required: false }),
+        expect.objectContaining({ key: "Name", required: true }),
+      ])
+    })
+
+    it("lets optional field mappings override stale required fieldConfig entries", () => {
+      const fields = buildTemplateFallbackFields({
+        fieldConfig: [
+          { key: "PEN", label: "PEN", type: "text", required: true },
+        ],
+        fieldMappings: [
+          { fieldKey: "PEN", label: "PEN", type: "text", required: false },
+        ],
+      })
+
+      expect(fields).toEqual([
+        expect.objectContaining({ key: "PEN", required: false }),
       ])
     })
   })
