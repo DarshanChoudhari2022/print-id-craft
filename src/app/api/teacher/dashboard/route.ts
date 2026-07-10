@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getDefaultTemplate } from "@/lib/template-resolver"
 import { withStudentPhotoUrl } from "@/lib/student-photo-url"
+import { runWithMissingColumnFallback } from "@/lib/prisma-query-compat"
 
 export const dynamic = "force-dynamic"
 
@@ -75,28 +76,54 @@ export async function GET(req: NextRequest) {
         orderBy: { name: "asc" },
       }), []),
       // Paginated student list — only select needed fields
-      safeQuery(() => prisma.student.findMany({
-        where: studentWhere,
-        select: {
-          id: true,
-          serialNumber: true,
-          photoUrl: true,
-          photoPath: true,
-          originalPhotoUrl: true,
-          originalPhotoPath: true,
-          photoBgStatus: true,
-          photoAiRunCount: true,
-          formData: true,
-          status: true,
-          flagNote: true,
-          teacherComment: true,
-          submittedAt: true,
-          class: { select: { name: true, linkToken: true } },
+      runWithMissingColumnFallback(
+        () => prisma.student.findMany({
+          where: studentWhere,
+          select: {
+            id: true,
+            serialNumber: true,
+            photoUrl: true,
+            photoPath: true,
+            originalPhotoUrl: true,
+            originalPhotoPath: true,
+            photoBgStatus: true,
+            photoAiRunCount: true,
+            formData: true,
+            status: true,
+            flagNote: true,
+            teacherComment: true,
+            submittedAt: true,
+            class: { select: { name: true, linkToken: true } },
+          },
+          orderBy: [{ submittedAt: "desc" }, { id: "asc" }],
+          take: limit,
+          skip,
+        }),
+        async () => {
+          const compatibleStudents = await prisma.student.findMany({
+            where: studentWhere,
+            select: {
+              id: true,
+              serialNumber: true,
+              photoUrl: true,
+              photoPath: true,
+              originalPhotoUrl: true,
+              originalPhotoPath: true,
+              photoBgStatus: true,
+              formData: true,
+              status: true,
+              flagNote: true,
+              teacherComment: true,
+              submittedAt: true,
+              class: { select: { name: true, linkToken: true } },
+            },
+            orderBy: [{ submittedAt: "desc" }, { id: "asc" }],
+            take: limit,
+            skip,
+          })
+          return compatibleStudents.map((student) => ({ ...student, photoAiRunCount: 0 }))
         },
-        orderBy: [{ submittedAt: "desc" }, { id: "asc" }],
-        take: limit,
-        skip,
-      }), []),
+      ),
       // Total count for pagination
       safeQuery(() => prisma.student.count({ where: studentWhere }), 0),
       // DB-level aggregation for stats

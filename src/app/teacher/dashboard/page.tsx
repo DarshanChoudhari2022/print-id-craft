@@ -883,7 +883,6 @@ export default function TeacherDashboard() {
                     <th>Name</th>
                     <th>Section</th>
                     <th>Class</th>
-                    <th>Division</th>
                     <th>Status</th>
                     <th>Comment</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
@@ -908,7 +907,6 @@ export default function TeacherDashboard() {
                         <td style={{ fontWeight: 500 }}>{studentName}</td>
                         <td>{s.class?.name || "—"}</td>
                         <td>{getStudentGrade(s) || "—"}</td>
-                        <td>{getStudentDivision(s) || "—"}</td>
                         <td>
                           <span className={`status-badge ${
                             s.status === 'APPROVED' ? 'status-approved' :
@@ -968,7 +966,7 @@ export default function TeacherDashboard() {
                     )
                   })}
                   {filtered.length === 0 && (
-                    <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No students found</td></tr>
+                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No students found</td></tr>
                   )}
                 </tbody>
               </table>

@@ -47,6 +47,17 @@ describe("teacher student view helpers", () => {
     expect(filtered.map((student) => student.id)).toEqual(["s2"])
   })
 
+  it("keeps every submitted record visible when filters are clear", () => {
+    const filtered = filterTeacherStudents(students, {
+      section: "",
+      grade: "",
+      division: "",
+      status: "",
+    })
+
+    expect(filtered).toHaveLength(students.length)
+  })
+
   it("updates one student and keeps status counters correct without a full refetch", () => {
     const updated = applyStatusToStudents(students, "s1", "APPROVED")
     const stats = statusStatsAfterChange(
