@@ -40,6 +40,7 @@ type FieldMapping = {
   fieldKey: string
   label: string
   type: "text" | "photo" | "flag"
+  required?: boolean
   x: number // percentage from left
   y: number // percentage from top
   width: number // percentage of image width
@@ -531,6 +532,7 @@ export default function JpgTemplateMapper({
     label: string,
     type: "text" | "photo" | "flag" = "text",
     initialRadius?: number,
+    required = true,
   ) => {
     // Prevent duplicate fieldKeys
     if (mappings.find((m) => m.fieldKey === fieldKey)) {
@@ -547,6 +549,7 @@ export default function JpgTemplateMapper({
       fieldKey,
       label,
       type,
+      required,
       x: type === "photo" ? 5 : type === "flag" ? 75 : 40,
       y: type === "photo" ? 25 : type === "flag" ? 5 : 30 + mappings.filter((m) => m.type === "text").length * 6,
       width: type === "photo" ? (isCircularPhoto ? 20 : 18) : type === "flag" ? 12 : isPrefixedAddress ? 55 : 30,
@@ -575,7 +578,7 @@ export default function JpgTemplateMapper({
     const label = newFieldLabel.trim()
     if (!label) return
     const key = labelToKey(label)
-    addFieldMapping(key, label, "text")
+    addFieldMapping(key, label, "text", undefined, false)
     setNewFieldLabel("")
   }
 

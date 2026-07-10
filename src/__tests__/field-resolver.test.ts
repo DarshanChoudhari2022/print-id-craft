@@ -11,7 +11,7 @@ import {
   sortFieldsByRole,
   isPrefixedAddressField,
 } from "@/lib/field-resolver"
-import { extractIdentityFields } from "@/lib/submit-fields"
+import { buildTemplateFallbackFields, extractIdentityFields } from "@/lib/submit-fields"
 import {
   DEFAULT_CLASS_OPTIONS,
   DIVISIONS,
@@ -317,6 +317,22 @@ describe("resolveFieldValue", () => {
       expect(id.father).toBe("Ramesh Patel")
       expect(id.roll).toBe("108")
       expect(id.dob).toBe("2016-03-15")
+    })
+  })
+
+  describe("buildTemplateFallbackFields", () => {
+    it("keeps custom template fields optional when fieldConfig marks them not required", () => {
+      const fields = buildTemplateFallbackFields({
+        fieldConfig: [
+          { key: "adhar_no", label: "Adhar No.", type: "text", required: false },
+          { key: "name", label: "Student Name", type: "text", required: true },
+        ],
+      })
+
+      expect(fields).toEqual([
+        expect.objectContaining({ key: "adhar_no", required: false }),
+        expect.objectContaining({ key: "name", required: true }),
+      ])
     })
   })
 

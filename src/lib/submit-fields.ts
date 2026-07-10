@@ -138,7 +138,7 @@ export function buildTemplateFallbackFields(template: any): FormField[] {
       const l = (f.label || "").toLowerCase()
       let formType: string = f.type || "text"
       if (k === "phone" || k.includes("mob") || l.includes("mobile") || l.includes("phone")) formType = "tel"
-      fallback.push({ key: f.key, label: f.label, type: formType, required: true, role: f.role })
+      fallback.push({ key: f.key, label: f.label, type: formType, required: f.required !== false, role: f.role })
     }
   } else if (rawMappings.length > 0) {
     for (const m of rawMappings) {
