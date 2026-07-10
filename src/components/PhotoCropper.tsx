@@ -10,6 +10,8 @@ type Props = {
   onCropped: (croppedDataUrl: string) => void
   /** Called when the user cancels / wants the un-cropped image. */
   onCancel: () => void
+  /** Text shown on the cancel action. */
+  cancelLabel?: string
 }
 
 type Rect = { x: number; y: number; w: number; h: number }
@@ -66,6 +68,7 @@ export default function PhotoCropper({
   aspectRatio = 3 / 4,
   onCropped,
   onCancel,
+  cancelLabel = "Skip Cropping",
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
@@ -446,7 +449,7 @@ export default function PhotoCropper({
 
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
         <button type="button" onClick={onCancel} style={secondaryBtnStyle}>
-          Skip Cropping
+          {cancelLabel}
         </button>
         <button type="button" onClick={handleConfirm} style={primaryBtnStyle}>
           ✓ Apply Crop

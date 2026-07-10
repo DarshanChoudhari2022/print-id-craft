@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { buildStudentIndexData } from "@/lib/student-index"
 import { withStudentPhotoUrl } from "@/lib/student-photo-url"
+import { updateTeacherStudentWithPhotoAiFallback } from "@/lib/teacher-student-edit"
+import { PHOTO_BG_STATUS, type PhotoBgStatus } from "@/lib/photo-bg-status"
 
 export const dynamic = "force-dynamic"
 
@@ -22,7 +24,7 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
     }
 
     const studentId = params.id
-    const { formData, photoUrl, photoPath } = await req.json()
+    const { formData, photoUrl, photoPath, photoBgStatus = "" } = await req.json()
 
     if (!formData || typeof formData !== "object") {
       return NextResponse.json({ error: "Invalid form data" }, { status: 400 })
@@ -35,6 +37,16 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
       }
       if (!photoPath.startsWith(`students/${schoolId}/`)) {
         return NextResponse.json({ error: "Photo path is not allowed for this school" }, { status: 400 })
+      }
+      const allowedPhotoBgStatuses = new Set<PhotoBgStatus>([
+        "",
+        PHOTO_BG_STATUS.PLAIN,
+        PHOTO_BG_STATUS.PROCESSED,
+        PHOTO_BG_STATUS.SKIPPED,
+        PHOTO_BG_STATUS.REPROCESSED,
+      ])
+      if (!allowedPhotoBgStatuses.has(photoBgStatus as PhotoBgStatus)) {
+        return NextResponse.json({ error: "Invalid photo background status" }, { status: 400 })
       }
     }
 
@@ -49,37 +61,46 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
       return NextResponse.json({ error: "Student not found or not authorized" }, { status: 404 })
     }
 
-    const updated = await prisma.student.update({
-      where: { id: studentId },
-      data: {
-        formData,
-        ...(hasPhotoUpdate ? {
-          photoUrl,
-          photoPath,
-          originalPhotoUrl: photoUrl,
-          originalPhotoPath: photoPath,
-          photoBgStatus: "",
-        } : {}),
-        ...buildStudentIndexData(formData, student.classId),
-      },
-      select: {
-        id: true,
-        serialNumber: true,
-        photoUrl: true,
-        photoPath: true,
-        originalPhotoUrl: true,
-        originalPhotoPath: true,
-        photoBgStatus: true,
-        photoAiRunCount: true,
-        formData: true,
-        status: true,
-        flagNote: true,
-        teacherComment: true,
-        submittedAt: true,
-        updatedAt: true,
-        class: { select: { name: true, linkToken: true } },
-      },
-    })
+    const updateData = {
+      formData,
+      ...(hasPhotoUpdate ? {
+        photoUrl,
+        photoPath,
+        originalPhotoUrl: photoUrl,
+        originalPhotoPath: photoPath,
+        photoBgStatus: photoBgStatus as PhotoBgStatus,
+      } : {}),
+      ...buildStudentIndexData(formData, student.classId),
+    }
+    const compatibleSelect = {
+      id: true,
+      serialNumber: true,
+      photoUrl: true,
+      photoPath: true,
+      originalPhotoUrl: true,
+      originalPhotoPath: true,
+      photoBgStatus: true,
+      formData: true,
+      status: true,
+      flagNote: true,
+      teacherComment: true,
+      submittedAt: true,
+      updatedAt: true,
+      class: { select: { name: true, linkToken: true } },
+    } as const
+
+    const updated = await updateTeacherStudentWithPhotoAiFallback(
+      () => prisma.student.update({
+        where: { id: studentId },
+        data: updateData,
+        select: { ...compatibleSelect, photoAiRunCount: true },
+      }),
+      () => prisma.student.update({
+        where: { id: studentId },
+        data: updateData,
+        select: compatibleSelect,
+      }),
+    )
 
     return NextResponse.json({ success: true, data: withStudentPhotoUrl(updated) })
   } catch (error) {

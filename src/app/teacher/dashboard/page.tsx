@@ -4,6 +4,8 @@ import { useSession, signOut } from "next-auth/react"
 import dynamic from "next/dynamic"
 import { toast } from "sonner"
 import { DEFAULT_CARD_HEIGHT_MM, DEFAULT_CARD_WIDTH_MM } from "@/lib/card-dimensions"
+import { prepareStudentPhotoForUpload } from "@/lib/client-photo-upload"
+import type { PhotoBgStatus } from "@/lib/photo-bg-status"
 import {
   applyStatusToStudents,
   filterTeacherStudents,
@@ -15,6 +17,7 @@ import {
 const IDCardPreview = dynamic(() => import("@/components/IDCardPreview"), { ssr: false })
 const JpgCardPreview = dynamic(() => import("@/components/JpgCardPreview"), { ssr: false })
 const JpgTemplateMapper = dynamic(() => import("@/components/JpgTemplateMapper"), { ssr: false })
+const TeacherPhotoEditor = dynamic(() => import("@/components/TeacherPhotoEditor"), { ssr: false })
 
 type StudentData = {
   id: string
@@ -96,8 +99,10 @@ export default function TeacherDashboard() {
   const [editingStudent, setEditingStudent] = useState<StudentData | null>(null)
   const [editFormData, setEditFormData] = useState<Record<string, string>>({})
   const [savingEdit, setSavingEdit] = useState(false)
-  const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null)
+  const [editPhotoDataUrl, setEditPhotoDataUrl] = useState("")
   const [editPhotoPreview, setEditPhotoPreview] = useState("")
+  const [editPhotoBgStatus, setEditPhotoBgStatus] = useState<PhotoBgStatus>("")
+  const [showEditPhotoWorkflow, setShowEditPhotoWorkflow] = useState(false)
   const [updatingStatusIds, setUpdatingStatusIds] = useState<Set<string>>(new Set())
   const [runningPhotoAiIds, setRunningPhotoAiIds] = useState<Set<string>>(new Set())
 
@@ -335,9 +340,12 @@ export default function TeacherDashboard() {
     setSavingEdit(true)
     try {
       let uploadedPhoto: { photoUrl?: string; photoPath?: string } = {}
-      if (editPhotoFile) {
+      if (editPhotoDataUrl) {
+        const uploadFile = await prepareStudentPhotoForUpload(editPhotoDataUrl, {
+          fileName: `teacher-photo-${editingStudent.id}.jpg`,
+        })
         const uploadData = new FormData()
-        uploadData.append("file", editPhotoFile)
+        uploadData.append("file", uploadFile)
         uploadData.append("folder", `students/${getSchoolId()}`)
         const uploadRes = await fetch("/api/upload", { method: "POST", body: uploadData })
         const uploadJson = await uploadRes.json()
@@ -350,15 +358,21 @@ export default function TeacherDashboard() {
       const res = await fetch(`/api/teacher/students/${editingStudent.id}/edit`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formData: editFormData, ...uploadedPhoto }),
+        body: JSON.stringify({
+          formData: editFormData,
+          ...uploadedPhoto,
+          ...(editPhotoDataUrl ? { photoBgStatus: editPhotoBgStatus } : {}),
+        }),
       })
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.error || "Failed to save changes")
-      toast.success(editPhotoFile ? "Student data and photo updated" : "Student data updated")
+      toast.success(editPhotoDataUrl ? "Student data and photo updated" : "Student data updated")
       setEditingStudent(null)
       setEditFormData({})
-      setEditPhotoFile(null)
+      setEditPhotoDataUrl("")
       setEditPhotoPreview("")
+      setEditPhotoBgStatus("")
+      setShowEditPhotoWorkflow(false)
       fetchData()
     } catch (err: any) {
       console.error(err)
@@ -370,16 +384,10 @@ export default function TeacherDashboard() {
   const beginEditStudent = (student: StudentData) => {
     setEditingStudent(student)
     setEditFormData({ ...(student.formData as Record<string, string>) })
-    setEditPhotoFile(null)
+    setEditPhotoDataUrl("")
     setEditPhotoPreview(student.photoUrl || "")
-  }
-
-  const handleEditPhotoChange = (file: File | null) => {
-    setEditPhotoFile(file)
-    if (editPhotoPreview && editPhotoPreview.startsWith("blob:")) {
-      URL.revokeObjectURL(editPhotoPreview)
-    }
-    setEditPhotoPreview(file ? URL.createObjectURL(file) : editingStudent?.photoUrl || "")
+    setEditPhotoBgStatus("")
+    setShowEditPhotoWorkflow(false)
   }
 
   const applyUpdatedStudent = (updated: StudentData) => {
@@ -1142,15 +1150,29 @@ export default function TeacherDashboard() {
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>Update Photo</label>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={e => handleEditPhotoChange(e.target.files?.[0] || null)}
-                    style={{ width: '100%', fontSize: 12 }}
-                  />
-                  {editPhotoFile && <div style={{ fontSize: 11, color: '#16a34a', marginTop: 5 }}>New photo selected: {editPhotoFile.name}</div>}
+                  <button type="button" className="btn btn-outline" onClick={() => setShowEditPhotoWorkflow(true)} style={{ fontSize: 12, padding: '7px 12px' }}>
+                    📷 Change Photo
+                  </button>
+                  {editPhotoDataUrl && (
+                    <div style={{ fontSize: 11, color: '#16a34a', marginTop: 6, fontWeight: 600 }}>
+                      ✓ New cropped photo ready{editPhotoBgStatus === "PROCESSED" ? " with AI-cleaned background" : ""}
+                    </div>
+                  )}
                 </div>
               </div>
+              {showEditPhotoWorkflow && (
+                <TeacherPhotoEditor
+                  currentPhotoUrl={editingStudent.photoUrl}
+                  backgroundColor={(templateData as any)?.photoBgColor || "#FFFFFF"}
+                  onCancel={() => setShowEditPhotoWorkflow(false)}
+                  onReady={(dataUrl, status) => {
+                    setEditPhotoDataUrl(dataUrl)
+                    setEditPhotoPreview(dataUrl)
+                    setEditPhotoBgStatus(status)
+                    setShowEditPhotoWorkflow(false)
+                  }}
+                />
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {Object.entries(editFormData).map(([key, value]) => (
                   <div key={key} className="form-group">
