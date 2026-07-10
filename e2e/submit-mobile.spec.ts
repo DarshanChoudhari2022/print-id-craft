@@ -28,10 +28,10 @@ async function fillAndReviewForm(page: import("@playwright/test").Page) {
   await page.getByPlaceholder("e.g. House No 12, MG Road, Kothrud, Pune, 411038").fill(
     "Flat 9 Lotus Residency Kothrud Pune 411038"
   )
-  await page.locator('form button[type="submit"]').click()
+  await page.getByRole("button", { name: /Next: Upload Photo/ }).click()
 
   const photo = await studentPhotoFixture()
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.locator('input[accept="image/jpeg,image/png,image/webp"]').setInputFiles({
     name: "student-photo.jpg",
     mimeType: "image/jpeg",
     buffer: photo,
@@ -43,7 +43,8 @@ async function fillAndReviewForm(page: import("@playwright/test").Page) {
   if (await forceButton.isVisible()) await forceButton.click()
   await cropButton.click()
 
-  await expect(page.getByText("Card Preview")).toBeVisible()
+  await page.getByRole("button", { name: /Keep Prepared Photo/ }).click()
+  await expect(page.getByText("Card Preview", { exact: true })).toBeVisible()
 }
 
 test.beforeEach(async ({ page }) => {
@@ -92,6 +93,13 @@ test.beforeEach(async ({ page }) => {
         url: "https://example.supabase.co/storage/v1/object/public/student-photos/students/school_e2e/e2e.jpg",
         path: "students/school_e2e/e2e.jpg",
       }),
+    })
+  })
+
+  await page.route("**/api/photo-bg/remove", async (route) => {
+    await route.fulfill({
+      contentType: "image/jpeg",
+      body: await studentPhotoFixture(),
     })
   })
 

@@ -39,6 +39,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         photoUrl: true,
         originalPhotoPath: true,
         originalPhotoUrl: true,
+        photoAiRunCount: true,
       },
     })
 
@@ -104,6 +105,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         photoUrl: true,
         originalPhotoPath: true,
         originalPhotoUrl: true,
+        photoAiRunCount: true,
         updatedAt: true,
         serialNumber: true,
         formData: true,
@@ -123,6 +125,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         photoPath: updated.photoPath,
         originalPhotoUrl: updated.originalPhotoUrl,
         originalPhotoPath: updated.originalPhotoPath,
+        photoAiRunCount: updated.photoAiRunCount,
         updatedAt: updated.updatedAt.toISOString(),
       },
     })

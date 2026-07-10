@@ -142,6 +142,7 @@ model Student {
   originalPhotoPath    String        @default("")
   // PLAIN | PROCESSED | SKIPPED | REPROCESSED — ID photo background pipeline
   photoBgStatus        String        @default("")
+  photoAiRunCount      Int           @default(0)
   qrCodeUrl            String?
   status               StudentStatus @default(SUBMITTED)
   flagNote             String?

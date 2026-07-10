@@ -4,6 +4,13 @@ import { useSession, signOut } from "next-auth/react"
 import dynamic from "next/dynamic"
 import { toast } from "sonner"
 import { DEFAULT_CARD_HEIGHT_MM, DEFAULT_CARD_WIDTH_MM } from "@/lib/card-dimensions"
+import {
+  applyStatusToStudents,
+  filterTeacherStudents,
+  getStudentDivision,
+  getStudentGrade,
+  statusStatsAfterChange,
+} from "@/lib/teacher-student-view"
 
 const IDCardPreview = dynamic(() => import("@/components/IDCardPreview"), { ssr: false })
 const JpgCardPreview = dynamic(() => import("@/components/JpgCardPreview"), { ssr: false })
@@ -13,6 +20,11 @@ type StudentData = {
   id: string
   serialNumber: string
   photoUrl: string
+  photoPath?: string
+  originalPhotoUrl?: string
+  originalPhotoPath?: string
+  photoBgStatus?: string
+  photoAiRunCount?: number
   formData: any
   status: string
   flagNote: string | null
@@ -84,6 +96,10 @@ export default function TeacherDashboard() {
   const [editingStudent, setEditingStudent] = useState<StudentData | null>(null)
   const [editFormData, setEditFormData] = useState<Record<string, string>>({})
   const [savingEdit, setSavingEdit] = useState(false)
+  const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null)
+  const [editPhotoPreview, setEditPhotoPreview] = useState("")
+  const [updatingStatusIds, setUpdatingStatusIds] = useState<Set<string>>(new Set())
+  const [runningPhotoAiIds, setRunningPhotoAiIds] = useState<Set<string>>(new Set())
 
   // Add class state
   const [newClassName, setNewClassName] = useState("")
@@ -92,6 +108,7 @@ export default function TeacherDashboard() {
   // Download Data + Photos state
   const [exportingFormat, setExportingFormat] = useState<string | null>(null)
   const [gradeClassFilter, setGradeClassFilter] = useState("")
+  const [divisionFilter, setDivisionFilter] = useState("")
 
   const fetchData = useCallback(async (retries = 3) => {
     setFetchError(false)
@@ -185,26 +202,52 @@ export default function TeacherDashboard() {
     }
   }, [activeTab, data?.isMainTeacher, fetchSubTeachers])
 
-  const handleApprove = async (sid: string) => {
+  const updateLocalStudentStatus = (sid: string, nextStatus: string) => {
+    setData((current) => {
+      const previousStatus = current?.students.find((student) => student.id === sid)?.status
+      if (!current || !previousStatus) return current
+      return {
+        ...current,
+        students: applyStatusToStudents(current.students, sid, nextStatus),
+        stats: statusStatsAfterChange(current.stats, previousStatus, nextStatus),
+      }
+    })
+    setSelectedStudent((current) => current?.id === sid ? { ...current, status: nextStatus } : current)
+  }
+
+  const handleStatusChange = async (sid: string, status: "APPROVED" | "FLAGGED") => {
+    const previousStatus = data?.students.find((student) => student.id === sid)?.status
+    if (!previousStatus || previousStatus === status || updatingStatusIds.has(sid)) return
+    updateLocalStudentStatus(sid, status)
+    setUpdatingStatusIds((current) => new Set(current).add(sid))
     try {
-      await fetch(`/api/schools/${getSchoolId()}/students/${sid}/status`, {
+      const res = await fetch(`/api/schools/${getSchoolId()}/students/${sid}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "APPROVED" }),
+        body: JSON.stringify({ status }),
       })
-      fetchData()
-    } catch (err) { console.error(err) }
+      if (!res.ok) throw new Error("Status update failed")
+      toast.success(status === "APPROVED" ? "Student approved" : "Student marked for correction")
+      fetchData(1)
+    } catch (err) {
+      console.error(err)
+      updateLocalStudentStatus(sid, previousStatus)
+      toast.error("Could not update status. Please try again.")
+    } finally {
+      setUpdatingStatusIds((current) => {
+        const next = new Set(current)
+        next.delete(sid)
+        return next
+      })
+    }
+  }
+
+  const handleApprove = async (sid: string) => {
+    await handleStatusChange(sid, "APPROVED")
   }
 
   const handleDisapprove = async (sid: string) => {
-    try {
-      await fetch(`/api/schools/${getSchoolId()}/students/${sid}/status`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "FLAGGED" }),
-      })
-      fetchData()
-    } catch (err) { console.error(err) }
+    await handleStatusChange(sid, "FLAGGED")
   }
 
   const handleFlag = async (sid: string) => {
@@ -291,16 +334,88 @@ export default function TeacherDashboard() {
     if (!editingStudent) return
     setSavingEdit(true)
     try {
-      await fetch(`/api/teacher/students/${editingStudent.id}/edit`, {
+      let uploadedPhoto: { photoUrl?: string; photoPath?: string } = {}
+      if (editPhotoFile) {
+        const uploadData = new FormData()
+        uploadData.append("file", editPhotoFile)
+        uploadData.append("folder", `students/${getSchoolId()}`)
+        const uploadRes = await fetch("/api/upload", { method: "POST", body: uploadData })
+        const uploadJson = await uploadRes.json()
+        if (!uploadRes.ok || !uploadJson.success) {
+          throw new Error(uploadJson.error || uploadJson.detail || "Photo upload failed")
+        }
+        uploadedPhoto = { photoUrl: uploadJson.url || "", photoPath: uploadJson.path || "" }
+      }
+
+      const res = await fetch(`/api/teacher/students/${editingStudent.id}/edit`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formData: editFormData }),
+        body: JSON.stringify({ formData: editFormData, ...uploadedPhoto }),
       })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to save changes")
+      toast.success(editPhotoFile ? "Student data and photo updated" : "Student data updated")
       setEditingStudent(null)
       setEditFormData({})
+      setEditPhotoFile(null)
+      setEditPhotoPreview("")
       fetchData()
-    } catch (err) { console.error(err) }
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err?.message || "Failed to save student")
+    }
     setSavingEdit(false)
+  }
+
+  const beginEditStudent = (student: StudentData) => {
+    setEditingStudent(student)
+    setEditFormData({ ...(student.formData as Record<string, string>) })
+    setEditPhotoFile(null)
+    setEditPhotoPreview(student.photoUrl || "")
+  }
+
+  const handleEditPhotoChange = (file: File | null) => {
+    setEditPhotoFile(file)
+    if (editPhotoPreview && editPhotoPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(editPhotoPreview)
+    }
+    setEditPhotoPreview(file ? URL.createObjectURL(file) : editingStudent?.photoUrl || "")
+  }
+
+  const applyUpdatedStudent = (updated: StudentData) => {
+    setData((current) => current ? {
+      ...current,
+      students: current.students.map((student) => student.id === updated.id ? { ...student, ...updated } : student),
+    } : current)
+    setSelectedStudent((current) => current?.id === updated.id ? { ...current, ...updated } : current)
+    setEditingStudent((current) => current?.id === updated.id ? { ...current, ...updated } : current)
+  }
+
+  const handleRunPhotoAi = async (student: StudentData) => {
+    if (!student.photoUrl && !student.photoPath) {
+      toast.error("No photo available for AI processing")
+      return
+    }
+    if (runningPhotoAiIds.has(student.id)) return
+    setRunningPhotoAiIds((current) => new Set(current).add(student.id))
+    try {
+      const res = await fetch(`/api/schools/${getSchoolId()}/students/${student.id}/run-photo-ai`, {
+        method: "POST",
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.error || "AI photo processing failed")
+      applyUpdatedStudent(json.data)
+      toast.success(`AI photo processed. Run count: ${json.data.photoAiRunCount || 1}`)
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err?.message || "AI photo processing failed")
+    } finally {
+      setRunningPhotoAiIds((current) => {
+        const next = new Set(current)
+        next.delete(student.id)
+        return next
+      })
+    }
   }
 
   const handleDeleteStudent = async (sid: string) => {
@@ -418,17 +533,13 @@ export default function TeacherDashboard() {
   }
 
   const filtered = useMemo(() => {
-    return data?.students?.filter(s => {
-      if (classFilter && s.class?.name !== classFilter) return false
-      if (statusFilter && s.status !== statusFilter) return false
-      if (gradeClassFilter) {
-        const fd = s.formData as any
-        const studentGrade = fd?.classgrade || fd?.classGrade || fd?.ClassGrade || fd?.class || fd?.Class || ""
-        if (studentGrade !== gradeClassFilter) return false
-      }
-      return true
-    }) || []
-  }, [data?.students, classFilter, statusFilter, gradeClassFilter])
+    return filterTeacherStudents(data?.students, {
+      section: classFilter,
+      grade: gradeClassFilter,
+      division: divisionFilter,
+      status: statusFilter,
+    })
+  }, [data?.students, classFilter, statusFilter, gradeClassFilter, divisionFilter])
 
   // Unique grade/class values for the grade dropdown filter
   const uniqueGrades = useMemo(() => {
@@ -438,11 +549,25 @@ export default function TeacherDashboard() {
       : (data?.students || [])
     for (const s of studentsInSection) {
       const fd = s.formData as any
-      const grade = fd?.classgrade || fd?.classGrade || fd?.ClassGrade || fd?.class || fd?.Class || ""
+      const grade = getStudentGrade({ formData: fd })
       if (grade) grades.add(grade)
     }
     return Array.from(grades).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
   }, [data?.students, classFilter])
+
+  const uniqueDivisions = useMemo(() => {
+    const divisions = new Set<string>()
+    const scopedStudents = (data?.students || []).filter(s => {
+      if (classFilter && s.class?.name !== classFilter) return false
+      if (gradeClassFilter && getStudentGrade(s) !== gradeClassFilter) return false
+      return true
+    })
+    for (const s of scopedStudents) {
+      const division = getStudentDivision(s)
+      if (division) divisions.add(division)
+    }
+    return Array.from(divisions).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  }, [data?.students, classFilter, gradeClassFilter])
 
   const classStatusCounts = useMemo(() => {
     const counts = new Map<string, { total: number; approved: number; flagged: number }>()
@@ -692,7 +817,7 @@ export default function TeacherDashboard() {
               {isMain && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Section</label>
-                  <select value={classFilter} onChange={e => { setClassFilter(e.target.value); setGradeClassFilter("") }} style={{ height: 38, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13, minWidth: 160 }}>
+                  <select value={classFilter} onChange={e => { setClassFilter(e.target.value); setGradeClassFilter(""); setDivisionFilter("") }} style={{ height: 38, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13, minWidth: 160 }}>
                     <option value="">All Sections</option>
                     {data?.classes.map(c => <option key={c.id} value={c.name}>{c.name} ({c._count.students})</option>)}
                   </select>
@@ -702,13 +827,26 @@ export default function TeacherDashboard() {
                 <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Class</label>
                 <select
                   value={gradeClassFilter}
-                  onChange={e => setGradeClassFilter(e.target.value)}
+                  onChange={e => { setGradeClassFilter(e.target.value); setDivisionFilter("") }}
                   style={{ height: 38, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13, minWidth: 160 }}
                 >
                   <option value="">All Classes</option>
                   {uniqueGrades.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
+              {uniqueDivisions.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Division</label>
+                  <select
+                    value={divisionFilter}
+                    onChange={e => setDivisionFilter(e.target.value)}
+                    style={{ height: 38, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13, minWidth: 130 }}
+                  >
+                    <option value="">All Divisions</option>
+                    {uniqueDivisions.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Status</label>
                 <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ height: 38, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13, minWidth: 140 }}>
@@ -743,7 +881,9 @@ export default function TeacherDashboard() {
                     <th>Photo</th>
                     <th>Serial</th>
                     <th>Name</th>
+                    <th>Section</th>
                     <th>Class</th>
+                    <th>Division</th>
                     <th>Status</th>
                     <th>Comment</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
@@ -753,6 +893,8 @@ export default function TeacherDashboard() {
                   {filtered.map(s => {
                     const fd = s.formData as any
                     const studentName = fd.fullName || fd["Full Name"] || fd["Student Name"] || fd.Student_Name || fd.name || "—"
+                    const statusBusy = updatingStatusIds.has(s.id)
+                    const photoAiBusy = runningPhotoAiIds.has(s.id)
                     return (
                       <tr key={s.id}>
                         <td>
@@ -765,6 +907,8 @@ export default function TeacherDashboard() {
                         <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{s.serialNumber}</td>
                         <td style={{ fontWeight: 500 }}>{studentName}</td>
                         <td>{s.class?.name || "—"}</td>
+                        <td>{getStudentGrade(s) || "—"}</td>
+                        <td>{getStudentDivision(s) || "—"}</td>
                         <td>
                           <span className={`status-badge ${
                             s.status === 'APPROVED' ? 'status-approved' :
@@ -792,21 +936,27 @@ export default function TeacherDashboard() {
                         <td style={{ textAlign: 'right' }}>
                           <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                             <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', color: '#6366f1', borderColor: '#6366f1' }} onClick={() => setSelectedStudent(s)}>👁</button>
+                            <button
+                              className="btn btn-outline"
+                              disabled={photoAiBusy || (!s.photoUrl && !s.photoPath)}
+                              style={{ fontSize: 10, padding: '4px 7px', color: '#7c3aed', borderColor: '#8b5cf6', opacity: photoAiBusy || (!s.photoUrl && !s.photoPath) ? 0.5 : 1, fontWeight: 700 }}
+                              onClick={() => handleRunPhotoAi(s)}
+                              title={`Run live-form API AI. AI runs: ${s.photoAiRunCount || 0}`}
+                            >
+                              {photoAiBusy ? "AI..." : `API AI ${s.photoAiRunCount || 0}`}
+                            </button>
                             {s.status !== "APPROVED" && s.status !== "PRINTED" && (
-                              <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', color: '#22c55e', borderColor: '#22c55e' }} onClick={() => handleApprove(s.id)}>✓</button>
+                              <button className="btn btn-outline" disabled={statusBusy} style={{ fontSize: 11, padding: '4px 8px', color: '#22c55e', borderColor: '#22c55e', opacity: statusBusy ? 0.5 : 1 }} onClick={() => handleApprove(s.id)}>✓</button>
                             )}
                             {s.status !== "FLAGGED" && s.status !== "PRINTED" && (
-                              <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', color: '#ef4444', borderColor: '#ef4444' }} onClick={() => handleDisapprove(s.id)} title="Disapprove">✕</button>
+                              <button className="btn btn-outline" disabled={statusBusy} style={{ fontSize: 11, padding: '4px 8px', color: '#ef4444', borderColor: '#ef4444', opacity: statusBusy ? 0.5 : 1 }} onClick={() => handleDisapprove(s.id)} title="Disapprove">✕</button>
                             )}
                             {s.status === "FLAGGED" ? (
                               <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', color: '#3b82f6', borderColor: '#3b82f6' }} onClick={() => handleUnflag(s.id)}>Unflag</button>
                             ) : s.status !== "PRINTED" ? (
                               <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', color: '#f59e0b', borderColor: '#f59e0b' }} onClick={() => handleFlag(s.id)}>🚩</button>
                             ) : null}
-                            <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', color: '#8b5cf6', borderColor: '#8b5cf6' }} onClick={() => {
-                              setEditingStudent(s)
-                              setEditFormData({ ...(s.formData as Record<string, string>) })
-                            }}>✏️</button>
+                            <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', color: '#8b5cf6', borderColor: '#8b5cf6' }} onClick={() => beginEditStudent(s)} title="Edit data and update photo">✏️</button>
                             <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', color: '#64748b', borderColor: '#cbd5e1' }} onClick={() => {
                               setCommentStudentId(s.id)
                               setCommentText(s.teacherComment || "")
@@ -818,7 +968,7 @@ export default function TeacherDashboard() {
                     )
                   })}
                   {filtered.length === 0 && (
-                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No students found</td></tr>
+                    <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No students found</td></tr>
                   )}
                 </tbody>
               </table>
@@ -984,6 +1134,25 @@ export default function TeacherDashboard() {
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }} onClick={() => setEditingStudent(null)}>
             <div style={{ background: 'white', borderRadius: 16, padding: 24, maxWidth: 520, width: '100%', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>✏️ Edit Student Data</h3>
+              <div style={{ display: 'flex', gap: 14, alignItems: 'center', padding: 12, border: '1px solid #e2e8f0', borderRadius: 12, background: '#f8fafc', marginBottom: 14 }}>
+                <div style={{ width: 56, height: 72, borderRadius: 8, overflow: 'hidden', border: '1px solid #cbd5e1', background: 'white', flexShrink: 0 }}>
+                  {editPhotoPreview ? (
+                    <img src={editPhotoPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 10, textAlign: 'center' }}>No Photo</div>
+                  )}
+                </div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>Update Photo</label>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={e => handleEditPhotoChange(e.target.files?.[0] || null)}
+                    style={{ width: '100%', fontSize: 12 }}
+                  />
+                  {editPhotoFile && <div style={{ fontSize: 11, color: '#16a34a', marginTop: 5 }}>New photo selected: {editPhotoFile.name}</div>}
+                </div>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {Object.entries(editFormData).map(([key, value]) => (
                   <div key={key} className="form-group">
@@ -1123,6 +1292,14 @@ export default function TeacherDashboard() {
 
                   {/* Action Buttons */}
                   <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20, borderTop: '1px solid #e2e8f0', paddingTop: 16, flexWrap: 'wrap' }}>
+                    <button
+                      className="btn btn-outline"
+                      disabled={runningPhotoAiIds.has(selectedStudent.id) || (!selectedStudent.photoUrl && !selectedStudent.photoPath)}
+                      style={{ fontSize: 13, color: '#7c3aed', borderColor: '#8b5cf6', opacity: runningPhotoAiIds.has(selectedStudent.id) || (!selectedStudent.photoUrl && !selectedStudent.photoPath) ? 0.5 : 1 }}
+                      onClick={() => handleRunPhotoAi(selectedStudent)}
+                    >
+                      {runningPhotoAiIds.has(selectedStudent.id) ? "Running API AI..." : `Run API AI (${selectedStudent.photoAiRunCount || 0})`}
+                    </button>
                     {selectedStudent.status !== "APPROVED" && selectedStudent.status !== "PRINTED" && (
                       <button className="btn btn-primary" style={{ fontSize: 13, background: 'linear-gradient(135deg, #22c55e, #16a34a)' }} onClick={() => { handleApprove(selectedStudent.id); setSelectedStudent(null) }}>✓ Approve</button>
                     )}

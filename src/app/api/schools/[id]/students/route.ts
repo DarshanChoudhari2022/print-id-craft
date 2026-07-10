@@ -117,6 +117,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
           originalPhotoUrl: true,
           originalPhotoPath: true,
           photoBgStatus: true,
+          photoAiRunCount: true,
           formData: true,
           status: true,
           flagNote: true,

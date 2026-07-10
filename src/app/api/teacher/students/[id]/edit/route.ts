@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { buildStudentIndexData } from "@/lib/student-index"
+import { withStudentPhotoUrl } from "@/lib/student-photo-url"
 
 export const dynamic = "force-dynamic"
 
@@ -21,10 +22,20 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
     }
 
     const studentId = params.id
-    const { formData } = await req.json()
+    const { formData, photoUrl, photoPath } = await req.json()
 
     if (!formData || typeof formData !== "object") {
       return NextResponse.json({ error: "Invalid form data" }, { status: 400 })
+    }
+
+    const hasPhotoUpdate = typeof photoUrl === "string" || typeof photoPath === "string"
+    if (hasPhotoUpdate) {
+      if (typeof photoUrl !== "string" || typeof photoPath !== "string") {
+        return NextResponse.json({ error: "Invalid photo update" }, { status: 400 })
+      }
+      if (!photoPath.startsWith(`students/${schoolId}/`)) {
+        return NextResponse.json({ error: "Photo path is not allowed for this school" }, { status: 400 })
+      }
     }
 
     // Verify student belongs to teacher's school (and class if sub-teacher)
@@ -42,12 +53,35 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
       where: { id: studentId },
       data: {
         formData,
+        ...(hasPhotoUpdate ? {
+          photoUrl,
+          photoPath,
+          originalPhotoUrl: photoUrl,
+          originalPhotoPath: photoPath,
+          photoBgStatus: "",
+        } : {}),
         ...buildStudentIndexData(formData, student.classId),
       },
-      select: { id: true, formData: true },
+      select: {
+        id: true,
+        serialNumber: true,
+        photoUrl: true,
+        photoPath: true,
+        originalPhotoUrl: true,
+        originalPhotoPath: true,
+        photoBgStatus: true,
+        photoAiRunCount: true,
+        formData: true,
+        status: true,
+        flagNote: true,
+        teacherComment: true,
+        submittedAt: true,
+        updatedAt: true,
+        class: { select: { name: true, linkToken: true } },
+      },
     })
 
-    return NextResponse.json({ success: true, data: updated })
+    return NextResponse.json({ success: true, data: withStudentPhotoUrl(updated) })
   } catch (error) {
     console.error("PUT /api/teacher/students/[id]/edit error:", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })

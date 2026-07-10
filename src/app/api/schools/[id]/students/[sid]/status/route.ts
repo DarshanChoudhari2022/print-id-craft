@@ -15,7 +15,7 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string; s
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
-    // Teachers can only update students from their own school
+    // Teachers can only update students from their own school and, for sub-teachers, their assigned class.
     if (session.user?.role === "TEACHER" && session.user.schoolId !== params.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
@@ -23,9 +23,28 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string; s
     const body = await req.json()
     const validated = statusSchema.parse(body)
 
-    const student = await prisma.student.update({
-      where: { id: params.sid, schoolId: params.id },
+    const where: { id: string; schoolId: string; classId?: string } = {
+      id: params.sid,
+      schoolId: params.id,
+    }
+    if (session.user?.role === "TEACHER" && !session.user.isMainTeacher) {
+      if (!session.user.classId) {
+        return NextResponse.json({ error: "No class assigned" }, { status: 403 })
+      }
+      where.classId = session.user.classId
+    }
+
+    const result = await prisma.student.updateMany({
+      where,
       data: { status: validated.status },
+    })
+    if (result.count === 0) {
+      return NextResponse.json({ error: "Student not found or not authorized" }, { status: 404 })
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { id: params.sid },
+      select: { id: true, status: true },
     })
 
     return NextResponse.json({ success: true, data: student })
