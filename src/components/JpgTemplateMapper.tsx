@@ -390,6 +390,7 @@ export default function JpgTemplateMapper({
 
   // Custom field creation
   const [newFieldLabel, setNewFieldLabel] = useState("")
+  const [newOptionalFieldLabel, setNewOptionalFieldLabel] = useState("")
   const [newFieldType, setNewFieldType] = useState<"text" | "tel">("text")
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -578,8 +579,16 @@ export default function JpgTemplateMapper({
     const label = newFieldLabel.trim()
     if (!label) return
     const key = labelToKey(label)
-    addFieldMapping(key, label, "text", undefined, false)
+    addFieldMapping(key, label, "text", undefined, true)
     setNewFieldLabel("")
+  }
+
+  const addOptionalCustomField = () => {
+    const label = newOptionalFieldLabel.trim()
+    if (!label) return
+    const key = labelToKey(label)
+    addFieldMapping(key, label, "text", undefined, false)
+    setNewOptionalFieldLabel("")
   }
 
   const removeFieldMapping = (id: string) => {
@@ -3554,7 +3563,7 @@ export default function JpgTemplateMapper({
               <span style={{ fontSize: 16 }}>✏️</span> Add Custom Field
             </h4>
             <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 10 }}>
-              Type the exact label as printed on your ID card template
+              Type the exact label as printed on your ID card template. This field is compulsory in the live form.
             </p>
             <div style={{ display: "flex", gap: 6 }}>
               <input
@@ -3585,6 +3594,68 @@ export default function JpgTemplateMapper({
                   fontSize: 13,
                   fontWeight: 600,
                   cursor: newFieldLabel.trim() ? "pointer" : "default",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                + Add
+              </button>
+            </div>
+          </div>
+
+          {/* Optional Custom Field Creator */}
+          <div
+            style={{
+              background: "white",
+              borderRadius: 14,
+              border: "1px solid #bbf7d0",
+              padding: 16,
+            }}
+          >
+            <h4
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#14532d",
+                marginBottom: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span style={{ fontSize: 16 }}>+</span> Add Not Compulsory Field
+            </h4>
+            <p style={{ fontSize: 11, color: "#64748b", marginBottom: 10 }}>
+              Use this for fields parents may leave blank in the live form.
+            </p>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                type="text"
+                value={newOptionalFieldLabel}
+                onChange={(e) => setNewOptionalFieldLabel(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addOptionalCustomField()}
+                placeholder="e.g. PEN, Alternate No."
+                style={{
+                  flex: 1,
+                  height: 36,
+                  padding: "0 10px",
+                  border: "1.5px solid #bbf7d0",
+                  borderRadius: 8,
+                  fontSize: 13,
+                }}
+              />
+              <button
+                onClick={addOptionalCustomField}
+                disabled={!newOptionalFieldLabel.trim()}
+                style={{
+                  height: 36,
+                  padding: "0 14px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: newOptionalFieldLabel.trim() ? "#16a34a" : "#e2e8f0",
+                  color: newOptionalFieldLabel.trim() ? "white" : "#94a3b8",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: newOptionalFieldLabel.trim() ? "pointer" : "default",
                   whiteSpace: "nowrap",
                 }}
               >
@@ -3748,6 +3819,23 @@ export default function JpgTemplateMapper({
                     {m.type === "photo" ? "📷 " : "Aa "}
                     {m.label}
                   </span>
+                  {m.type !== "photo" && (
+                    <span
+                      title={m.required === false ? "Not compulsory in live form" : "Compulsory in live form"}
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        color: m.required === false ? "#15803d" : "#1d4ed8",
+                        background: m.required === false ? "#dcfce7" : "#dbeafe",
+                        border: `1px solid ${m.required === false ? "#86efac" : "#bfdbfe"}`,
+                        borderRadius: 999,
+                        padding: "2px 6px",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {m.required === false ? "Optional" : "Required"}
+                    </span>
+                  )}
                   <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
                     <button
                       onClick={(e) => {
