@@ -6,9 +6,14 @@ import {
 } from "@/lib/teacher-photo-workflow"
 
 describe("teacher photo workflow", () => {
-  it("requires manual cropping between photo selection and background cleanup", () => {
+  it("requires manual cropping and confirmation before background cleanup", () => {
     expect(nextTeacherPhotoStage("select", "PHOTO_ACCEPTED")).toBe("crop")
-    expect(nextTeacherPhotoStage("crop", "CROP_APPLIED")).toBe("background")
+    expect(nextTeacherPhotoStage("crop", "CROP_APPLIED")).toBe("confirm-ai")
+    expect(nextTeacherPhotoStage("confirm-ai", "PROCESS_AI_BACKGROUND")).toBe("background")
+  })
+
+  it("returns from AI confirmation to cropping without starting background cleanup", () => {
+    expect(nextTeacherPhotoStage("confirm-ai", "BACK_TO_CROP")).toBe("crop")
   })
 
   it("returns to photo selection when the teacher chooses another photo", () => {

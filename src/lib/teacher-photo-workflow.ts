@@ -1,5 +1,10 @@
-export type TeacherPhotoStage = "select" | "crop" | "background"
-export type TeacherPhotoEvent = "PHOTO_ACCEPTED" | "CROP_APPLIED" | "CHOOSE_AGAIN"
+export type TeacherPhotoStage = "select" | "crop" | "confirm-ai" | "background"
+export type TeacherPhotoEvent =
+  | "PHOTO_ACCEPTED"
+  | "CROP_APPLIED"
+  | "CHOOSE_AGAIN"
+  | "PROCESS_AI_BACKGROUND"
+  | "BACK_TO_CROP"
 export type TeacherPhotoMode = "replace" | "crop-existing"
 
 export function initialTeacherPhotoState(
@@ -23,6 +28,8 @@ export function nextTeacherPhotoStage(
 ): TeacherPhotoStage {
   if (event === "CHOOSE_AGAIN") return "select"
   if (stage === "select" && event === "PHOTO_ACCEPTED") return "crop"
-  if (stage === "crop" && event === "CROP_APPLIED") return "background"
+  if (stage === "crop" && event === "CROP_APPLIED") return "confirm-ai"
+  if (stage === "confirm-ai" && event === "PROCESS_AI_BACKGROUND") return "background"
+  if (stage === "confirm-ai" && event === "BACK_TO_CROP") return "crop"
   return stage
 }

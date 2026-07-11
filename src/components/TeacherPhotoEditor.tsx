@@ -47,7 +47,15 @@ export default function TeacherPhotoEditor({
     ? "Choose or Take Student Photo"
     : stage === "crop"
       ? "Crop Student Photo"
-      : "Clean Photo Background"
+      : stage === "confirm-ai"
+        ? "Choose Background Option"
+        : "Clean Photo Background"
+
+  const stageDescription = stage === "crop"
+    ? "Position the student, resize the crop, then tap Apply Crop."
+    : stage === "confirm-ai"
+      ? "Cropping is complete. AI will run only if you choose it below."
+      : "The existing photo will not change until you save."
 
   return (
     <div
@@ -62,7 +70,7 @@ export default function TeacherPhotoEditor({
           <div>
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#0f172a" }}>📷 {stageTitle}</h3>
             <p style={{ margin: "4px 0 0", fontSize: 12, color: "#64748b" }}>
-              {stage === "crop" ? "Position the student, resize the crop, then tap Apply Crop." : "The existing photo will not change until you save."}
+              {stageDescription}
             </p>
           </div>
           <button type="button" onClick={onCancel} aria-label="Close photo editor" style={{ width: 34, height: 34, border: 0, borderRadius: 9, background: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: 18 }}>×</button>
@@ -97,6 +105,45 @@ export default function TeacherPhotoEditor({
                 setStage((current) => nextTeacherPhotoStage(current, "CROP_APPLIED"))
               }}
             />
+          )}
+
+          {stage === "confirm-ai" && croppedUrl && (
+            <div style={{ textAlign: "center" }}>
+              <img
+                src={croppedUrl}
+                alt="Cropped student preview"
+                style={{ width: 180, maxWidth: "65%", aspectRatio: "3 / 4", objectFit: "cover", borderRadius: 14, border: "2px solid #bfdbfe", background: "#f8fafc", boxShadow: "0 10px 24px rgba(15,23,42,0.12)" }}
+              />
+
+              <div style={{ margin: "18px auto 0", maxWidth: 460, padding: 14, borderRadius: 12, background: "#fffbeb", border: "1px solid #fde68a", color: "#92400e", fontSize: 13, lineHeight: 1.5 }}>
+                <strong>Do you want to process the AI background?</strong><br />
+                AI background processing may consume one credit. Keeping the cropped photo uses no AI credit.
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 18 }}>
+                <button
+                  type="button"
+                  onClick={() => onReady(croppedUrl, "SKIPPED")}
+                  style={{ padding: "12px 16px", border: 0, borderRadius: 10, background: "#16a34a", color: "white", fontSize: 14, fontWeight: 800, cursor: "pointer" }}
+                >
+                  ✓ Use Cropped Photo — No AI
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStage((current) => nextTeacherPhotoStage(current, "PROCESS_AI_BACKGROUND"))}
+                  style={{ padding: "12px 16px", border: "1px solid #f59e0b", borderRadius: 10, background: "#fff7ed", color: "#9a3412", fontSize: 14, fontWeight: 800, cursor: "pointer" }}
+                >
+                  ✨ Process AI Background
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStage((current) => nextTeacherPhotoStage(current, "BACK_TO_CROP"))}
+                  style={{ padding: "10px 16px", border: "1px solid #cbd5e1", borderRadius: 10, background: "white", color: "#475569", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+                >
+                  ← Back to Crop
+                </button>
+              </div>
+            </div>
           )}
 
           {stage === "background" && croppedUrl && (
