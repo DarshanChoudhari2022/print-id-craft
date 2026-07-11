@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { nextTeacherPhotoStage } from "@/lib/teacher-photo-workflow"
+import {
+  cancelTeacherCrop,
+  initialTeacherPhotoState,
+  nextTeacherPhotoStage,
+} from "@/lib/teacher-photo-workflow"
 
 describe("teacher photo workflow", () => {
   it("requires manual cropping between photo selection and background cleanup", () => {
@@ -13,5 +17,24 @@ describe("teacher photo workflow", () => {
 
   it("does not allow photo acceptance to skip directly to background cleanup", () => {
     expect(nextTeacherPhotoStage("crop", "PHOTO_ACCEPTED")).toBe("crop")
+  })
+
+  it("starts replacement mode at photo selection", () => {
+    expect(initialTeacherPhotoState("replace", "https://example.com/current.jpg")).toEqual({
+      stage: "select",
+      sourceUrl: "",
+    })
+  })
+
+  it("starts existing-photo mode directly at crop", () => {
+    expect(initialTeacherPhotoState("crop-existing", "https://example.com/current.jpg")).toEqual({
+      stage: "crop",
+      sourceUrl: "https://example.com/current.jpg",
+    })
+  })
+
+  it("cancels crop to the correct destination for each mode", () => {
+    expect(cancelTeacherCrop("replace")).toBe("select")
+    expect(cancelTeacherCrop("crop-existing")).toBe("close")
   })
 })

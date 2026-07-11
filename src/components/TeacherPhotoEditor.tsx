@@ -4,11 +4,18 @@ import { useState } from "react"
 import PhotoVerifier from "@/components/PhotoVerifier"
 import PhotoCropper from "@/components/PhotoCropper"
 import PhotoBgProcessor from "@/components/PhotoBgProcessor"
-import { nextTeacherPhotoStage, type TeacherPhotoStage } from "@/lib/teacher-photo-workflow"
+import {
+  cancelTeacherCrop,
+  initialTeacherPhotoState,
+  nextTeacherPhotoStage,
+  type TeacherPhotoMode,
+  type TeacherPhotoStage,
+} from "@/lib/teacher-photo-workflow"
 import type { PhotoBgStatus } from "@/lib/photo-bg-status"
 
 type Props = {
   currentPhotoUrl?: string
+  mode: TeacherPhotoMode
   backgroundColor: string
   onReady: (photoDataUrl: string, status: PhotoBgStatus) => void
   onCancel: () => void
@@ -16,15 +23,21 @@ type Props = {
 
 export default function TeacherPhotoEditor({
   currentPhotoUrl,
+  mode,
   backgroundColor,
   onReady,
   onCancel,
 }: Props) {
-  const [stage, setStage] = useState<TeacherPhotoStage>("select")
-  const [sourceUrl, setSourceUrl] = useState("")
+  const initialState = initialTeacherPhotoState(mode, currentPhotoUrl)
+  const [stage, setStage] = useState<TeacherPhotoStage>(initialState.stage)
+  const [sourceUrl, setSourceUrl] = useState(initialState.sourceUrl)
   const [croppedUrl, setCroppedUrl] = useState("")
 
   const chooseAgain = () => {
+    if (cancelTeacherCrop(mode) === "close") {
+      onCancel()
+      return
+    }
     setSourceUrl("")
     setCroppedUrl("")
     setStage((current) => nextTeacherPhotoStage(current, "CHOOSE_AGAIN"))
@@ -77,7 +90,7 @@ export default function TeacherPhotoEditor({
           {stage === "crop" && sourceUrl && (
             <PhotoCropper
               photoUrl={sourceUrl}
-              cancelLabel="Choose Another Photo"
+              cancelLabel={mode === "crop-existing" ? "Cancel" : "Choose Another Photo"}
               onCancel={chooseAgain}
               onCropped={(dataUrl) => {
                 setCroppedUrl(dataUrl)

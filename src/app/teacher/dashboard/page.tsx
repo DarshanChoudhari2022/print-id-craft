@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { DEFAULT_CARD_HEIGHT_MM, DEFAULT_CARD_WIDTH_MM } from "@/lib/card-dimensions"
 import { prepareStudentPhotoForUpload } from "@/lib/client-photo-upload"
 import type { PhotoBgStatus } from "@/lib/photo-bg-status"
+import type { TeacherPhotoMode } from "@/lib/teacher-photo-workflow"
 import {
   applyStatusToStudents,
   filterTeacherStudents,
@@ -102,6 +103,7 @@ export default function TeacherDashboard() {
   const [editPhotoPreview, setEditPhotoPreview] = useState("")
   const [editPhotoBgStatus, setEditPhotoBgStatus] = useState<PhotoBgStatus>("")
   const [showEditPhotoWorkflow, setShowEditPhotoWorkflow] = useState(false)
+  const [editPhotoMode, setEditPhotoMode] = useState<TeacherPhotoMode>("replace")
   const [updatingStatusIds, setUpdatingStatusIds] = useState<Set<string>>(new Set())
 
   // Add class state
@@ -371,6 +373,7 @@ export default function TeacherDashboard() {
       setEditPhotoPreview("")
       setEditPhotoBgStatus("")
       setShowEditPhotoWorkflow(false)
+      setEditPhotoMode("replace")
       fetchData()
     } catch (err: any) {
       console.error(err)
@@ -386,6 +389,7 @@ export default function TeacherDashboard() {
     setEditPhotoPreview(student.photoUrl || "")
     setEditPhotoBgStatus("")
     setShowEditPhotoWorkflow(false)
+    setEditPhotoMode("replace")
   }
 
   const handleDeleteStudent = async (sid: string) => {
@@ -1102,9 +1106,16 @@ export default function TeacherDashboard() {
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>Update Photo</label>
-                  <button type="button" className="btn btn-outline" onClick={() => setShowEditPhotoWorkflow(true)} style={{ fontSize: 12, padding: '7px 12px' }}>
-                    📷 Change Photo
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button" className="btn btn-outline" onClick={() => { setEditPhotoMode("replace"); setShowEditPhotoWorkflow(true) }} style={{ fontSize: 12, padding: '7px 12px' }}>
+                      📷 Change Photo
+                    </button>
+                    {editingStudent.photoUrl && (
+                      <button type="button" className="btn btn-outline" onClick={() => { setEditPhotoMode("crop-existing"); setShowEditPhotoWorkflow(true) }} style={{ fontSize: 12, padding: '7px 12px', color: '#2563eb', borderColor: '#93c5fd' }}>
+                        ✂️ Crop Existing Photo
+                      </button>
+                    )}
+                  </div>
                   {editPhotoDataUrl && (
                     <div style={{ fontSize: 11, color: '#16a34a', marginTop: 6, fontWeight: 600 }}>
                       ✓ New cropped photo ready{editPhotoBgStatus === "PROCESSED" ? " with AI-cleaned background" : ""}
@@ -1115,6 +1126,7 @@ export default function TeacherDashboard() {
               {showEditPhotoWorkflow && (
                 <TeacherPhotoEditor
                   currentPhotoUrl={editingStudent.photoUrl}
+                  mode={editPhotoMode}
                   backgroundColor={(templateData as any)?.photoBgColor || "#FFFFFF"}
                   onCancel={() => setShowEditPhotoWorkflow(false)}
                   onReady={(dataUrl, status) => {

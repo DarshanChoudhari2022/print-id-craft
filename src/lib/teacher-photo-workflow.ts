@@ -1,5 +1,21 @@
 export type TeacherPhotoStage = "select" | "crop" | "background"
 export type TeacherPhotoEvent = "PHOTO_ACCEPTED" | "CROP_APPLIED" | "CHOOSE_AGAIN"
+export type TeacherPhotoMode = "replace" | "crop-existing"
+
+export function initialTeacherPhotoState(
+  mode: TeacherPhotoMode,
+  currentPhotoUrl?: string,
+): { stage: TeacherPhotoStage; sourceUrl: string } {
+  if (mode === "crop-existing" && currentPhotoUrl) {
+    return { stage: "crop", sourceUrl: currentPhotoUrl }
+  }
+
+  return { stage: "select", sourceUrl: "" }
+}
+
+export function cancelTeacherCrop(mode: TeacherPhotoMode): "select" | "close" {
+  return mode === "crop-existing" ? "close" : "select"
+}
 
 export function nextTeacherPhotoStage(
   stage: TeacherPhotoStage,
