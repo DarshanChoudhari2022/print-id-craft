@@ -14,6 +14,7 @@ import {
   type SectionType,
 } from "@/lib/section-class"
 import { photoCacheVersion, studentPhotoUrl as buildStudentPhotoUrl } from "@/lib/student-photo-url"
+import { prepareSectionRename } from "@/lib/section-name"
 import { getFieldRole, resolveEditFieldValue } from "@/lib/field-resolver"
 import {
   cardDimensionsForOrientation,
@@ -299,6 +300,11 @@ export default function SchoolDetailPage() {
   const [newSectionType, setNewSectionType] = useState<SectionType | "">("")
   const [newExpiry, setNewExpiry] = useState("")
   const [addingClass, setAddingClass] = useState(false)
+
+  // Inline section-name editor
+  const [editingSectionNameFor, setEditingSectionNameFor] = useState<string | null>(null)
+  const [editingSectionNameDraft, setEditingSectionNameDraft] = useState("")
+  const [savingSectionName, setSavingSectionName] = useState(false)
 
   // Inline class-options editor (Roman numerals per section)
   const [editingClassOptionsFor, setEditingClassOptionsFor] = useState<string | null>(null)
@@ -825,6 +831,48 @@ export default function SchoolDetailPage() {
     })
     toast.success(isActive ? "Class deactivated" : "Class activated")
     fetchClasses()
+  }
+
+  const startEditSectionName = (cls: ClassData) => {
+    setEditingSectionNameFor(cls.id)
+    setEditingSectionNameDraft(cls.name)
+  }
+
+  const cancelEditSectionName = () => {
+    setEditingSectionNameFor(null)
+    setEditingSectionNameDraft("")
+  }
+
+  const saveEditSectionName = async (cls: ClassData) => {
+    const rename = prepareSectionRename(cls.name, editingSectionNameDraft)
+    if (rename.error) {
+      toast.error(rename.error)
+      return
+    }
+
+    setSavingSectionName(true)
+    try {
+      const res = await fetch(`/api/schools/${schoolId}/classes/${cls.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: rename.name }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        throw new Error(typeof json.error === "string" ? json.error : "Could not rename section")
+      }
+
+      const savedName = typeof json.data?.name === "string" ? json.data.name : rename.name
+      setClasses((current) => current.map((item) => (
+        item.id === cls.id ? { ...item, name: savedName } : item
+      )))
+      cancelEditSectionName()
+      toast.success("Section name updated")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not rename section")
+    } finally {
+      setSavingSectionName(false)
+    }
   }
 
   // Open the inline expiry editor for a row, prefilled with the current value
@@ -2687,6 +2735,14 @@ export default function SchoolDetailPage() {
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                           <button
                             className="btn btn-outline"
+                            onClick={() => startEditSectionName(cls)}
+                            style={{ fontSize: 11, padding: '5px 10px' }}
+                            title="Change this section name"
+                          >
+                            ✏️ Edit Name
+                          </button>
+                          <button
+                            className="btn btn-outline"
                             onClick={() => startEditClassOptions(cls)}
                             style={{ fontSize: 11, padding: '5px 10px' }}
                             title="Configure Roman class list for this section"
@@ -2719,6 +2775,49 @@ export default function SchoolDetailPage() {
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/></svg>
                           </button>
                         </div>
+                        {editingSectionNameFor === cls.id && (
+                          <div
+                            style={{
+                              marginTop: 8,
+                              padding: 10,
+                              background: '#f8fafc',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: 8,
+                              textAlign: 'left',
+                            }}
+                          >
+                            <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
+                              Rename section
+                            </div>
+                            <input
+                              value={editingSectionNameDraft}
+                              onChange={(event) => setEditingSectionNameDraft(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Escape") cancelEditSectionName()
+                                if (event.key === "Enter" && !savingSectionName && !prepareSectionRename(cls.name, editingSectionNameDraft).error) {
+                                  event.preventDefault()
+                                  void saveEditSectionName(cls)
+                                }
+                              }}
+                              autoFocus
+                              maxLength={120}
+                              placeholder="Section name"
+                              style={{ width: '100%', padding: '8px 10px', fontSize: 12, borderRadius: 6, border: '1px solid #cbd5e1', marginBottom: 8 }}
+                            />
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              <button type="button" className="btn btn-outline" disabled={savingSectionName} onClick={cancelEditSectionName} style={{ fontSize: 11, padding: '4px 10px' }}>Cancel</button>
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                disabled={savingSectionName || Boolean(prepareSectionRename(cls.name, editingSectionNameDraft).error)}
+                                onClick={() => saveEditSectionName(cls)}
+                                style={{ fontSize: 11, padding: '4px 10px' }}
+                              >
+                                {savingSectionName ? "Saving…" : "Save Name"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                         {editingClassOptionsFor === cls.id && (
                           <div
                             style={{
