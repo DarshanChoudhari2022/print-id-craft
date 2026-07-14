@@ -314,12 +314,27 @@ function toDuplicateResult(
   }
 }
 
+const SHINING_LIGHT_CLASS_ID = "cmr0fgn1d00037286escfox15"
+
+function isShiningLightMobileMisreadAsRoll(
+  classId: string,
+  formData: Record<string, string>,
+  roll: string
+): boolean {
+  if (classId !== SHINING_LIGHT_CLASS_ID || !roll) return false
+  const mobile = resolveFieldValue(formData, "mobile")
+  return !!mobile && normalizeFormValue(roll) === normalizeFormValue(mobile)
+}
+
 export async function checkDuplicateSubmission(
   classId: string,
   formData: Record<string, string>
 ): Promise<DuplicateCheckResult> {
-  const { name, father, dob, roll } = extractIdentityFields(formData)
+  const { name, father, dob, roll: resolvedRoll } = extractIdentityFields(formData)
   const indexData = buildStudentIndexData(formData, classId)
+  const ignoreResolvedRoll = isShiningLightMobileMisreadAsRoll(classId, formData, resolvedRoll)
+  const roll = ignoreResolvedRoll ? "" : resolvedRoll
+  if (ignoreResolvedRoll) indexData.normalizedRollNo = ""
   const fingerprint = indexData.duplicateFingerprint
 
   if (fingerprint) {
