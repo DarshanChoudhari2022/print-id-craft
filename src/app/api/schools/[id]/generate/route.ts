@@ -5,6 +5,10 @@ import { prisma } from "@/lib/prisma"
 import { studentPhotoUrl } from "@/lib/student-photo-url"
 import { DEFAULT_CARD_HEIGHT_MM, DEFAULT_CARD_WIDTH_MM } from "@/lib/card-dimensions"
 import { getDefaultTemplate, getTemplateForClass } from "@/lib/template-resolver"
+import {
+  buildGenerationFilterOptions,
+  filterStudentsByGenerationScope,
+} from "@/lib/generation-scope"
 
 export const maxDuration = 60; // Vercel function timeout config
 
@@ -29,6 +33,28 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     const { searchParams } = new URL(req.url)
     const classId = searchParams.get("classId")
     const statusFilter = searchParams.get("status") || "APPROVED"
+    const mode = searchParams.get("mode")
+    const classGrade = searchParams.get("classGrade")?.trim() || ""
+    const division = searchParams.get("division")?.trim() || ""
+
+    const whereClause: any = {
+      schoolId: params.id,
+      status: statusFilter,
+    }
+    if (classId) {
+      whereClause.classId = classId
+    }
+
+    if (mode === "filters") {
+      const optionStudents = await prisma.student.findMany({
+        where: whereClause,
+        select: { formData: true },
+      })
+      return NextResponse.json({
+        success: true,
+        data: buildGenerationFilterOptions(optionStudents),
+      })
+    }
 
     const template = classId
       ? await getTemplateForClass(classId)
@@ -49,15 +75,6 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
         { error: "No field mappings found. Please map fields on the template first." },
         { status: 400 }
       )
-    }
-
-    // Get students
-    const whereClause: any = {
-      schoolId: params.id,
-      status: statusFilter,
-    }
-    if (classId) {
-      whereClause.classId = classId
     }
 
     const students = await prisma.student.findMany({
@@ -88,16 +105,18 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
       },
       orderBy: { serialNumber: "asc" },
     })
+    const scopedStudents = filterStudentsByGenerationScope(students, classGrade, division)
 
-    if (students.length === 0) {
+    if (scopedStudents.length === 0) {
+      const scopeLabel = [classGrade, division].filter(Boolean).join(" - ")
       return NextResponse.json(
-        { error: `No ${statusFilter.toLowerCase()} students found${classId ? " in this class" : ""}.` },
+        { error: `No ${statusFilter.toLowerCase()} students found${scopeLabel ? ` in ${scopeLabel}` : classId ? " in this section" : ""}.` },
         { status: 404 }
       )
     }
 
     // Build student render data
-    const renderData = students.map((s) => {
+    const renderData = scopedStudents.map((s) => {
       const formData = s.formData as Record<string, any>
       // Classes without an assignment inherit the default school template.
       const assignedTemplate = s.class.template || template
