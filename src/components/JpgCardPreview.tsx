@@ -11,6 +11,7 @@ import {
   DEFAULT_PRINT_DPI,
   printCanvasSize,
 } from "@/lib/card-dimensions"
+import { getCoverPhotoPlacement } from "@/lib/card-photo-placement"
 
 type FieldMapping = {
   id: string
@@ -377,23 +378,14 @@ export default function JpgCardPreview({
           if (studentPhoto) {
             try {
               const photoImg = await loadImage(studentPhoto)
-              // Contain-fit: scale to fit entirely inside the box, no cropping.
-              const photoAspect = photoImg.naturalWidth / photoImg.naturalHeight
-              const boxAspect = fw / fh
-              let dx: number, dy: number, dw: number, dh: number
-              // Cover logic: scale photo so it fills the box completely
-              if (photoAspect < boxAspect) {
-                dw = fw
-                dh = fw / photoAspect
-                dx = fx
-                // Align to top so head/hair isn't cropped (equivalent to object-position: top)
-                dy = fy
-              } else {
-                dh = fh
-                dw = fh * photoAspect
-                dx = fx + (fw - dw) / 2
-                dy = fy
-              }
+              const { dx, dy, dw, dh } = getCoverPhotoPlacement(
+                photoImg.naturalWidth,
+                photoImg.naturalHeight,
+                fx,
+                fy,
+                fw,
+                fh,
+              )
               ctx.save()
               pathRoundedRect(ctx, fx, fy, fw, fh, radiusPx)
               ctx.clip()

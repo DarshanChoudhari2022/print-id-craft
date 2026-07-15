@@ -18,6 +18,7 @@ import {
   printCanvasSize,
   resolveCardDimensions,
 } from "@/lib/card-dimensions"
+import { getCoverPhotoPlacement } from "@/lib/card-photo-placement"
 
 type FieldMapping = {
   id: string
@@ -69,6 +70,8 @@ type StudentRenderData = {
   className: string
   formData: Record<string, string>
 }
+
+type PhotoFit = "contain" | "cover"
 
 type BatchGeneratorProps = {
   schoolId: string
@@ -382,6 +385,7 @@ async function renderIdCard(
   flagImageUrl?: string,
   cardWidthMm?: number,
   cardHeightMm?: number,
+  photoFit: PhotoFit = "contain",
 ): Promise<string> {
   const templateImg = await getCachedImage(templateImageUrl)
   if (!templateImg) throw new Error("Failed to load template")
@@ -421,11 +425,21 @@ async function renderIdCard(
       if (student.photoUrl) {
         const photoImg = await getCachedImage(student.photoUrl)
         if (photoImg) {
-          // Contain-fit: scale to fit entirely inside the box, no cropping.
+          // PDF explicitly uses cover-fit; existing raster callers retain contain-fit.
           const photoAspect = photoImg.naturalWidth / photoImg.naturalHeight
           const boxAspect = fw / fh
           let dx: number, dy: number, dw: number, dh: number
-          if (photoAspect > boxAspect) {
+          if (photoFit === "cover") {
+            const placement = getCoverPhotoPlacement(
+              photoImg.naturalWidth,
+              photoImg.naturalHeight,
+              fx,
+              fy,
+              fw,
+              fh,
+            )
+            ;({ dx, dy, dw, dh } = placement)
+          } else if (photoAspect > boxAspect) {
             // Photo is wider → fit width, center vertically
             dw = fw
             dh = fw / photoAspect
@@ -1384,6 +1398,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 getFlagUrl(student),
                 studentTemplate.cardWidthMm,
                 studentTemplate.cardHeightMm,
+                "cover",
               )
               let backDataUrl: string | undefined
               if (studentTemplate.hasBackSide && studentTemplate.backTemplateImageUrl) {
@@ -1394,6 +1409,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                   getFlagUrl(student),
                   studentTemplate.cardWidthMm,
                   studentTemplate.cardHeightMm,
+                  "cover",
                 )
               }
               return { serialNumber: student.serialNumber, frontDataUrl, backDataUrl }
