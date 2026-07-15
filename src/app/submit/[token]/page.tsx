@@ -22,6 +22,7 @@ import {
 } from "@/lib/submit-draft"
 import { uploadStudentPhotoResilient } from "@/lib/client-photo-upload"
 import { PHOTO_BG_STATUS, type PhotoBgStatus } from "@/lib/photo-bg-status"
+import { resolveHouseImageUrl } from "@/lib/house-flags"
 
 const SUPPORT_PHONE_DISPLAY = "+91 98818 77607"
 const SUPPORT_PHONE_E164 = "+919881877607"
@@ -108,6 +109,7 @@ type FormConfig = {
   // Available house/flag colours (from other students in this school) — used to
   // render the House Flag input as a dropdown so parents don't misspell.
   flagColors?: string[]
+  flagImages?: Record<string, string>
   fixedBranch?: string
   appBuildId?: string
   formRevision?: string
@@ -446,6 +448,7 @@ export default function SubmitPage() {
   const [errorMsg, setErrorMsg] = useState("")
   const [config, setConfig] = useState<FormConfig | null>(null)
   const [formData, setFormData] = useState<Record<string, string>>({})
+  const selectedFlagImageUrl = resolveHouseImageUrl(formData, config?.flagImages || {})
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState("") // Data URL of the accepted photo
   const [croppedPhoto, setCroppedPhoto] = useState("")
@@ -1077,6 +1080,7 @@ export default function SubmitPage() {
                       fieldMappings={config.fieldMappings}
                       formData={formData}
                       studentPhoto={croppedPhoto}
+                      flagImageUrl={selectedFlagImageUrl}
                       scale={1}
                       watermark="Wise Melon"
                       cardWidthMm={(config as any).cardWidthMm}
@@ -1091,6 +1095,7 @@ export default function SubmitPage() {
                         fieldMappings={config.backFieldMappings || []}
                         formData={formData}
                         studentPhoto={croppedPhoto}
+                        flagImageUrl={selectedFlagImageUrl}
                         scale={1}
                         watermark="Wise Melon"
                         cardWidthMm={(config as any).cardWidthMm}
@@ -1334,6 +1339,7 @@ export default function SubmitPage() {
                         fieldMappings={config.fieldMappings}
                         formData={formData}
                         studentPhoto={croppedPhoto}
+                        flagImageUrl={selectedFlagImageUrl}
                         scale={1}
                         watermark="Wise Melon"
                         cardWidthMm={(config as any).cardWidthMm}
@@ -1348,6 +1354,7 @@ export default function SubmitPage() {
                           fieldMappings={config.backFieldMappings || []}
                           formData={formData}
                           studentPhoto={croppedPhoto}
+                          flagImageUrl={selectedFlagImageUrl}
                           scale={1}
                           watermark="Wise Melon"
                           cardWidthMm={(config as any).cardWidthMm}

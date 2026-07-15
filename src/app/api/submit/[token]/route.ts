@@ -150,10 +150,16 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
         FLAG_LABEL_WORDS.some(w => (f.label || "").toLowerCase().includes(w))
       )
     let flagColors: string[] = []
+    let flagImages: Record<string, string> = {}
     if (hasFlagMapping) {
       try {
         const flags = await getSchoolFlagCatalog(cls.school.id)
         flagColors = flags.map(flag => flag.color)
+        flagImages = Object.fromEntries(
+          flags
+            .filter(flag => Boolean(flag.imageUrl))
+            .map(flag => [flag.color, flag.imageUrl as string]),
+        )
       } catch {
         // Non-fatal — dropdown will simply be empty and form falls back to text input
       }
@@ -200,8 +206,10 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
         hasBackSide: template?.hasBackSide || false,
         // Photo background color for auto-replacement
         photoBgColor: template?.photoBgColor || "#FFFFFF",
-        // Available house/flag colours for dropdown in public form
+        // Available house/flag colours and their uploaded images for the public
+        // dropdown and live card preview. This is read-only storage metadata.
         flagColors,
+        flagImages,
         // Fixed branch option
         fixedBranch,
       },
