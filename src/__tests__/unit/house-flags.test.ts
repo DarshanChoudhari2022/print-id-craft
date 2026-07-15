@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   buildHouseFlagDefinitions,
+  generationUsesHouseFlags,
   humanizeHouseFilename,
   resolveHouseImageUrl,
   resolveHouseValue,
@@ -33,5 +34,21 @@ describe("house flag utilities", () => {
 
   it("matches house images case-insensitively and ignores punctuation", () => {
     expect(resolveHouseImageUrl({ flagColor: "red" }, { Red_: "/red.png" })).toBe("/red.png")
+  })
+
+  it("detects a flag field in an assigned student's front template", () => {
+    expect(generationUsesHouseFlags([], [], [{
+      template: { fieldMappings: [{ type: "flag" }], backFieldMappings: [] },
+    }])).toBe(true)
+  })
+
+  it("detects a flag field in an assigned student's back template", () => {
+    expect(generationUsesHouseFlags([], [], [{
+      template: { fieldMappings: [], backFieldMappings: [{ type: "flag" }] },
+    }])).toBe(true)
+  })
+
+  it("does not report flags when no active template contains one", () => {
+    expect(generationUsesHouseFlags([{ type: "text" }], [], [{}])).toBe(false)
   })
 })

@@ -3,6 +3,17 @@ export type HouseFlagDefinition = {
   imageUrl: string | null
 }
 
+type HouseFlagMapping = {
+  type?: string
+}
+
+type HouseFlagTemplateStudent = {
+  template?: {
+    fieldMappings?: HouseFlagMapping[] | null
+    backFieldMappings?: HouseFlagMapping[] | null
+  } | null
+}
+
 const HOUSE_KEYS = new Set([
   "flag",
   "flagcolor",
@@ -17,6 +28,21 @@ const HOUSE_KEYS = new Set([
 
 export const normalizeHouseName = (value: string) =>
   String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "")
+
+export function generationUsesHouseFlags(
+  fallbackFront: HouseFlagMapping[] = [],
+  fallbackBack: HouseFlagMapping[] = [],
+  students: HouseFlagTemplateStudent[] = [],
+): boolean {
+  return [
+    fallbackFront,
+    fallbackBack,
+    ...students.flatMap(student => [
+      student.template?.fieldMappings || [],
+      student.template?.backFieldMappings || [],
+    ]),
+  ].some(mappings => mappings.some(mapping => mapping?.type === "flag"))
+}
 
 export function humanizeHouseFilename(filename: string): string {
   const base = filename
