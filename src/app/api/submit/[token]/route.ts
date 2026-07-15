@@ -7,6 +7,7 @@ import { computeSubmitFormRevision } from "@/lib/submit-draft"
 import { migrateTemplateToPt } from "@/lib/font-size-units"
 import { getFieldRole, inferFieldRole, resolveFieldValue, sortFieldsByRole } from "@/lib/field-resolver"
 import { getTemplateForClass } from "@/lib/template-resolver"
+import { getSchoolFlagCatalog } from "@/lib/school-flag-catalog"
 import {
   DIVISIONS,
   isDivisionDisabled,
@@ -98,6 +99,7 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
     // Excel exactly.  Fall back to deriving from fieldMappings only for JPG-template-only
     // schools that have never imported an Excel.
     const rawMappings = (template?.fieldMappings || []) as any[]
+    const backFieldMappings = (template?.backFieldMappings || []) as any[]
     const rawFieldConf = (template?.fieldConfig || []) as any[]
 
     // ─────────────────────────────────────────────────────────────────────
@@ -142,31 +144,20 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
     const FLAG_LABEL_WORDS = ["house", "flag", "colour", "color"]
     const hasFlagMapping =
       rawMappings.some((m: any) => m.type === "flag") ||
+      backFieldMappings.some((m: any) => m.type === "flag") ||
       rawFieldConf.some((f: any) =>
         FLAG_FIELD_KEYS.includes(f.key) ||
         FLAG_LABEL_WORDS.some(w => (f.label || "").toLowerCase().includes(w))
       )
-    const FLAG_KEYS = ["flagColor", "Flag Color", "flag_color", "House", "house", "Colour", "colour", "houseFlag", "house_flag", "houseColor", "house_color"]
-    const flagColorSet = new Set<string>()
+    let flagColors: string[] = []
     if (hasFlagMapping) {
       try {
-        const otherStudents = await prisma.student.findMany({
-          where: { schoolId: cls.school.id },
-          select: { formData: true },
-        })
-        for (const s of otherStudents) {
-          const fd = (s.formData as Record<string, string> | null) || {}
-          for (const k of FLAG_KEYS) {
-            const v = (fd[k] || "").trim()
-            if (v) flagColorSet.add(v)
-          }
-        }
+        const flags = await getSchoolFlagCatalog(cls.school.id)
+        flagColors = flags.map(flag => flag.color)
       } catch {
         // Non-fatal — dropdown will simply be empty and form falls back to text input
       }
     }
-    const flagColors = Array.from(flagColorSet).sort((a, b) => a.localeCompare(b))
-
     const classOptions = resolveEffectiveClassOptions(
       cls.classOptions,
       cls.sectionType,

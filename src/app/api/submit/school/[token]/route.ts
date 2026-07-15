@@ -4,6 +4,7 @@ import { buildFormFields, buildTemplateFallbackFields, type FormField } from "@/
 import { migrateTemplateToPt } from "@/lib/font-size-units"
 import { getDefaultTemplate } from "@/lib/template-resolver"
 import { DEFAULT_CARD_HEIGHT_MM, DEFAULT_CARD_WIDTH_MM } from "@/lib/card-dimensions"
+import { getSchoolFlagCatalog } from "@/lib/school-flag-catalog"
 import {
   isDivisionDisabled,
   resolveEffectiveClassOptions,
@@ -66,6 +67,7 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
       }
     }
     const rawMappings = (template?.fieldMappings || []) as any[]
+    const backFieldMappings = (template?.backFieldMappings || []) as any[]
     const rawFieldConf = (template?.fieldConfig || []) as any[]
 
     // Same skip rules as the per-class endpoint — keeps behaviour consistent.
@@ -90,29 +92,18 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
     const FLAG_LABEL_WORDS = ["house", "flag", "colour", "color"]
     const hasFlagMapping =
       rawMappings.some((m: any) => m.type === "flag") ||
+      backFieldMappings.some((m: any) => m.type === "flag") ||
       rawFieldConf.some((f: any) =>
         FLAG_FIELD_KEYS.includes(f.key) ||
         FLAG_LABEL_WORDS.some(w => (f.label || "").toLowerCase().includes(w))
       )
-    const FLAG_KEYS = ["flagColor", "Flag Color", "flag_color", "House", "house", "Colour", "colour", "houseFlag", "house_flag", "houseColor", "house_color"]
-    const flagColorSet = new Set<string>()
+    let flagColors: string[] = []
     if (hasFlagMapping) {
       try {
-        const otherStudents = await prisma.student.findMany({
-          where: { schoolId: school.id },
-          select: { formData: true },
-        })
-        for (const s of otherStudents) {
-          const fd = (s.formData as Record<string, string> | null) || {}
-          for (const k of FLAG_KEYS) {
-            const v = (fd[k] || "").trim()
-            if (v) flagColorSet.add(v)
-          }
-        }
+        const flags = await getSchoolFlagCatalog(school.id)
+        flagColors = flags.map(flag => flag.color)
       } catch { /* non-fatal */ }
     }
-    const flagColors = Array.from(flagColorSet).sort((a, b) => a.localeCompare(b))
-
     const templateNeedsDivision = templateHasDivisionPlaceholder(rawMappings, rawFieldConf)
 
     return NextResponse.json({
