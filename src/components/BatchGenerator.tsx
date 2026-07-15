@@ -19,7 +19,7 @@ import {
   resolveCardDimensions,
 } from "@/lib/card-dimensions"
 import { getCoverPhotoPlacement } from "@/lib/card-photo-placement"
-import { resolveHouseImageUrl } from "@/lib/house-flags"
+import { generationUsesHouseFlags, resolveHouseImageUrl } from "@/lib/house-flags"
 
 type FieldMapping = {
   id: string
@@ -1331,8 +1331,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
 
       // Fetch flag images for this school (if any flag field exists in mappings)
       let flagImagesMap: Record<string, string> = {}
-      const hasFlagField = fieldMappings.some((f: any) => f.type === "flag") ||
-                           (backFieldMappings || []).some((f: any) => f.type === "flag")
+      const hasFlagField = generationUsesHouseFlags(fieldMappings, backFieldMappings || [], students)
       if (hasFlagField) {
         try {
           const flagRes = await fetch(`/api/schools/${schoolId}/flags`)
@@ -1347,7 +1346,6 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
 
       // Helper to resolve flag URL for a student
       const getFlagUrl = (student: any): string | undefined => {
-        if (!hasFlagField) return undefined
         return resolveHouseImageUrl(
           student.formData as Record<string, string>,
           flagImagesMap,

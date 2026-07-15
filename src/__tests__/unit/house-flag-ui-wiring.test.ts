@@ -9,6 +9,14 @@ describe("house flag UI and rendering wiring", () => {
     expect(read("src/components/BatchGenerator.tsx")).toContain("resolveHouseImageUrl")
   })
 
+  it("detects flags across fallback and assigned student templates", () => {
+    const source = read("src/components/BatchGenerator.tsx")
+    expect(source).toContain(
+      "generationUsesHouseFlags(fieldMappings, backFieldMappings || [], students)",
+    )
+    expect(source).not.toContain("if (!hasFlagField) return undefined")
+  })
+
   it("uses the shared resolver in manufacturer preview", () => {
     expect(read("src/app/(manufacturer)/schools/[id]/page.tsx")).toContain("resolveHouseImageUrl")
   })
