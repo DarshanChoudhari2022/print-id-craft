@@ -127,6 +127,7 @@ export async function buildFormFields(
 
 export function buildTemplateFallbackFields(template: any): FormField[] {
   const rawMappings = (template?.fieldMappings || []) as any[]
+  const backMappings = (template?.backFieldMappings || []) as any[]
   const rawFieldConf = (template?.fieldConfig || []) as any[]
   const fallback: FormField[] = []
   const optionalMappingKeys = new Set(
@@ -155,6 +156,20 @@ export function buildTemplateFallbackFields(template: any): FormField[] {
       if (k.includes("phone") || k.includes("mob") || k === "mob_father" || k === "mother_phone") formType = "tel"
       fallback.push({ key: m.fieldKey, label: m.label, type: formType, required: m.required !== false })
     }
+  }
+
+  const hasFlagMapping = [...rawMappings, ...backMappings].some(m => m.type === "flag")
+  const hasFlagField = fallback.some(
+    field => getFieldRole(field.key, field.label, field.role) === "flag",
+  )
+  if (hasFlagMapping && !hasFlagField) {
+    fallback.push({
+      key: "flagColor",
+      label: "House",
+      type: "select",
+      required: true,
+      role: "flag",
+    })
   }
 
   return fallback
