@@ -20,6 +20,10 @@ import {
 } from "@/lib/card-dimensions"
 import { getCoverPhotoPlacement } from "@/lib/card-photo-placement"
 import { generationUsesHouseFlags, resolveHouseImageUrl } from "@/lib/house-flags"
+import {
+  buildGenerationScopeName,
+  type GenerationFilterOptions,
+} from "@/lib/generation-scope"
 
 type FieldMapping = {
   id: string
@@ -1086,6 +1090,7 @@ async function buildBmpPagesFromCards(
 async function saveBmpPagesToFolder(
   pages: BmpPageFile[],
   onProgress: (current: number, total: number) => void,
+  archiveName: string = "IDCards-BMP-Pages.zip",
 ): Promise<void> {
   let done = 0
   const total = pages.length
@@ -1116,7 +1121,7 @@ async function saveBmpPagesToFolder(
     const blob = await zip.generateAsync({ type: "blob" })
     const a = document.createElement("a")
     a.href = URL.createObjectURL(blob)
-    a.download = "IDCards-BMP-Pages.zip"
+    a.download = archiveName
     a.click()
     URL.revokeObjectURL(a.href)
   }
@@ -1124,6 +1129,14 @@ async function saveBmpPagesToFolder(
 
 export default function BatchGenerator({ schoolId, schoolName, classes }: BatchGeneratorProps) {
   const [selectedClassId, setSelectedClassId] = useState("")
+  const [selectedClassGrade, setSelectedClassGrade] = useState("")
+  const [selectedDivision, setSelectedDivision] = useState("")
+  const [generationFilterOptions, setGenerationFilterOptions] = useState<GenerationFilterOptions>({
+    classes: [],
+    divisionsByClass: {},
+  })
+  const [filterOptionsLoading, setFilterOptionsLoading] = useState(false)
+  const [filterOptionsError, setFilterOptionsError] = useState("")
   const [statusFilter, setStatusFilter] = useState("APPROVED")
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("JPEG")
   const [pdfChunkSize, setPdfChunkSize] = useState(100)
@@ -1177,6 +1190,57 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
 
   // Track whether printConfig was loaded from DB (to show "saved" badge)
   const [printConfigSaved, setPrintConfigSaved] = useState(false)
+
+  const clearGeneratedResults = useCallback(() => {
+    setPreviewCards([])
+    setPdfPrintCards([])
+    setPendingSave(null)
+    setLastDownloadedPrintJob(null)
+    setProgress({ current: 0, total: 0, status: "" })
+  }, [])
+
+  const selectedSectionName = classes.find(c => c.id === selectedClassId)?.name || ""
+  const generationScopeName = buildGenerationScopeName(
+    schoolName,
+    selectedSectionName,
+    selectedClassGrade,
+    selectedDivision,
+  )
+  const availableDivisions = generationFilterOptions.divisionsByClass[selectedClassGrade] || []
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setSelectedClassGrade("")
+    setSelectedDivision("")
+    setGenerationFilterOptions({ classes: [], divisionsByClass: {} })
+    setFilterOptionsError("")
+    setFilterOptionsLoading(true)
+    clearGeneratedResults()
+
+    const params = new URLSearchParams({ status: statusFilter })
+    params.set("mode", "filters")
+    if (selectedClassId) params.set("classId", selectedClassId)
+
+    fetch(`/api/schools/${schoolId}/generate?${params}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async response => {
+        const data = await response.json()
+        if (!response.ok || !data.success) throw new Error(data.error || "Failed to load class filters")
+        setGenerationFilterOptions(data.data)
+      })
+      .catch(error => {
+        if (error?.name !== "AbortError") {
+          setFilterOptionsError(error?.message || "Failed to load class filters")
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setFilterOptionsLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [clearGeneratedResults, schoolId, selectedClassId, statusFilter])
 
   // Fetch the template's configured card dimensions + saved printConfig once.
   // This ensures Print Setup, render canvas, and PDF placement all agree.
@@ -1277,7 +1341,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
 
       await generateDirectPdf({
         cards: chunk,
-        schoolName,
+        schoolName: generationScopeName,
         paperWidth: layout.paperWidth,
         paperHeight: layout.paperHeight,
         cardWidth: layout.cardWidth,
@@ -1297,7 +1361,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     }
 
     return totalFiles
-  }, [getPdfFileCount, pdfChunkSize, schoolName])
+  }, [generationScopeName, getPdfFileCount, pdfChunkSize])
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true)
@@ -1309,6 +1373,8 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     try {
       const params = new URLSearchParams({ status: statusFilter })
       if (selectedClassId) params.set("classId", selectedClassId)
+      if (selectedClassGrade) params.set("classGrade", selectedClassGrade)
+      if (selectedDivision) params.set("division", selectedDivision)
 
       const res = await fetch(`/api/schools/${schoolId}/generate?${params}`)
       const data = await res.json()
@@ -1555,7 +1621,6 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         const cdrCw = cardWidthMm || DEFAULT_CARD_WIDTH_MM
         const cdrCh = cardHeightMm || DEFAULT_CARD_HEIGHT_MM
         setLastCardDims({ w: cdrCw, h: cdrCh })
-        const cdrClassName = classes.find((c) => c.id === selectedClassId)?.name || "All"
         const cdrStudentIds = [...studentIds]
         setPendingSave({
           format: "CDR",
@@ -1570,7 +1635,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           vPitch: printConfig.v2ndPosition,
           pdfStudentIds: cdrStudentIds,
           save: async () => {
-            await downloadAsCdrZip(svgCards, `${schoolName}-${cdrClassName}-IDCards-CDR.zip`)
+            await downloadAsCdrZip(svgCards, `${generationScopeName}-IDCards-CDR.zip`)
           },
         })
         setProgress({ current: totalCount, total: totalCount, status: `Ready! ${svgCards.length} SVG files staged. Verify size below, then click Download.` })
@@ -1669,14 +1734,14 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 hPitch: bmpHPitch,
                 vPitch: bmpVPitch,
               },
-              schoolName,
+              generationScopeName,
               (done, total, status) => {
                 setProgress({ current: done, total, status })
               },
             )
             await saveBmpPagesToFolder(pages, (done, total) => {
               setProgress({ current: done, total, status: `Saving BMP page ${done}/${total}...` })
-            })
+            }, `${generationScopeName}-IDCards-BMP-Pages.zip`)
           },
         })
         setProgress({ current: totalCount, total: totalCount, status: `Ready! ${bmpRendered.length} cards staged on ${bmpTotalPages} BMP page(s) (${bmpCols}×${bmpRows} per page). Verify layout below, then click Download.` })
@@ -1738,7 +1803,6 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         const jpegCw = cardWidthMm || DEFAULT_CARD_WIDTH_MM
         const jpegCh = cardHeightMm || DEFAULT_CARD_HEIGHT_MM
         setLastCardDims({ w: jpegCw, h: jpegCh })
-        const jpegClassName = classes.find((c) => c.id === selectedClassId)?.name || "All"
         const jpegStudentIds = renderedCards.map((c) => c.id)
         setPendingSave({
           format: "JPEG",
@@ -1754,7 +1818,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           pdfStudentIds: jpegStudentIds,
           save: async () => {
             setProgress({ current: totalCount, total: totalCount, status: "Creating ZIP file..." })
-            await downloadAsZip(zipCards, `${schoolName}-${jpegClassName}-IDCards.zip`)
+            await downloadAsZip(zipCards, `${generationScopeName}-IDCards.zip`)
           },
         })
         setProgress({ current: totalCount, total: totalCount, status: `Ready! ${renderedCards.length} cards (${zipCards.length} images) staged. Verify size below, then click Download.` })
@@ -1767,7 +1831,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
       // Release student photo cache to prevent memory build-up across runs
       clearStudentImageCache()
     }
-  }, [classes, downloadPdfInChunks, getPdfFileCount, outputFormat, pdfChunkSize, printConfig, schoolId, schoolName, selectedClassId, statusFilter])
+  }, [downloadPdfInChunks, generationScopeName, getPdfFileCount, outputFormat, pdfChunkSize, printConfig, schoolId, selectedClassGrade, selectedClassId, selectedDivision, statusFilter])
 
   const handleConfirmDownload = useCallback(async () => {
     if (!pendingSave) return
@@ -1903,16 +1967,16 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 hPitch,
                 vPitch,
               },
-              schoolName,
+              generationScopeName,
               (done, total, status) => setProgress({ current: done, total, status }),
             )
             await saveBmpPagesToFolder(pages, (done, total) => {
               setProgress({ current: done, total, status: `Saving BMP page ${done}/${total}...` })
-            })
+            }, `${generationScopeName}-IDCards-BMP-Pages.zip`)
           },
     })
     setProgress({ current: cards.length, total: cards.length, status: `Layout updated! (${cols}×${rows} = ${cols * rows} per page · ${totalPages} pages)` })
-  }, [downloadPdfInChunks, pdfChunkSize, pendingSave, schoolName])
+  }, [downloadPdfInChunks, generationScopeName, pdfChunkSize, pendingSave])
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -1955,7 +2019,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             <label
               style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 6, display: "block" }}
             >
-              Select Class
+              Section
             </label>
             <select
               value={selectedClassId}
@@ -1969,10 +2033,75 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 fontSize: 14,
               }}
             >
-              <option value="">All Classes</option>
+              <option value="">All Sections</option>
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({c._count.students} students)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ flex: "1 1 160px" }}>
+            <label
+              style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 6, display: "block" }}
+            >
+              Class/Grade
+            </label>
+            <select
+              value={selectedClassGrade}
+              disabled={filterOptionsLoading || generationFilterOptions.classes.length === 0}
+              onChange={(e) => {
+                setSelectedClassGrade(e.target.value)
+                setSelectedDivision("")
+                clearGeneratedResults()
+              }}
+              style={{
+                width: "100%",
+                height: 42,
+                padding: "0 12px",
+                border: "1.5px solid #e2e8f0",
+                borderRadius: 10,
+                fontSize: 14,
+                background: filterOptionsLoading ? "#f8fafc" : "white",
+              }}
+            >
+              <option value="">{filterOptionsLoading ? "Loading classes..." : "All Classes"}</option>
+              {generationFilterOptions.classes.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.value} ({option.count} students)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ flex: "1 1 150px" }}>
+            <label
+              style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 6, display: "block" }}
+            >
+              Division
+            </label>
+            <select
+              value={selectedDivision}
+              disabled={!selectedClassGrade || availableDivisions.length === 0}
+              onChange={(e) => {
+                setSelectedDivision(e.target.value)
+                clearGeneratedResults()
+              }}
+              style={{
+                width: "100%",
+                height: 42,
+                padding: "0 12px",
+                border: "1.5px solid #e2e8f0",
+                borderRadius: 10,
+                fontSize: 14,
+                background: !selectedClassGrade ? "#f8fafc" : "white",
+              }}
+            >
+              <option value="">All Divisions</option>
+              {availableDivisions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.value} ({option.count} students)
                 </option>
               ))}
             </select>
@@ -2056,6 +2185,12 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             </div>
           )}
         </div>
+
+        {filterOptionsError && (
+          <div style={{ marginTop: -12, marginBottom: 16, color: "#b91c1c", fontSize: 12 }}>
+            {filterOptionsError}
+          </div>
+        )}
 
         {/* CDR format info banner */}
         {outputFormat === "CDR" && (
