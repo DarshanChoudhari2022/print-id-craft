@@ -22,7 +22,7 @@ Extract the cover-fit placement calculation into a small pure helper. Given the 
 - If the source is relatively taller than the mapped box, scale it to the box width and align it to the top.
 - Otherwise, scale it to the box height, center it horizontally, and align it to the top.
 
-Both the live JPG preview and `BatchGenerator`'s raster card renderer will call this helper. The existing rounded-rectangle clip and border drawing remain in their current rendering paths. PDF print generation already consumes the raster card output from `BatchGenerator`, so no PDF page-layout changes are required.
+Both the live JPG preview and `BatchGenerator`'s raster card renderer will call this helper. The raster renderer will accept an explicit photo-fit option that defaults to its current contain-fit behaviour; only the PDF print path will request cover-fit. Existing JPG and BMP export callers will therefore retain their current output. The existing rounded-rectangle clip and border drawing remain in their current rendering paths, and no PDF page-layout changes are required.
 
 The helper boundary prevents the preview and PDF calculations from drifting apart again while keeping the change limited to student-photo placement.
 
@@ -37,6 +37,6 @@ Add focused unit tests for the pure placement helper before changing production 
 - A relatively tall source photo fills the mapped width, overflows vertically, and is top-aligned.
 - A relatively wide source photo fills the mapped height, overflows horizontally, is centered horizontally, and is top-aligned.
 - A source with the same aspect ratio exactly matches the mapped rectangle.
+- A source-level regression assertion confirms that the PDF print call requests cover-fit while the renderer default remains contain-fit for existing non-PDF callers.
 
 After implementation, run the focused regression test, the complete Vitest suite, lint, and the production build. No database commands or migrations are part of verification.
-
