@@ -19,6 +19,7 @@ import {
   resolveCardDimensions,
 } from "@/lib/card-dimensions"
 import { getCoverPhotoPlacement } from "@/lib/card-photo-placement"
+import { resolveHouseImageUrl } from "@/lib/house-flags"
 
 type FieldMapping = {
   id: string
@@ -1347,9 +1348,10 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
       // Helper to resolve flag URL for a student
       const getFlagUrl = (student: any): string | undefined => {
         if (!hasFlagField) return undefined
-        const fd = student.formData as Record<string, string>
-        const color = fd?.flagColor || fd?.["Flag Color"] || fd?.["house"] || fd?.["House"] || fd?.["colour"] || fd?.["Colour"] || ""
-        return color ? flagImagesMap[color] : undefined
+        return resolveHouseImageUrl(
+          student.formData as Record<string, string>,
+          flagImagesMap,
+        )
       }
 
       // Pre-load every class template. This is essential when "All classes"

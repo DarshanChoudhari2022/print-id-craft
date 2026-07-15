@@ -26,6 +26,7 @@ import {
   validatePublicSubmissionDetails,
   type FormField,
 } from "@/lib/form-validation"
+import { resolveHouseImageUrl } from "@/lib/house-flags"
 
 const EDIT_ADDRESS_MIN_WORDS = 5
 
@@ -104,51 +105,6 @@ const BatchGenerator = dynamic(() => import("@/components/BatchGenerator"), { ss
 const ManufacturerPhotoBgEditor = dynamic(() => import("@/components/ManufacturerPhotoBgEditor"), { ssr: false })
 const ManufacturerBgBatchProcessor = dynamic(() => import("@/components/ManufacturerBgBatchProcessor"), { ssr: false })
 const PhotoCropper = dynamic(() => import("@/components/PhotoCropper"), { ssr: false })
-
-/**
- * Resolve a student's flag-image URL by trying every column the import
- * route maps to "flagColor" — older student records may still store the
- * value under "House", "house", "Colour", etc., so we check those first
- * before falling back to a case-insensitive scan of every formData key.
- *
- * Without this fallback, a school whose Excel header was "HOUSE" (instead
- * of "Flag Color") would render with a missing flag in the preview even
- * though the upload + storage path worked correctly.
- */
-function resolveFlagImageUrl(
-  formData: Record<string, string> | undefined | null,
-  flagImages: Record<string, string>,
-): string | undefined {
-  if (!formData) return undefined
-  const candidates = [
-    formData.flagColor,
-    formData["Flag Color"],
-    formData["flag_color"],
-    formData["House"],
-    formData["house"],
-    formData["HOUSE"],
-    formData["Colour"],
-    formData["colour"],
-    formData["Color"],
-    formData["color"],
-    formData["Team"],
-    formData["team"],
-  ].filter(Boolean) as string[]
-
-  // Direct hits first
-  for (const c of candidates) {
-    if (flagImages[c]) return flagImages[c]
-  }
-  // Case-insensitive fallback against the whole flagImages map.
-  // This matches a value of "blue" against an uploaded "Blue" flag, etc.
-  const flagKeysLower: Record<string, string> = {}
-  for (const k of Object.keys(flagImages)) flagKeysLower[k.toLowerCase()] = flagImages[k]
-  for (const c of candidates) {
-    const hit = flagKeysLower[c.toLowerCase()]
-    if (hit) return hit
-  }
-  return undefined
-}
 
 type ClassData = {
   id: string
@@ -433,6 +389,9 @@ export default function SchoolDetailPage() {
   const [flagColors, setFlagColors] = useState<string[]>([])
   const [flagImages, setFlagImages] = useState<Record<string, string>>({})
   const [flagUploading, setFlagUploading] = useState<string>('')
+  const [newHouseName, setNewHouseName] = useState('')
+  const [newHouseFile, setNewHouseFile] = useState<File | null>(null)
+  const [addingHouse, setAddingHouse] = useState(false)
   const schoolTemplatesLoadedRef = useRef(false)
   const templateLoadedRef = useRef(false)
   const flagsLoadedRef = useRef(false)
@@ -1965,6 +1924,30 @@ export default function SchoolDetailPage() {
     } finally {
       setFlagUploading('')
     }
+  }
+
+  const handleAddHouse = async () => {
+    const name = newHouseName.trim()
+    if (!name) {
+      toast.error("Enter a house name")
+      return
+    }
+    if (!newHouseFile) {
+      toast.error("Select a house flag image")
+      return
+    }
+
+    setAddingHouse(true)
+    const result = await handleFlagUpload(name, newHouseFile, { silent: true })
+    if (result.ok) {
+      toast.success(`House "${name}" added`)
+      setNewHouseName('')
+      setNewHouseFile(null)
+      await fetchFlags()
+    } else {
+      toast.error(result.error || "Could not add house")
+    }
+    setAddingHouse(false)
   }
 
   // Bulk flag upload — uses filename (without extension) as the color name.
@@ -4362,14 +4345,44 @@ export default function SchoolDetailPage() {
               <div style={{ background: 'white', borderRadius: 20, maxWidth: 640, width: '100%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>🏴 Manage Flag Images</h2>
-                    <p style={{ fontSize: 13, color: '#64748b' }}>Upload flag/house images for each color group. These will appear on student ID cards.</p>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>🏴 Manage Houses & Flags</h2>
+                    <p style={{ fontSize: 13, color: '#64748b' }}>Add any number of houses and upload the matching image for the ID-card flag placeholder.</p>
                   </div>
                   <button onClick={() => setFlagUploadOpen(false)} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#f1f5f9', cursor: 'pointer', fontSize: 16 }}>✕</button>
                 </div>
 
                 <div style={{ padding: 24 }}>
                   {/* Bulk Upload Section — always visible */}
+                  <div style={{ marginBottom: 20, padding: 16, background: '#eff6ff', borderRadius: 14, border: '1.5px solid #bfdbfe' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1e40af', marginBottom: 10 }}>Add House</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(180px, 1fr) auto', gap: 10, alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={newHouseName}
+                        onChange={event => setNewHouseName(event.target.value)}
+                        placeholder="e.g. Red House"
+                        style={{ height: 42, padding: '0 12px', border: '1.5px solid #bfdbfe', borderRadius: 9, fontSize: 13 }}
+                      />
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
+                        onChange={event => setNewHouseFile(event.target.files?.[0] || null)}
+                        style={{ fontSize: 12 }}
+                      />
+                      <button
+                        className="btn btn-primary"
+                        onClick={handleAddHouse}
+                        disabled={addingHouse || !newHouseName.trim() || !newHouseFile}
+                        style={{ minHeight: 42, padding: '8px 18px', whiteSpace: 'nowrap' }}
+                      >
+                        {addingHouse ? "Adding..." : "Add House"}
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
+                      This name becomes a required option in the public House dropdown.
+                    </div>
+                  </div>
+
                   <div style={{ marginBottom: 20, padding: 16, background: '#fefce8', borderRadius: 14, border: '1.5px solid #fde68a' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
                       <span style={{ fontSize: 24 }}>📁</span>
@@ -4890,7 +4903,7 @@ export default function SchoolDetailPage() {
                         fieldMappings={studentTemplate.fieldMappings as any[]}
                         formData={selectedStudent.formData as Record<string, string>}
                         studentPhoto={detailPhotoUrl}
-                        flagImageUrl={resolveFlagImageUrl(selectedStudent.formData as Record<string, string>, flagImages)}
+                        flagImageUrl={resolveHouseImageUrl(selectedStudent.formData as Record<string, string>, flagImages)}
                         scale={1}
                         watermark="PREVIEW"
                         cardWidthMm={(studentTemplate as any).cardWidthMm}
@@ -4906,7 +4919,7 @@ export default function SchoolDetailPage() {
                           fieldMappings={studentTemplate.backFieldMappings as any[] || []}
                           formData={selectedStudent.formData as Record<string, string>}
                           studentPhoto={detailPhotoUrl}
-                          flagImageUrl={resolveFlagImageUrl(selectedStudent.formData as Record<string, string>, flagImages)}
+                          flagImageUrl={resolveHouseImageUrl(selectedStudent.formData as Record<string, string>, flagImages)}
                           scale={1}
                           watermark="PREVIEW"
                           cardWidthMm={(studentTemplate as any).cardWidthMm}
