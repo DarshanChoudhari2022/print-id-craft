@@ -3,6 +3,19 @@ export type HouseFlagDefinition = {
   imageUrl: string | null
 }
 
+export type HouseFlagRenderLayout = {
+  label: string
+  imageX: number
+  imageY: number
+  imageWidth: number
+  imageHeight: number
+  labelX: number
+  labelY: number
+  labelWidth: number
+  labelHeight: number
+  fontSize: number
+}
+
 type HouseFlagMapping = {
   type?: string
 }
@@ -99,4 +112,42 @@ export function resolveHouseImageUrl(
   if (!wanted) return undefined
   const match = Object.entries(images).find(([name]) => normalizeHouseName(name) === wanted)
   return match?.[1]
+}
+
+export function getHouseFlagRenderLayout(
+  formData: Record<string, string> | null | undefined,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): HouseFlagRenderLayout | null {
+  const rawLabel = resolveHouseValue(formData)
+  if (!rawLabel) return null
+
+  const label = rawLabel
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, character => character.toUpperCase())
+  const gap = height * 0.03
+  const labelHeight = height * 0.2
+  const imageHeight = Math.max(0, height - labelHeight - gap)
+  const fontSize = Math.max(
+    1,
+    Math.min(labelHeight * 0.68, width / Math.max(label.length * 0.62, 1)),
+  )
+
+  return {
+    label,
+    imageX: x,
+    imageY: y,
+    imageWidth: width,
+    imageHeight,
+    labelX: x,
+    labelY: y + imageHeight + gap,
+    labelWidth: width,
+    labelHeight,
+    fontSize,
+  }
 }

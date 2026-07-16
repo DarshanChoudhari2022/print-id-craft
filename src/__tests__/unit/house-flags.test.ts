@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   buildHouseFlagDefinitions,
   generationUsesHouseFlags,
+  getHouseFlagRenderLayout,
   humanizeHouseFilename,
   resolveHouseImageUrl,
   resolveHouseValue,
@@ -34,6 +35,19 @@ describe("house flag utilities", () => {
 
   it("matches house images case-insensitively and ignores punctuation", () => {
     expect(resolveHouseImageUrl({ flagColor: "red" }, { Red_: "/red.png" })).toBe("/red.png")
+  })
+
+  it("places the house label below the flag inside the original placeholder", () => {
+    const layout = getHouseFlagRenderLayout({ House: "red" }, 10, 20, 100, 200)
+
+    expect(layout?.label).toBe("Red")
+    expect(layout?.imageY).toBe(20)
+    expect(layout!.imageY + layout!.imageHeight).toBeLessThan(layout!.labelY)
+    expect(layout!.labelY + layout!.labelHeight).toBeLessThanOrEqual(220)
+  })
+
+  it("returns no flag layout when the student has no selected house", () => {
+    expect(getHouseFlagRenderLayout({}, 0, 0, 100, 100)).toBeNull()
   })
 
   it("detects a flag field in an assigned student's front template", () => {

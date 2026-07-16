@@ -9,6 +9,17 @@ describe("house flag UI and rendering wiring", () => {
     expect(read("src/components/BatchGenerator.tsx")).toContain("resolveHouseImageUrl")
   })
 
+  it.each(["src/components/JpgCardPreview.tsx", "src/components/BatchGenerator.tsx"])(
+    "uses the shared flag image-and-label layout in %s",
+    file => expect(read(file)).toContain("getHouseFlagRenderLayout"),
+  )
+
+  it("renders the escaped house label in SVG output", () => {
+    const source = read("src/components/BatchGenerator.tsx")
+    expect(source).toContain("escapeXml(flagLayout.label)")
+    expect(source).toContain('font-weight="bold"')
+  })
+
   it("detects flags across fallback and assigned student templates", () => {
     const source = read("src/components/BatchGenerator.tsx")
     expect(source).toContain(

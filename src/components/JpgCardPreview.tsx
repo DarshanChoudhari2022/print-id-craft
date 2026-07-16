@@ -12,6 +12,7 @@ import {
   printCanvasSize,
 } from "@/lib/card-dimensions"
 import { getCoverPhotoPlacement } from "@/lib/card-photo-placement"
+import { getHouseFlagRenderLayout } from "@/lib/house-flags"
 
 type FieldMapping = {
   id: string
@@ -99,6 +100,48 @@ function drawImageContain(
     dy = y
   }
   ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, dw, dh)
+}
+
+async function drawHouseFlag(
+  ctx: CanvasRenderingContext2D,
+  formData: Record<string, string>,
+  field: FieldMapping,
+  flagImageUrl: string | undefined,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const layout = getHouseFlagRenderLayout(formData, x, y, width, height)
+  if (!layout) return
+
+  if (flagImageUrl) {
+    try {
+      const flagImg = await loadImage(flagImageUrl)
+      drawImageContain(
+        ctx,
+        flagImg,
+        layout.imageX,
+        layout.imageY,
+        layout.imageWidth,
+        layout.imageHeight,
+      )
+    } catch {
+      // Keep the selected house name visible even if its image cannot load.
+    }
+  }
+
+  ctx.save()
+  ctx.font = `bold ${layout.fontSize}px ${field.fontFamily || "Arial"}`
+  ctx.fillStyle = field.fontColor || "#000000"
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  ctx.fillText(
+    layout.label,
+    layout.labelX + layout.labelWidth / 2,
+    layout.labelY + layout.labelHeight / 2,
+  )
+  ctx.restore()
 }
 
 type JpgCardPreviewProps = {
@@ -418,14 +461,7 @@ export default function JpgCardPreview({
             ctx.restore()
           }
         } else if (field.type === "flag") {
-          if (flagImageUrl) {
-            try {
-              const flagImg = await loadImage(flagImageUrl)
-              ctx.drawImage(flagImg, 0, 0, flagImg.naturalWidth, flagImg.naturalHeight, fx, fy, fw, fh)
-            } catch (err) {
-              // Flag image failed to load — skip silently
-            }
-          }
+          await drawHouseFlag(ctx, formData, field, flagImageUrl, fx, fy, fw, fh)
         } else {
           // Apply dateFormat + textTransform before rendering (matches mapper preview).
           const hasDivisionPlaceholder = fieldMappings.some(
@@ -620,11 +656,8 @@ export async function generateJpgCard(
         ctx.stroke()
         ctx.restore()
       }
-    } else if (field.type === "flag" && flagImageUrl) {
-      try {
-        const flagImg = await loadImage(flagImageUrl)
-        ctx.drawImage(flagImg, 0, 0, flagImg.naturalWidth, flagImg.naturalHeight, fx, fy, fw, fh)
-      } catch {}
+    } else if (field.type === "flag") {
+      await drawHouseFlag(ctx, formData, field, flagImageUrl, fx, fy, fw, fh)
     } else if (field.type === "text") {
       const hasDivisionPlaceholder = fieldMappings.some(
         (x) => x.type !== "photo" && x.type !== "flag" && (x.fieldKey === "division" || x.fieldKey === "div")

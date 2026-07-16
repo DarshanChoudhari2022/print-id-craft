@@ -19,7 +19,11 @@ import {
   resolveCardDimensions,
 } from "@/lib/card-dimensions"
 import { getCoverPhotoPlacement } from "@/lib/card-photo-placement"
-import { generationUsesHouseFlags, resolveHouseImageUrl } from "@/lib/house-flags"
+import {
+  generationUsesHouseFlags,
+  getHouseFlagRenderLayout,
+  resolveHouseImageUrl,
+} from "@/lib/house-flags"
 import {
   buildGenerationScopeName,
   type GenerationFilterOptions,
@@ -75,6 +79,12 @@ type StudentRenderData = {
   className: string
   formData: Record<string, string>
 }
+
+const escapeXml = (value: string) => value
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
 
 type PhotoFit = "contain" | "cover"
 
@@ -273,6 +283,46 @@ function drawImageContain(
     dy = y
   }
   ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, dw, dh)
+}
+
+async function drawHouseFlagCanvas(
+  ctx: CanvasRenderingContext2D,
+  formData: Record<string, string>,
+  field: FieldMapping,
+  flagImageUrl: string | undefined,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const layout = getHouseFlagRenderLayout(formData, x, y, width, height)
+  if (!layout) return
+
+  if (flagImageUrl) {
+    const flagImg = await getCachedImage(flagImageUrl)
+    if (flagImg) {
+      drawImageContain(
+        ctx,
+        flagImg,
+        layout.imageX,
+        layout.imageY,
+        layout.imageWidth,
+        layout.imageHeight,
+      )
+    }
+  }
+
+  ctx.save()
+  ctx.font = `bold ${layout.fontSize}px ${field.fontFamily || "Arial"}`
+  ctx.fillStyle = field.fontColor || "#000000"
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  ctx.fillText(
+    layout.label,
+    layout.labelX + layout.labelWidth / 2,
+    layout.labelY + layout.labelHeight / 2,
+  )
+  ctx.restore()
 }
 
 /**
@@ -475,12 +525,7 @@ async function renderIdCard(
         ctx.restore()
       }
     } else if (field.type === "flag") {
-      if (flagImageUrl) {
-        const flagImg = await getCachedImage(flagImageUrl)
-        if (flagImg) {
-          ctx.drawImage(flagImg, 0, 0, flagImg.naturalWidth, flagImg.naturalHeight, fx, fy, fw, fh)
-        }
-      }
+      await drawHouseFlagCanvas(ctx, student.formData, field, flagImageUrl, fx, fy, fw, fh)
     } else {
       const pId = field.fieldKey === "photoId" ? "photoid" : field.fieldKey
       const hasDivisionPlaceholder = fieldMappings.some(
@@ -639,9 +684,15 @@ async function renderIdCardSvg(
         }
       }
     } else if (field.type === "flag") {
-      if (flagImageUrl) {
+      const flagLayout = getHouseFlagRenderLayout(student.formData, fx, fy, fw, fh)
+      if (flagLayout && flagImageUrl) {
         const flagDataUrl = await imageToDataUrl(flagImageUrl)
-        lines.push(`  <image href="${flagDataUrl}" x="${fx}" y="${fy}" width="${fw}" height="${fh}" preserveAspectRatio="xMidYMid meet" />`)
+        lines.push(`  <image href="${flagDataUrl}" x="${flagLayout.imageX}" y="${flagLayout.imageY}" width="${flagLayout.imageWidth}" height="${flagLayout.imageHeight}" preserveAspectRatio="xMidYMid meet" />`)
+      }
+      if (flagLayout) {
+        const textX = flagLayout.labelX + flagLayout.labelWidth / 2
+        const textY = flagLayout.labelY + flagLayout.labelHeight / 2
+        lines.push(`  <text x="${textX}" y="${textY}" font-family="${field.fontFamily || "Arial"}" font-size="${flagLayout.fontSize}" fill="${field.fontColor || "#000000"}" font-weight="bold" text-anchor="middle" dominant-baseline="central">${escapeXml(flagLayout.label)}</text>`)
       }
     } else {
       const pId = field.fieldKey === "photoId" ? "photoid" : field.fieldKey
