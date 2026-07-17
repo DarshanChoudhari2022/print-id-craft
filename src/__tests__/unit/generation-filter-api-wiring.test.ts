@@ -19,8 +19,9 @@ describe("generation filter API wiring", () => {
     expect(source).toContain('const classGrade = searchParams.get("classGrade")?.trim() || ""')
     expect(source).toContain('const division = searchParams.get("division")?.trim() || ""')
     expect(source).toContain(
-      "const scopedStudents = filterStudentsByGenerationScope(students, classGrade, division)",
+      "const scopedStudents = sortStudentsForGeneration(",
     )
+    expect(source).toContain("filterStudentsByGenerationScope(students, classGrade, division)")
     expect(source.indexOf("if (scopedStudents.length === 0)")).toBeGreaterThan(-1)
     expect(source.indexOf("scopedStudents.map")).toBeGreaterThan(-1)
     expect(source.indexOf("if (scopedStudents.length === 0)")).toBeLessThan(source.indexOf("scopedStudents.map"))

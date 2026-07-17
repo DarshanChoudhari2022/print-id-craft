@@ -1395,8 +1395,14 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     },
     chunkSize = pdfChunkSize,
   ) => {
-    const effectiveChunkSize = chunkSize > 0 ? chunkSize : cards.length
+    const MAX_SAFE_SINGLE_PDF_CARDS = 200
+    const effectiveChunkSize = chunkSize > 0
+      ? chunkSize
+      : Math.min(cards.length, MAX_SAFE_SINGLE_PDF_CARDS)
     const totalFiles = getPdfFileCount(cards.length, effectiveChunkSize)
+    if (chunkSize <= 0 && cards.length > MAX_SAFE_SINGLE_PDF_CARDS) {
+      toast.info(`Large all-in-one PDFs can freeze the browser, so this download will be safely split into ${totalFiles} class-wise PDF files.`)
+    }
 
     for (let start = 0; start < cards.length; start += effectiveChunkSize) {
       const end = Math.min(start + effectiveChunkSize, cards.length)

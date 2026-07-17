@@ -2,6 +2,10 @@ import {
   resolveClassDisplayValue,
   resolveDivisionDisplayValue,
 } from "@/lib/section-class"
+import {
+  normalizeFormValue,
+  resolveFieldValue,
+} from "@/lib/field-resolver"
 
 export type GenerationScopeOption = {
   value: string
@@ -22,6 +26,54 @@ const normalizeScopeValue = (value: string) =>
 
 const naturalSort = <T extends GenerationScopeOption>(a: T, b: T) =>
   a.value.localeCompare(b.value, undefined, { numeric: true, sensitivity: "base" })
+
+const PRE_PRIMARY_CLASS_ORDER: Record<string, number> = {
+  nursery: -30,
+  nur: -30,
+  lkg: -20,
+  lowerkg: -20,
+  ukg: -10,
+  upperkg: -10,
+}
+
+const ROMAN_CLASS_ORDER: Record<string, number> = {
+  i: 1,
+  ii: 2,
+  iii: 3,
+  iv: 4,
+  v: 5,
+  vi: 6,
+  vii: 7,
+  viii: 8,
+  ix: 9,
+  x: 10,
+  xi: 11,
+  xii: 12,
+}
+
+function classSortRank(value: string): number {
+  const normalized = normalizeScopeValue(value)
+  if (!normalized) return Number.MAX_SAFE_INTEGER
+  if (PRE_PRIMARY_CLASS_ORDER[normalized] !== undefined) return PRE_PRIMARY_CLASS_ORDER[normalized]
+  if (ROMAN_CLASS_ORDER[normalized] !== undefined) return ROMAN_CLASS_ORDER[normalized]
+  const numeric = normalized.match(/\d+/)?.[0]
+  return numeric ? Number(numeric) : Number.MAX_SAFE_INTEGER
+}
+
+function compareScopeText(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+}
+
+function compareRollValues(a: string, b: string): number {
+  const normalizedA = normalizeFormValue(a)
+  const normalizedB = normalizeFormValue(b)
+  const numberA = normalizedA.match(/\d+/)?.[0]
+  const numberB = normalizedB.match(/\d+/)?.[0]
+  if (numberA && numberB && Number(numberA) !== Number(numberB)) {
+    return Number(numberA) - Number(numberB)
+  }
+  return compareScopeText(normalizedA, normalizedB)
+}
 
 export function getGenerationStudentScope(formData: unknown): {
   classGrade: string
@@ -89,6 +141,42 @@ export function filterStudentsByGenerationScope<T extends StudentWithFormData>(
     if (wantedClass && normalizeScopeValue(scope.classGrade) !== wantedClass) return false
     if (wantedDivision && normalizeScopeValue(scope.division) !== wantedDivision) return false
     return true
+  })
+}
+
+export function sortStudentsForGeneration<T extends StudentWithFormData & {
+  serialNumber?: string | null
+}>(
+  students: T[],
+): T[] {
+  return [...students].sort((a, b) => {
+    const scopeA = getGenerationStudentScope(a.formData)
+    const scopeB = getGenerationStudentScope(b.formData)
+    const rankA = classSortRank(scopeA.classGrade)
+    const rankB = classSortRank(scopeB.classGrade)
+    if (rankA !== rankB) return rankA - rankB
+
+    const classCompare = compareScopeText(scopeA.classGrade, scopeB.classGrade)
+    if (classCompare) return classCompare
+
+    const divisionCompare = compareScopeText(scopeA.division, scopeB.division)
+    if (divisionCompare) return divisionCompare
+
+    const formA = (a.formData || {}) as Record<string, string>
+    const formB = (b.formData || {}) as Record<string, string>
+    const rollCompare = compareRollValues(
+      resolveFieldValue(formA, "rollno"),
+      resolveFieldValue(formB, "rollno"),
+    )
+    if (rollCompare) return rollCompare
+
+    const serialCompare = compareScopeText(a.serialNumber || "", b.serialNumber || "")
+    if (serialCompare) return serialCompare
+
+    return compareScopeText(
+      resolveFieldValue(formA, "name"),
+      resolveFieldValue(formB, "name"),
+    )
   })
 }
 

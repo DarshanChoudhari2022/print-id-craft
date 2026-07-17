@@ -8,6 +8,7 @@ import { getDefaultTemplate, getTemplateForClass } from "@/lib/template-resolver
 import {
   buildGenerationFilterOptions,
   filterStudentsByGenerationScope,
+  sortStudentsForGeneration,
 } from "@/lib/generation-scope"
 
 export const maxDuration = 60; // Vercel function timeout config
@@ -105,7 +106,9 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
       },
       orderBy: { serialNumber: "asc" },
     })
-    const scopedStudents = filterStudentsByGenerationScope(students, classGrade, division)
+    const scopedStudents = sortStudentsForGeneration(
+      filterStudentsByGenerationScope(students, classGrade, division)
+    )
 
     if (scopedStudents.length === 0) {
       const scopeLabel = [classGrade, division].filter(Boolean).join(" - ")

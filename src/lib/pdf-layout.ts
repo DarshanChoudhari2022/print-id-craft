@@ -387,6 +387,15 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
   const getImageFormat = (dataUrl: string): "PNG" | "JPEG" =>
     dataUrl.startsWith("data:image/png") ? "PNG" : "JPEG"
 
+  const yieldToBrowser = () =>
+    new Promise<void>((resolve) => {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => resolve())
+      } else {
+        setTimeout(resolve, 0)
+      }
+    })
+
   // Pre-convert ALL card images to byte arrays once upfront.
   // This avoids re-running atob + byte-copy inside the inner page loop
   // (saves ~200ms per 100 cards for typical 200KB PNG data URLs).
@@ -464,6 +473,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
 
   // Front pages
   for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+    if (pageIdx > 0 && pageIdx % 4 === 0) await yieldToBrowser()
     if (pageIdx > 0) doc.addPage([pageW, pageH])
 
     doc.setFontSize(6); doc.setTextColor(200, 200, 200)
@@ -493,6 +503,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
   // Back pages (mirrored)
   if (hasBackSide) {
     for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+      if (pageIdx > 0 && pageIdx % 4 === 0) await yieldToBrowser()
       doc.addPage([pageW, pageH])
       doc.setFontSize(6); doc.setTextColor(200, 200, 200)
       doc.text(`${schoolName} - Back Side - Page ${pageIdx + 1}`, pageW / 2, 4, { align: "center" })

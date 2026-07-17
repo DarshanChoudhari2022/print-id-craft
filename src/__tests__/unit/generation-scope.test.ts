@@ -5,6 +5,7 @@ import {
   filterStudentsByGenerationScope,
   getGenerationStudentScope,
   reconcileGenerationScopeSelection,
+  sortStudentsForGeneration,
 } from "@/lib/generation-scope"
 
 describe("generation scope utilities", () => {
@@ -52,6 +53,28 @@ describe("generation scope utilities", () => {
     expect(filterStudentsByGenerationScope(students, "iii", "a").map(s => s.id)).toEqual(["one"])
     expect(filterStudentsByGenerationScope(students, "III", "").map(s => s.id)).toEqual(["one", "two"])
     expect(filterStudentsByGenerationScope(students)).toEqual(students)
+  })
+
+  it("sorts generation students class-wise, then division-wise, then roll-wise", () => {
+    const students = [
+      { id: "ukg-2", serialNumber: "S-4", formData: { classGrade: "UKG", rollno: "2" } },
+      { id: "i-b-1", serialNumber: "S-5", formData: { classGrade: "I", division: "B", rollno: "1" } },
+      { id: "lkg-1", serialNumber: "S-2", formData: { classGrade: "LKG", rollno: "1" } },
+      { id: "nursery-7", serialNumber: "S-1", formData: { classGrade: "Nursery", rollno: "7" } },
+      { id: "i-a-10", serialNumber: "S-7", formData: { classGrade: "I", division: "A", rollno: "10" } },
+      { id: "i-a-2", serialNumber: "S-6", formData: { classGrade: "I", division: "A", rollno: "2" } },
+      { id: "x-1", serialNumber: "S-8", formData: { classGrade: "X", rollno: "1" } },
+    ]
+
+    expect(sortStudentsForGeneration(students).map(s => s.id)).toEqual([
+      "nursery-7",
+      "lkg-1",
+      "ukg-2",
+      "i-a-2",
+      "i-a-10",
+      "i-b-1",
+      "x-1",
+    ])
   })
 
   it("preserves a selected class and division when refreshed options still contain them", () => {
