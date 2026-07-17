@@ -20,6 +20,7 @@ describe('POST /api/schools/[id]/students/import', () => {
     })
     ;(prisma.template.findFirst as any).mockResolvedValue({ fieldConfig: [] })
     ;(prisma.student.findFirst as any).mockResolvedValue(null)
+    ;(prisma.student.findMany as any).mockResolvedValue([])
     ;(prisma.student.count as any).mockResolvedValue(0)
     ;(prisma.student.createMany as any).mockResolvedValue({ count: 0 })
     ;(prisma.template.update as any).mockResolvedValue({})
@@ -87,6 +88,32 @@ describe('POST /api/schools/[id]/students/import', () => {
       expect(createManyCall.data.length).toBe(2)
       expect(createManyCall.data[0].schoolId).toBe('s1')
       expect(createManyCall.data[0].formData.fullName).toBe('John Doe')
+    })
+
+    it('does not create duplicate employees when the same ID Code is uploaded again', async () => {
+      ;(prisma.student.findMany as any).mockResolvedValue([
+        {
+          formData: {
+            name: 'Ravindra Panchal',
+            id_code: 'LPT055',
+            contact_number: '8898156694',
+          },
+        },
+      ])
+      const csvStr = 'Name,ID Code,Contact Number\nRavindra Panchal,LPT055,8898156694'
+      const req = new Request('http://localhost:3000/api/schools/s1/students/import', {
+        method: 'POST',
+        body: createMockFormData(csvStr),
+      })
+
+      const res = await POST(req, { params: Promise.resolve({ id: 's1' }) })
+      const data = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(data.success).toBe(true)
+      expect(data.data.imported).toBe(0)
+      expect(data.data.skippedDuplicates).toBe(1)
+      expect(prisma.student.createMany).not.toHaveBeenCalled()
     })
   })
 

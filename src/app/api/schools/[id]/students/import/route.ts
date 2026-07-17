@@ -11,6 +11,7 @@ import { parseExcelBuffer } from "@/lib/excel"
 import { allocateStudentSerials } from "@/lib/student-serial"
 import { buildStudentIndexData } from "@/lib/student-index"
 import { getDefaultTemplate } from "@/lib/template-resolver"
+import { buildImportIdentityKeys } from "@/lib/import-identity"
 
 export const maxDuration = 300; // Vercel Pro function timeout config
 
@@ -352,6 +353,37 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       })
     }
 
+    // Make the import idempotent. Re-uploading the same workbook must not
+    // create another copy of every student/employee. Match strong employee or
+    // school identifiers first, then exact/name-based fallback identities.
+    const existingStudents = await prisma.student.findMany({
+      where: { schoolId },
+      select: { formData: true },
+    })
+    const existingIdentities = new Set<string>()
+    for (const student of existingStudents) {
+      const fd = (student.formData || {}) as Record<string, string>
+      for (const identity of buildImportIdentityKeys(fd)) existingIdentities.add(identity)
+    }
+
+    const importIdentities = new Set<string>()
+    const duplicateRows: Array<{ row: number; name: string }> = []
+    const importableRows = validRows.filter(row => {
+      const identities = buildImportIdentityKeys(row.formData)
+      const duplicate = identities.some(identity =>
+        existingIdentities.has(identity) || importIdentities.has(identity)
+      )
+      if (duplicate) {
+        duplicateRows.push({
+          row: row.rowNum,
+          name: row.formData.fullName || row.formData["Full Name"] || "Unknown",
+        })
+        return false
+      }
+      for (const identity of identities) importIdentities.add(identity)
+      return true
+    })
+
     // If mode is "validate", return validation results without saving
     const mode = formData.get("mode") as string | null
     if (mode === "validate") {
@@ -369,7 +401,9 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         success: true,
         data: {
           totalRows: rawRows.length,
-          validRows: validRows.length,
+          validRows: importableRows.length,
+          duplicateRows: duplicateRows.length,
+          duplicates: duplicateRows.slice(0, 50),
           errorRows: errors.length,
           errors: errors.slice(0, 50),
           autoClasses,
@@ -377,7 +411,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
           hasClassColumn: !!classColumnHeader,
           hasFlagColumn: !!flagColumnHeader,
           uniqueFlagColors,
-          preview: validRows.slice(0, 10).map(r => ({
+          preview: importableRows.slice(0, 10).map(r => ({
             ...r.formData,
             _rowNum: r.rowNum,
             _photoId: r.photoId,
@@ -405,10 +439,25 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     const importErrors: Array<{ row: number; error: string }> = []
 
     try {
+      if (importableRows.length === 0) {
+        return NextResponse.json({
+          success: true,
+          data: {
+            imported: 0,
+            failed: 0,
+            total: validRows.length,
+            skippedDuplicates: duplicateRows.length,
+            students: [],
+            errors: [],
+            classesCreated: 0,
+            qrJobIds: [],
+          },
+        })
+      }
       await prisma.$transaction(async (tx) => {
-        const serialNumbers = await allocateStudentSerials(tx, schoolId, school.name, validRows.length)
+        const serialNumbers = await allocateStudentSerials(tx, schoolId, school.name, importableRows.length)
 
-        const studentsToCreate = validRows.map((row, index) => ({
+        const studentsToCreate = importableRows.map((row, index) => ({
           id: randomUUID(),
           schoolId,
           classId: row.classId,
@@ -442,7 +491,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         }
       }, { timeout: 45_000 })
     } catch (err: any) {
-      validRows.forEach((row) => {
+      importableRows.forEach((row) => {
         importErrors.push({ row: row.rowNum, error: err?.message || "Batch insert failed" })
       })
     }
@@ -535,6 +584,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         imported: createdStudents.length,
         failed: importErrors.length,
         total: validRows.length,
+        skippedDuplicates: duplicateRows.length,
         students: createdStudents.slice(0, 50),
         errors: importErrors.slice(0, 20),
         classesCreated: classColumnHeader ? Array.from(new Set(validRows.map(r => r.className))).length : 0,

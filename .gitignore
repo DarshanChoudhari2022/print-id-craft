@@ -70,3 +70,5 @@ public/uploads/
 
 /scratch/
 
+# Local audit, rollback, and import reports may contain private school data
+/outputs/

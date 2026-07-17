@@ -3,6 +3,7 @@ import {
   normalizeKey,
   resolveDisplayFieldValue,
   resolveFieldValue,
+  resolveTemplateFieldValue,
   resolveEditFieldValue,
   FIELD_GROUPS,
   getFieldRole,
@@ -317,6 +318,34 @@ describe("resolveFieldValue", () => {
       expect(id.father).toBe("Ramesh Patel")
       expect(id.roll).toBe("108")
       expect(id.dob).toBe("2016-03-15")
+    })
+  })
+
+  describe("strict custom template fields", () => {
+    const employee = {
+      mobile: "8898156694",
+      emergencyContact: "9768673348",
+    }
+
+    it("does not let custom contact fields borrow the canonical mobile value", () => {
+      expect(resolveTemplateFieldValue(employee, "contact_number")).toBe("")
+      expect(resolveTemplateFieldValue(employee, "emergency_contact_number")).toBe("")
+    })
+
+    it("resolves exact custom fields independently", () => {
+      expect(resolveTemplateFieldValue({
+        contact_number: "8898156694",
+        emergency_contact_number: "9768673348",
+      }, "contact_number")).toBe("8898156694")
+      expect(resolveTemplateFieldValue({
+        contact_number: "8898156694",
+        emergency_contact_number: "9768673348",
+      }, "emergency_contact_number")).toBe("9768673348")
+    })
+
+    it("keeps canonical and exact camelCase template mappings working", () => {
+      expect(resolveTemplateFieldValue(employee, "mobile")).toBe("8898156694")
+      expect(resolveTemplateFieldValue(employee, "emergencyContact")).toBe("9768673348")
     })
   })
 

@@ -209,13 +209,33 @@ export default function JpgTemplateMapper({
   const [mappings, setMappings] = useState<FieldMapping[]>(
     initialMappings && initialMappings.length > 0 ? initialMappings : []
   )
+  const [frontImageUrl, setFrontImageUrl] = useState(initialImageUrl || "")
+  const [frontMappings, setFrontMappings] = useState<FieldMapping[]>(
+    initialMappings && initialMappings.length > 0 ? initialMappings : []
+  )
+  const [backImageUrl, setBackImageUrl] = useState<string | null>(initialCardSettings?.backImageUrl || null)
+  const [backMappings, setBackMappings] = useState<FieldMapping[]>(initialCardSettings?.backMappings || [])
+  const [activeCardSide, setActiveCardSide] = useState<"front" | "back">("front")
   const [photoBgColor, setPhotoBgColor] = useState(initialPhotoBgColor || "#FFFFFF")
 
-  // Sync state when props change
+  // Keep the persisted front side separate from the side currently being edited.
   useEffect(() => {
-    if (initialImageUrl) setImageUrl(initialImageUrl)
-    if (initialMappings && initialMappings.length > 0) setMappings(initialMappings)
+    const nextImageUrl = initialImageUrl || ""
+    const nextMappings = initialMappings || []
+    setFrontImageUrl(nextImageUrl)
+    setFrontMappings(nextMappings)
+    if (activeCardSide === "front") {
+      setImageUrl(nextImageUrl)
+      setMappings(nextMappings)
+    }
+    // Switching sides must not restore stale initial props.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialImageUrl, initialMappings])
+
+  useEffect(() => {
+    setBackImageUrl(initialCardSettings?.backImageUrl || null)
+    setBackMappings(initialCardSettings?.backMappings || [])
+  }, [initialCardSettings?.backImageUrl, initialCardSettings?.backMappings])
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -413,9 +433,6 @@ export default function JpgTemplateMapper({
   const [printSides, setPrintSides] = useState<"front" | "both">(initialCardSettings?.printSides || "front")
   const [cardDpi, setCardDpi] = useState(initialCardSettings?.cardDpi || 300)
   const [bleedMargin, setBleedMargin] = useState(initialCardSettings?.bleedMargin ?? 1) // mm
-  const [backImageUrl, setBackImageUrl] = useState<string | null>(initialCardSettings?.backImageUrl || null)
-  const [backMappings, setBackMappings] = useState<FieldMapping[]>(initialCardSettings?.backMappings || [])
-  const [activeCardSide, setActiveCardSide] = useState<"front" | "back">("front")
   const [cardSizeLocked, setCardSizeLocked] = useState(initialCardSettings?.cardSizeLocked || false)
   const [fixedBranch, setFixedBranch] = useState(initialCardSettings?.fixedBranch || "")
 
@@ -834,10 +851,43 @@ export default function JpgTemplateMapper({
     }
   }, [])
 
+  const switchCardSide = useCallback((nextSide: "front" | "back") => {
+    if (nextSide === activeCardSide) return
+
+    if (activeCardSide === "front") {
+      setFrontImageUrl(imageUrl)
+      setFrontMappings(mappings)
+      setImageUrl(backImageUrl || "")
+      setMappings(backMappings)
+    } else {
+      setBackImageUrl(imageUrl || null)
+      setBackMappings(mappings)
+      setImageUrl(frontImageUrl)
+      setMappings(frontMappings)
+    }
+
+    setActiveCardSide(nextSide)
+    setSelectedId(null)
+    setUndoStack([])
+    setRedoStack([])
+  }, [
+    activeCardSide,
+    backImageUrl,
+    backMappings,
+    frontImageUrl,
+    frontMappings,
+    imageUrl,
+    mappings,
+  ])
+
   const handleSave = async () => {
     if (!imageUrl) return
     setSaving(true)
     try {
+      const savedFrontImageUrl = activeCardSide === "front" ? imageUrl : frontImageUrl
+      const savedFrontMappings = activeCardSide === "front" ? mappings : frontMappings
+      const savedBackImageUrl = activeCardSide === "back" ? imageUrl : backImageUrl
+      const savedBackMappings = activeCardSide === "back" ? mappings : backMappings
       const settings: CardSettings = {
         cardSizePreset,
         cardWidth,
@@ -846,12 +896,16 @@ export default function JpgTemplateMapper({
         printSides,
         cardDpi,
         bleedMargin,
-        backImageUrl,
-        backMappings,
+        backImageUrl: savedBackImageUrl,
+        backMappings: savedBackMappings,
         cardSizeLocked,
         fixedBranch,
       }
-      await onSave(imageUrl, mappings, photoBgColor, settings)
+      await onSave(savedFrontImageUrl, savedFrontMappings, photoBgColor, settings)
+      setFrontImageUrl(savedFrontImageUrl)
+      setFrontMappings(savedFrontMappings)
+      setBackImageUrl(savedBackImageUrl)
+      setBackMappings(savedBackMappings)
     } finally {
       setSaving(false)
     }
@@ -1109,17 +1163,7 @@ export default function JpgTemplateMapper({
               border: "1.5px solid #3b82f6",
             }}>
               <button
-                onClick={() => {
-                  if (activeCardSide === "back") {
-                    // Save back state, load front
-                    setBackImageUrl(imageUrl)
-                    setBackMappings(mappings)
-                    setImageUrl(initialImageUrl || "")
-                    setMappings(initialMappings && initialMappings.length > 0 ? initialMappings : [])
-                    setActiveCardSide("front")
-                    setSelectedId(null)
-                  }
-                }}
+                onClick={() => switchCardSide("front")}
                 style={{
                   padding: "8px 16px", border: "none",
                   background: activeCardSide === "front" ? "#3b82f6" : "white",
@@ -1131,21 +1175,7 @@ export default function JpgTemplateMapper({
                 <span style={{ fontSize: 14 }}>🪪</span> Front
               </button>
               <button
-                onClick={() => {
-                  if (activeCardSide === "front") {
-                    // Save front state to props-level, load back
-                    // (front is the "primary" state — already in imageUrl/mappings)
-                    const frontImg = imageUrl
-                    const frontMaps = [...mappings]
-                    setImageUrl(backImageUrl || "")
-                    setMappings(backMappings || [])
-                    // Store front for restore
-                    ;(window as any).__frontImgTemp = frontImg
-                    ;(window as any).__frontMapsTemp = frontMaps
-                    setActiveCardSide("back")
-                    setSelectedId(null)
-                  }
-                }}
+                onClick={() => switchCardSide("back")}
                 style={{
                   padding: "8px 16px", border: "none",
                   background: activeCardSide === "back" ? "#3b82f6" : "white",
@@ -2124,7 +2154,7 @@ export default function JpgTemplateMapper({
                     {(["front", "back"] as const).map((side) => (
                       <button
                         key={side}
-                        onClick={() => setActiveCardSide(side)}
+                        onClick={() => switchCardSide(side)}
                         style={{
                           flex: 1,
                           padding: "8px 10px",

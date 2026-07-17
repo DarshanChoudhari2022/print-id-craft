@@ -1883,12 +1883,8 @@ html {
 
 .mapper-sidebar {
   align-self: start;
-  max-height: calc(100vh - 120px);
   overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 2px;
-  scrollbar-gutter: stable;
+  overflow-y: visible;
 }
 
 .mapper-sidebar > div {

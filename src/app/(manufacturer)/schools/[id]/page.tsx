@@ -27,6 +27,7 @@ import {
   type FormField,
 } from "@/lib/form-validation"
 import { resolveHouseImageUrl } from "@/lib/house-flags"
+import { isCompanyWorkspace } from "@/lib/workspace-kind"
 
 const EDIT_ADDRESS_MIN_WORDS = 5
 
@@ -1269,7 +1270,11 @@ export default function SchoolDetailPage() {
       if (data.success) {
         setImportResult(data.data)
         setImportStep("result")
-        toast.success(`${data.data.imported} students imported!`)
+        toast.success(
+          data.data.skippedDuplicates > 0
+            ? `${data.data.imported} imported, ${data.data.skippedDuplicates} duplicates skipped`
+            : `${data.data.imported} ${companyMode ? "employees" : "students"} imported!`
+        )
         fetchStudents()
         fetchSchool() // Refreshes template.fieldConfig (auto-synced from Excel columns)
         fetchClasses()
@@ -2231,6 +2236,10 @@ export default function SchoolDetailPage() {
     </div>
   )
   if (!school) return <div style={{ padding: 32 }}>School not found.</div>
+  const companyMode = isCompanyWorkspace(
+    school.name,
+    (templateData?.fieldConfig || []) as Array<{ key?: string; label?: string }>
+  )
 
   const toggleSectionExpanded = (sectionId: string) => {
     setExpandedSectionIds((prev) => {
@@ -2333,7 +2342,11 @@ export default function SchoolDetailPage() {
                 cursor: 'pointer'
               }}
             >
-              {SCHOOL_TAB_LABELS[t]}
+              {companyMode && t === "classes"
+                ? "Companies"
+                : companyMode && t === "students"
+                  ? "Employees"
+                  : SCHOOL_TAB_LABELS[t]}
             </button>
           ))}
         </div>
@@ -2345,11 +2358,11 @@ export default function SchoolDetailPage() {
           <div className="fade-in">
             <div className="school-stats-mobile stat-grid">
               <div className="stat-card glass-card premium-shadow">
-                <div className="stat-card-label">Total Classes</div>
+                <div className="stat-card-label">{companyMode ? "Total Companies" : "Total Classes"}</div>
                 <div className="stat-card-value text-blue-600">{school._count.classes}</div>
               </div>
               <div className="stat-card glass-card premium-shadow">
-                <div className="stat-card-label">Total Students</div>
+                <div className="stat-card-label">{companyMode ? "Total Employees" : "Total Students"}</div>
                 <div className="stat-card-value text-blue-600">{school._count.students}</div>
               </div>
               <div className="stat-card glass-card premium-shadow">
@@ -3184,11 +3197,11 @@ export default function SchoolDetailPage() {
               </button>
               <button className="btn btn-outline" onClick={() => openReprocessModal()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#8b5cf6', color: '#7c3aed' }} title="Select a section/class, then run local AI background removal and auto-save every processed photo">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-                Process Class Photos (AI Background)
+                Process {companyMode ? "Company" : "Class"} Photos (AI Background)
               </button>
               <button className="btn btn-outline" onClick={openAddStudent} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#22c55e', color: '#16a34a' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
-                Add Student
+                Add {companyMode ? "Employee" : "Student"}
               </button>
               {((): boolean => {
                 const maps = (templateData?.fieldMappings as any[]) || []
@@ -3215,7 +3228,7 @@ export default function SchoolDetailPage() {
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#0ea5e9', color: '#0369a1', fontSize: 13, opacity: exportingFormat !== null || studentTotal === 0 ? 0.6 : 1, cursor: exportingFormat !== null || studentTotal === 0 ? 'not-allowed' : 'pointer' }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M3 8l9 6 9-6"/><path d="M21 8l-9-5-9 5"/><path d="M12 14v7"/></svg>
-                {exportingFormat === "excel" ? 'Preparing Backup...' : classFilter ? 'Download Class Backup' : 'Download Data + Photos'}
+                {exportingFormat === "excel" ? 'Preparing Backup...' : classFilter ? `Download ${companyMode ? "Company" : "Class"} Backup` : 'Download Data + Photos'}
               </button>
               {studentTotal > 0 && (
                 <button
@@ -3232,7 +3245,7 @@ export default function SchoolDetailPage() {
             </div>
 
             <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input placeholder="Search by name or serial..." value={searchInput} onChange={e => { const v = e.target.value; setSearchInput(v); if (searchTimerRef.current) clearTimeout(searchTimerRef.current); searchTimerRef.current = setTimeout(() => { setSearchQuery(v); setStudentPage(1); }, 400); }} style={{ height: 40, padding: '0 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, flex: 1, minWidth: 200 }} />
+              <input placeholder={companyMode ? "Search by employee name, ID, or serial..." : "Search by name or serial..."} value={searchInput} onChange={e => { const v = e.target.value; setSearchInput(v); if (searchTimerRef.current) clearTimeout(searchTimerRef.current); searchTimerRef.current = setTimeout(() => { setSearchQuery(v); setStudentPage(1); }, 400); }} style={{ height: 40, padding: '0 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, flex: 1, minWidth: 200 }} />
               <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setStudentPage(1) }} style={{ height: 40, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13, minWidth: 130 }}>
                 <option value="">All Status</option>
                 <option value="SUBMITTED">Submitted</option>
@@ -3245,20 +3258,20 @@ export default function SchoolDetailPage() {
 
             <div style={{ display: 'flex', gap: 12, marginBottom: showStudentAddSection ? 8 : 20, flexWrap: 'wrap', alignItems: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 180 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>1. Section</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>{companyMode ? "Company" : "1. Section"}</label>
                 <select
                   value={classFilter}
                   onChange={(e) => { setClassFilter(e.target.value); setStudentPage(1) }}
                   style={{ height: 40, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13, minWidth: 180 }}
                 >
-                  <option value="">All Sections</option>
+                  <option value="">{companyMode ? "All Companies" : "All Sections"}</option>
                   {classes.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 180 }}>
+              {!companyMode && <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 180 }}>
                 <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>2. Class</label>
                 <select
                   value={gradeClassFilter}
@@ -3280,7 +3293,7 @@ export default function SchoolDetailPage() {
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
-              </div>
+              </div>}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'flex-end' }}>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'transparent' }}>.</label>
@@ -3290,7 +3303,7 @@ export default function SchoolDetailPage() {
                   onClick={() => setShowStudentAddSection((v) => !v)}
                   style={{ height: 40, padding: '0 14px', fontSize: 13, whiteSpace: 'nowrap' }}
                 >
-                  + Add Section
+                  + Add {companyMode ? "Company" : "Section"}
                 </button>
               </div>
             </div>
@@ -3311,13 +3324,13 @@ export default function SchoolDetailPage() {
                 }}
               >
                 <input
-                  placeholder="New section name (e.g. Pre Primary, Other)"
+                  placeholder={companyMode ? "New company name" : "New section name (e.g. Pre Primary, Other)"}
                   value={studentTabNewSectionName}
                   onChange={(e) => setStudentTabNewSectionName(e.target.value)}
                   style={{ height: 38, padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, flex: 1, minWidth: 200 }}
                 />
                 <button type="submit" className="btn btn-primary" disabled={addingClass || !studentTabNewSectionName.trim()} style={{ height: 38, padding: '0 16px', fontSize: 13 }}>
-                  {addingClass ? "Adding…" : "Create Section"}
+                  {addingClass ? "Adding…" : `Create ${companyMode ? "Company" : "Section"}`}
                 </button>
                 <button type="button" className="btn btn-outline" onClick={() => setShowStudentAddSection(false)} style={{ height: 38, padding: '0 12px', fontSize: 13 }}>
                   Cancel
@@ -3327,7 +3340,7 @@ export default function SchoolDetailPage() {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ fontSize: 13, color: '#64748b' }}>
-                {studentTotal} students found
+                {studentTotal} {companyMode ? "employees" : "students"} found
                 {classFilter && selectedStudentSection && (
                   <span style={{ marginLeft: 8, color: '#3b82f6' }}>
                     · {selectedStudentSection.name}
@@ -3435,7 +3448,7 @@ export default function SchoolDetailPage() {
                   return selectedDuplicateGroups.get(info.group)?.key === key
                 })
                 const hasDynamicColumns = dataColumns.length > 0
-                const totalCols = 1 + (hasDynamicColumns ? dataColumns.length : 2) + 3
+                const totalCols = 1 + (hasDynamicColumns ? dataColumns.length : 2) + (companyMode ? 2 : 3)
 
                 return (
                 <table className="data-table" style={{ minWidth: hasDynamicColumns ? Math.max(800, dataColumns.length * 120) : 800 }}>
@@ -3450,7 +3463,7 @@ export default function SchoolDetailPage() {
                           <th>Name</th>
                         </>
                       )}
-                      <th>Class</th>
+                      {!companyMode && <th>Class</th>}
                       <th>Status</th>
                       <th style={{ textAlign: 'right' }}>Actions</th>
                     </tr>
@@ -3573,7 +3586,7 @@ export default function SchoolDetailPage() {
                               </td>
                             </>
                           )}
-                          <td>{s.class?.name || "—"}</td>
+                          {!companyMode && <td>{s.class?.name || "—"}</td>}
                           <td>
                             <span className={`status-badge ${
                               s.status === 'APPROVED' ? 'status-approved' :
@@ -3665,9 +3678,9 @@ export default function SchoolDetailPage() {
 
                   {/* Class selector */}
                   <div className="form-group">
-                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>Class <span style={{ color: '#ef4444' }}>*</span></label>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>{companyMode ? "Company" : "Class"} <span style={{ color: '#ef4444' }}>*</span></label>
                     <select value={editClassId} onChange={e => setEditClassId(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14 }}>
-                      <option value="">— Select class —</option>
+                      <option value="">— Select {companyMode ? "company" : "class"} —</option>
                       {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
@@ -3861,22 +3874,28 @@ export default function SchoolDetailPage() {
 
                       {/* Fallback class selector (optional) */}
                       <div style={{ marginTop: 16, padding: 14, background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 6 }}>Fallback Class (optional)</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 6 }}>Fallback {companyMode ? "Company" : "Class"} (optional)</label>
                         <select value={importClassId} onChange={e => setImportClassId(e.target.value)} style={{ width: '100%', height: 40, padding: '0 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}>
                           <option value="">Auto-detect from Excel column</option>
                           {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c._count.students} students)</option>)}
                         </select>
-                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>If your Excel has a "Class-Section" column, classes are created automatically. Otherwise select a fallback class here.</div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                          {companyMode
+                            ? "Select the company these employees belong to. The Excel Company column remains employee data and is not displayed as Class."
+                            : 'If your Excel has a "Class-Section" column, classes are created automatically. Otherwise select a fallback class here.'}
+                        </div>
                       </div>
 
                       {/* Info box */}
                       <div style={{ marginTop: 16, padding: 14, background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe' }}>
                         <div style={{ fontSize: 13, color: '#1e40af', fontWeight: 600, marginBottom: 4 }}>💡 Smart Import</div>
                         <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: '#3b82f6', lineHeight: 1.8 }}>
-                          <li><strong>Mixed classes supported!</strong> Include a "Class-Section" column — classes are auto-created</li>
+                          <li>{companyMode
+                            ? <><strong>Duplicate-safe:</strong> Employee/ID Code is used to skip records already imported</>
+                            : <><strong>Mixed classes supported!</strong> Include a "Class-Section" column — classes are auto-created</>}</li>
                           <li><strong>Photo ID column</strong> — if present, used to match bulk photos later</li>
                           <li>Column headers matched automatically: "Student Name", "Father", "Mother", "Photo ID", etc.</li>
-                          <li>Only <strong>Student Name</strong> is required — all other fields are optional</li>
+                          <li>Only <strong>{companyMode ? "Employee Name" : "Student Name"}</strong> is required — all other fields are optional</li>
                           <li>Max 2000 students per import</li>
                         </ul>
                       </div>
@@ -3900,7 +3919,7 @@ export default function SchoolDetailPage() {
                   {importStep === 'preview' && importPreview && (
                     <div>
                       {/* Stats cards */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${importPreview.duplicateRows > 0 ? 4 : 3}, 1fr)`, gap: 12, marginBottom: 20 }}>
                         <div style={{ padding: 16, background: '#f0fdf4', borderRadius: 12, border: '1px solid #bbf7d0', textAlign: 'center' }}>
                           <div style={{ fontSize: 24, fontWeight: 700, color: '#16a34a' }}>{importPreview.validRows}</div>
                           <div style={{ fontSize: 12, color: '#15803d' }}>Valid Rows</div>
@@ -3913,6 +3932,12 @@ export default function SchoolDetailPage() {
                           <div style={{ fontSize: 24, fontWeight: 700, color: '#334155' }}>{importPreview.totalRows}</div>
                           <div style={{ fontSize: 12, color: '#64748b' }}>Total Rows</div>
                         </div>
+                        {importPreview.duplicateRows > 0 && (
+                          <div style={{ padding: 16, background: '#fff7ed', borderRadius: 12, border: '1px solid #fed7aa', textAlign: 'center' }}>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: '#c2410c' }}>{importPreview.duplicateRows}</div>
+                            <div style={{ fontSize: 12, color: '#9a3412' }}>Already Imported</div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Column Mapping */}
@@ -3987,7 +4012,7 @@ export default function SchoolDetailPage() {
                           disabled={importPreview.validRows === 0 || importUploading}
                           style={{ padding: '10px 24px', background: importPreview.validRows > 0 ? 'linear-gradient(135deg, #22c55e, #16a34a)' : '#94a3b8' }}
                         >
-                          {importUploading ? 'Importing...' : `Import ${importPreview.validRows} Students ✓`}
+                          {importUploading ? 'Importing...' : `Import ${importPreview.validRows} ${companyMode ? "Employees" : "Students"} ✓`}
                         </button>
                       </div>
                     </div>
@@ -3999,7 +4024,7 @@ export default function SchoolDetailPage() {
                       <div style={{ textAlign: 'center', padding: 20 }}>
                         <div style={{ fontSize: 48, marginBottom: 12 }}>🎉</div>
                         <h3 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>
-                          {importResult.imported} Students Imported!
+                          {importResult.imported} {companyMode ? "Employees" : "Students"} Imported!
                         </h3>
                         {importResult.classesCreated > 0 && (
                           <p style={{ fontSize: 14, color: '#3b82f6', marginBottom: 4 }}>📚 {importResult.classesCreated} classes auto-created</p>
@@ -4007,12 +4032,15 @@ export default function SchoolDetailPage() {
                         {importResult.failed > 0 && (
                           <p style={{ fontSize: 14, color: '#dc2626' }}>{importResult.failed} rows failed</p>
                         )}
+                        {importResult.skippedDuplicates > 0 && (
+                          <p style={{ fontSize: 14, color: '#c2410c' }}>{importResult.skippedDuplicates} duplicate rows skipped</p>
+                        )}
                       </div>
 
                       {/* Show first few imported students */}
                       {importResult.students?.length > 0 && (
                         <div style={{ marginTop: 16 }}>
-                          <h4 style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Imported Students</h4>
+                          <h4 style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Imported {companyMode ? "Employees" : "Students"}</h4>
                           <div className="data-table-wrapper" style={{ maxHeight: 240, overflowY: 'auto' }}>
                             <table className="data-table" style={{ fontSize: 12 }}>
                               <thead><tr><th>Serial Number</th><th>Name</th></tr></thead>
@@ -4507,7 +4535,7 @@ export default function SchoolDetailPage() {
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
-                      Process Class Photos - AI Background
+                      Process {companyMode ? "Company" : "Class"} Photos - AI Background
                     </h2>
                     <p style={{ fontSize: 13, color: '#64748b' }}>
                       {selectedBatchClassLabel}: remove backgrounds, apply the selected plain colour, and automatically save each processed photo.

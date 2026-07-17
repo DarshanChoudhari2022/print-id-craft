@@ -281,6 +281,49 @@ export function resolveFieldValue(fd: Record<string, string>, fieldKey: string):
   return ""
 }
 
+// Card/template mappings must not let one custom field borrow data from a
+// similarly named custom field. Only canonical built-in placeholders are
+// allowed to use the broad alias resolver; every other mapping is exact
+// (case/punctuation-insensitive) or blank.
+const CANONICAL_TEMPLATE_FIELD_KEYS = new Set([
+  "name",
+  "fullname",
+  "studentname",
+  "father",
+  "fathername",
+  "mother",
+  "mothername",
+  "phone",
+  "mobile",
+  "address",
+  "dob",
+  "dateofbirth",
+  "bloodgroup",
+  "rollno",
+  "admissionno",
+  "photoid",
+  "serialnumber",
+  "flagcolor",
+  "branch",
+])
+
+export function resolveTemplateFieldValue(
+  fd: Record<string, string>,
+  fieldKey: string
+): string {
+  const directVal = fd[fieldKey]
+  if (directVal != null && String(directVal).trim()) return String(directVal).trim()
+
+  const normKey = normalizeKey(fieldKey)
+  const fdNormalized = getNormalizedFd(fd)
+  if (fdNormalized[normKey]) return fdNormalized[normKey]
+
+  if (CANONICAL_TEMPLATE_FIELD_KEYS.has(normKey)) {
+    return resolveFieldValue(fd, fieldKey)
+  }
+  return ""
+}
+
 function mobileFieldIntent(fieldKey: string, label: string): "father" | "mother" | "generic" {
   const hay = `${fieldKey} ${label}`.toLowerCase()
   const hasFather = /\bfather\b/.test(hay) || fieldKey === "mob_father"
@@ -378,7 +421,7 @@ export function resolveDisplayFieldValue(
   }
 
   const prefix = PREFIXED_ADDRESS_FIELDS[nk]
-  if (!prefix) return resolveFieldValue(fd, fieldKey)
+  if (!prefix) return resolveTemplateFieldValue(fd, fieldKey)
 
   const address = resolveFieldValue(fd, "address")
   return address ? `${prefix} ${address}` : ""
