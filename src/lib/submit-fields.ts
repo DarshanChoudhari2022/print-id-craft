@@ -19,7 +19,7 @@ import {
   normalizeFormValue,
   resolveFieldValue,
 } from "@/lib/field-resolver"
-import { buildStudentIndexData } from "@/lib/student-index"
+import { buildStudentIndexData, normalizeScopedRollNo } from "@/lib/student-index"
 import {
   isHiddenFixedBranchField,
   stripIndianPrefix,
@@ -435,7 +435,7 @@ export async function checkDuplicateSubmission(
   }
 
   if (roll || (name && father)) {
-    const normRoll = normalizeFormValue(roll)
+    const normRoll = indexData.normalizedRollNo || normalizeFormValue(roll)
     const requireDob = !!dob
     const existingStudents = await prisma.student.findMany({
       where: { classId, status: { not: "FLAGGED" } },
@@ -446,7 +446,7 @@ export async function checkDuplicateSubmission(
       const fd = (s.formData as Record<string, string>) || {}
 
       if (normRoll) {
-        const existingRoll = normalizeFormValue(resolveFieldValue(fd, "rollno"))
+        const existingRoll = normalizeScopedRollNo(fd, resolveFieldValue(fd, "rollno"))
         if (existingRoll && existingRoll === normRoll) {
           return toDuplicateResult(
             "roll",

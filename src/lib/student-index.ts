@@ -18,6 +18,32 @@ function compactSearchParts(parts: string[]) {
   return Array.from(new Set(parts.map(normalizeFormValue).filter(Boolean))).join(" ")
 }
 
+function readDirectFormValue(fd: Record<string, string>, keys: string[]) {
+  for (const key of keys) {
+    const value = fd[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+  return ""
+}
+
+export function normalizeScopedRollNo(
+  formData: Record<string, unknown>,
+  rollNo: string
+): string {
+  const normalizedRoll = normalizeFormValue(rollNo)
+  if (!normalizedRoll) return ""
+
+  const fd = Object.fromEntries(
+    Object.entries(formData || {}).map(([key, value]) => [key, String(value ?? "").trim()])
+  ) as Record<string, string>
+
+  const classGrade = normalizeFormValue(readDirectFormValue(fd, ["classGrade", "classgrade"]))
+  const division = normalizeFormValue(readDirectFormValue(fd, ["division", "div"]))
+  if (!classGrade) return normalizedRoll
+
+  return [classGrade, division, normalizedRoll].filter(Boolean).join("|")
+}
+
 export function buildStudentIndexData(
   formData: Record<string, unknown>,
   classId: string
@@ -36,7 +62,7 @@ export function buildStudentIndexData(
   const normalizedName = normalizeFormValue(fullName)
   const normalizedFatherName = normalizeFormValue(fatherName)
   const normalizedDob = normalizeFormValue(dob)
-  const normalizedRollNo = normalizeFormValue(rollNo)
+  const normalizedRollNo = normalizeScopedRollNo(fd, rollNo)
 
   return {
     duplicateFingerprint: computeDuplicateFingerprint(fd, classId) || null,

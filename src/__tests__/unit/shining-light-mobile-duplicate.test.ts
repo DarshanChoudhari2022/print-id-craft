@@ -105,4 +105,58 @@ describe("Shining Light sibling duplicate detection", () => {
       error: "DUPLICATE_ROLL",
     })
   })
+
+  it("allows the same pre-primary roll number in a different class option", async () => {
+    ;(prisma.student.findFirst as any).mockResolvedValue(null)
+    ;(prisma.student.findMany as any).mockResolvedValue([
+      {
+        serialNumber: "VISHAL-0001",
+        submittedAt: new Date("2026-07-17T00:00:00.000Z"),
+        formData: {
+          name: "Nursery Student",
+          class: "Nursery",
+          classGrade: "Nursery",
+          rollno: "1",
+        },
+      },
+    ])
+
+    const result = await checkDuplicateSubmission("vishal-pre-primary-section", {
+      name: "LKG Student",
+      class: "LKG",
+      classGrade: "LKG",
+      rollno: "1",
+    })
+
+    expect(result).toEqual({ isDuplicate: false })
+  })
+
+  it("still blocks the same pre-primary roll number inside the same class option", async () => {
+    ;(prisma.student.findFirst as any).mockResolvedValue(null)
+    ;(prisma.student.findMany as any).mockResolvedValue([
+      {
+        serialNumber: "VISHAL-0001",
+        submittedAt: new Date("2026-07-17T00:00:00.000Z"),
+        formData: {
+          name: "Nursery Student",
+          class: "Nursery",
+          classGrade: "Nursery",
+          rollno: "1",
+        },
+      },
+    ])
+
+    const result = await checkDuplicateSubmission("vishal-pre-primary-section", {
+      name: "Another Nursery Student",
+      class: "Nursery",
+      classGrade: "Nursery",
+      rollno: "1",
+    })
+
+    expect(result).toMatchObject({
+      isDuplicate: true,
+      kind: "roll",
+      error: "DUPLICATE_ROLL",
+    })
+  })
 })

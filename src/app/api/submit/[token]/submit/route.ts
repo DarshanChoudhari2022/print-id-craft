@@ -119,7 +119,13 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
       durationMs: Date.now() - startedAt,
     })
 
-    const duplicate = await checkDuplicateSubmission(cls.id, formData)
+    const duplicateCheckFormData = {
+      ...formDataWithBranch,
+      class: classFields.class,
+      ...(classFields.classGrade ? { classGrade: classFields.classGrade } : {}),
+      ...(classFields.division ? { division: classFields.division } : {}),
+    }
+    const duplicate = await checkDuplicateSubmission(cls.id, duplicateCheckFormData)
     if (duplicate.isDuplicate) {
       await recordPublicSubmissionAudit({
         stage: "DUPLICATE",
