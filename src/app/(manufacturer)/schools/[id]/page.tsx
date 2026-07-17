@@ -3369,9 +3369,9 @@ export default function SchoolDetailPage() {
                 const DUPLICATE_DISPLAY_GROUPS: string[][] = [
                   ["name", "fullName", "studentName"],
                   ["mobile", "mobile_no", "phone"],
-                  ["address", "homeAddress"],
+                  ["address", "homeAddress", "home_address"],
                   ["dateOfBirth", "dob"],
-                  ["bloodGroup", "blood group"],
+                  ["bloodGroup", "blood_group", "blood group"],
                 ]
                 const normalizeDisplayKey = (key: string) => key.trim().toLowerCase().replace(/[^a-z0-9]+/g, "")
                 const duplicateGroupRank = (key: string) => {

@@ -108,6 +108,9 @@ function mergeInfoOnlyFormData(existing: Record<string, any>, row: Record<string
   const sectionClass = firstValue(row, ["class_10", "classsection", "schoolname"]) || fallbackClass
 
   const next: Record<string, any> = { ...existing }
+  for (const alias of ["fullName", "studentName", "mobile_no", "phone", "homeAddress", "home_address", "dob", "blood_group", "blood group"]) {
+    delete next[alias]
+  }
 
   if (name) {
     next.name = name
