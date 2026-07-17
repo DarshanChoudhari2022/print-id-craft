@@ -404,6 +404,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
   const backBytes: (Uint8Array | null)[] = new Array(cards.length)
   const backFmt: ("PNG" | "JPEG" | null)[] = new Array(cards.length)
   for (let i = 0; i < cards.length; i++) {
+    if (i > 0 && i % 10 === 0) await yieldToBrowser()
     try {
       frontBytes[i] = dataUrlToBytes(cards[i].frontDataUrl)
       frontFmt[i] = getImageFormat(cards[i].frontDataUrl)
@@ -473,7 +474,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
 
   // Front pages
   for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
-    if (pageIdx > 0 && pageIdx % 4 === 0) await yieldToBrowser()
+    if (pageIdx > 0) await yieldToBrowser()
     if (pageIdx > 0) doc.addPage([pageW, pageH])
 
     doc.setFontSize(6); doc.setTextColor(200, 200, 200)
@@ -503,7 +504,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
   // Back pages (mirrored)
   if (hasBackSide) {
     for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
-      if (pageIdx > 0 && pageIdx % 4 === 0) await yieldToBrowser()
+      if (pageIdx > 0) await yieldToBrowser()
       doc.addPage([pageW, pageH])
       doc.setFontSize(6); doc.setTextColor(200, 200, 200)
       doc.text(`${schoolName} - Back Side - Page ${pageIdx + 1}`, pageW / 2, 4, { align: "center" })

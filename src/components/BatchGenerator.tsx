@@ -960,6 +960,7 @@ async function downloadAsCdrZip(
 }
 
 type OutputFormat = "JPEG" | "CDR" | "PDF_PRINT" | "BMP"
+const MAX_SAFE_AUTO_PDF_CARDS = 50
 
 /**
  * Encode raw RGBA pixel data (top-down, 4 bytes/pixel) to a 24-bit BMP ArrayBuffer.
@@ -1377,8 +1378,9 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
   }
 
   const getPdfFileCount = useCallback((cardCount: number, chunkSize = pdfChunkSize) => {
-    if (chunkSize <= 0 || chunkSize >= cardCount) return 1
-    return Math.ceil(cardCount / chunkSize)
+    const effectiveChunkSize = chunkSize > 0 ? chunkSize : Math.min(cardCount, MAX_SAFE_AUTO_PDF_CARDS)
+    if (effectiveChunkSize <= 0 || effectiveChunkSize >= cardCount) return 1
+    return Math.ceil(cardCount / effectiveChunkSize)
   }, [pdfChunkSize])
 
   const downloadPdfInChunks = useCallback(async (
@@ -1395,12 +1397,11 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     },
     chunkSize = pdfChunkSize,
   ) => {
-    const MAX_SAFE_SINGLE_PDF_CARDS = 200
     const effectiveChunkSize = chunkSize > 0
       ? chunkSize
-      : Math.min(cards.length, MAX_SAFE_SINGLE_PDF_CARDS)
+      : Math.min(cards.length, MAX_SAFE_AUTO_PDF_CARDS)
     const totalFiles = getPdfFileCount(cards.length, effectiveChunkSize)
-    if (chunkSize <= 0 && cards.length > MAX_SAFE_SINGLE_PDF_CARDS) {
+    if (chunkSize <= 0 && cards.length > MAX_SAFE_AUTO_PDF_CARDS) {
       toast.info(`Large all-in-one PDFs can freeze the browser, so this download will be safely split into ${totalFiles} class-wise PDF files.`)
     }
 
@@ -2270,7 +2271,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 <option value={50}>50 students/file</option>
                 <option value={100}>100 students/file</option>
                 <option value={200}>200 students/file</option>
-                <option value={0}>All in one PDF</option>
+                <option value={0}>All in one PDF (auto-split if large)</option>
               </select>
             </div>
           )}
