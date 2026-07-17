@@ -111,21 +111,15 @@ function mergeInfoOnlyFormData(existing: Record<string, any>, row: Record<string
 
   if (name) {
     next.name = name
-    next.fullName = name
-    next.studentName = name
   }
   if (dob) {
     next.dateOfBirth = dob
-    next.dob = dob
   }
   if (bloodGroup) next.bloodGroup = bloodGroup
   if (mobile) {
-    next.mobile_no = mobile
     next.mobile = mobile
-    next.phone = mobile
   }
   if (address) {
-    next.homeAddress = address
     next.address = address
   }
   if (classGrade) next.classGrade = classGrade

@@ -3366,6 +3366,22 @@ export default function SchoolDetailPage() {
                 for (const f of rawFC) { if (f.key && f.label) fcLabelMap[f.key] = f.label }
 
                 const SKIP_KEYS = new Set(["class", "classSection", "photoUrl", "photoPath"])
+                const DUPLICATE_DISPLAY_GROUPS: string[][] = [
+                  ["name", "fullName", "studentName"],
+                  ["mobile", "mobile_no", "phone"],
+                  ["address", "homeAddress"],
+                  ["dateOfBirth", "dob"],
+                  ["bloodGroup", "blood group"],
+                ]
+                const normalizeDisplayKey = (key: string) => key.trim().toLowerCase().replace(/[^a-z0-9]+/g, "")
+                const duplicateGroupRank = (key: string) => {
+                  const normalized = normalizeDisplayKey(key)
+                  for (const group of DUPLICATE_DISPLAY_GROUPS) {
+                    const rank = group.findIndex(item => normalizeDisplayKey(item) === normalized)
+                    if (rank >= 0) return { group: normalizeDisplayKey(group[0]), rank }
+                  }
+                  return null
+                }
                 const isUsableDataKey = (key: string, value?: unknown) => {
                   const normalized = key.trim().toLowerCase()
                   if (!normalized) return false
@@ -3406,6 +3422,18 @@ export default function SchoolDetailPage() {
                     for (const m of visible) keyToLabel[m.fieldKey] = m.label
                   }
                 }
+                const selectedDuplicateGroups = new Map<string, { key: string; rank: number }>()
+                for (const key of dataColumns) {
+                  const info = duplicateGroupRank(key)
+                  if (!info) continue
+                  const current = selectedDuplicateGroups.get(info.group)
+                  if (!current || info.rank < current.rank) selectedDuplicateGroups.set(info.group, { key, rank: info.rank })
+                }
+                dataColumns = dataColumns.filter(key => {
+                  const info = duplicateGroupRank(key)
+                  if (!info) return true
+                  return selectedDuplicateGroups.get(info.group)?.key === key
+                })
                 const hasDynamicColumns = dataColumns.length > 0
                 const totalCols = 1 + (hasDynamicColumns ? dataColumns.length : 2) + 3
 
