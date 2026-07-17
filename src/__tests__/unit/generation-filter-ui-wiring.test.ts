@@ -12,8 +12,7 @@ describe("generation filter UI wiring", () => {
     expect(source).toContain('const [selectedClassGrade, setSelectedClassGrade] = useState("")')
     expect(source).toContain('const [selectedDivision, setSelectedDivision] = useState("")')
     expect(source).toContain('params.set("mode", "filters")')
-    expect(source).toContain("setSelectedClassGrade(\"\")")
-    expect(source).toContain("setSelectedDivision(\"\")")
+    expect(source).toContain("reconcileGenerationScopeSelection")
   })
 
   it("renders Section, Class/Grade, and Division controls", () => {

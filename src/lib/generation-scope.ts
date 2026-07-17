@@ -92,6 +92,33 @@ export function filterStudentsByGenerationScope<T extends StudentWithFormData>(
   })
 }
 
+export function reconcileGenerationScopeSelection(
+  options: GenerationFilterOptions,
+  classGrade: string = "",
+  division: string = "",
+): { classGrade: string; division: string } {
+  const wantedClass = normalizeScopeValue(classGrade)
+  if (!wantedClass) return { classGrade: "", division: "" }
+
+  const matchedClass = options.classes.find(
+    option => normalizeScopeValue(option.value) === wantedClass,
+  )
+  if (!matchedClass) return { classGrade: "", division: "" }
+
+  const wantedDivision = normalizeScopeValue(division)
+  if (!wantedDivision) {
+    return { classGrade: matchedClass.value, division: "" }
+  }
+
+  const matchedDivision = (options.divisionsByClass[matchedClass.value] || []).find(
+    option => normalizeScopeValue(option.value) === wantedDivision,
+  )
+  return {
+    classGrade: matchedClass.value,
+    division: matchedDivision?.value || "",
+  }
+}
+
 export function buildGenerationScopeName(
   schoolName: string,
   sectionName: string = "",

@@ -4,6 +4,7 @@ import {
   buildGenerationScopeName,
   filterStudentsByGenerationScope,
   getGenerationStudentScope,
+  reconcileGenerationScopeSelection,
 } from "@/lib/generation-scope"
 
 describe("generation scope utilities", () => {
@@ -51,6 +52,38 @@ describe("generation scope utilities", () => {
     expect(filterStudentsByGenerationScope(students, "iii", "a").map(s => s.id)).toEqual(["one"])
     expect(filterStudentsByGenerationScope(students, "III", "").map(s => s.id)).toEqual(["one", "two"])
     expect(filterStudentsByGenerationScope(students)).toEqual(students)
+  })
+
+  it("preserves a selected class and division when refreshed options still contain them", () => {
+    const options = {
+      classes: [{ value: "VIII", count: 42 }],
+      divisionsByClass: {
+        VIII: [{ value: "B", count: 20 }],
+      },
+    }
+
+    expect(reconcileGenerationScopeSelection(options, "viii", "b")).toEqual({
+      classGrade: "VIII",
+      division: "B",
+    })
+  })
+
+  it("clears only scope values that are unavailable after refresh", () => {
+    const options = {
+      classes: [{ value: "VIII", count: 42 }],
+      divisionsByClass: {
+        VIII: [{ value: "A", count: 22 }],
+      },
+    }
+
+    expect(reconcileGenerationScopeSelection(options, "VIII", "B")).toEqual({
+      classGrade: "VIII",
+      division: "",
+    })
+    expect(reconcileGenerationScopeSelection(options, "IX", "A")).toEqual({
+      classGrade: "",
+      division: "",
+    })
   })
 
   it("builds a scoped filename label without duplicating the school-wide section", () => {

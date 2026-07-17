@@ -26,6 +26,7 @@ import {
 } from "@/lib/house-flags"
 import {
   buildGenerationScopeName,
+  reconcileGenerationScopeSelection,
   type GenerationFilterOptions,
 } from "@/lib/generation-scope"
 
@@ -1261,9 +1262,6 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
 
   useEffect(() => {
     const controller = new AbortController()
-    setSelectedClassGrade("")
-    setSelectedDivision("")
-    setGenerationFilterOptions({ classes: [], divisionsByClass: {} })
     setFilterOptionsError("")
     setFilterOptionsLoading(true)
     clearGeneratedResults()
@@ -1292,6 +1290,20 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
 
     return () => controller.abort()
   }, [clearGeneratedResults, schoolId, selectedClassId, statusFilter])
+
+  useEffect(() => {
+    const reconciled = reconcileGenerationScopeSelection(
+      generationFilterOptions,
+      selectedClassGrade,
+      selectedDivision,
+    )
+    if (reconciled.classGrade !== selectedClassGrade) {
+      setSelectedClassGrade(reconciled.classGrade)
+    }
+    if (reconciled.division !== selectedDivision) {
+      setSelectedDivision(reconciled.division)
+    }
+  }, [generationFilterOptions, selectedClassGrade, selectedDivision])
 
   // Fetch the template's configured card dimensions + saved printConfig once.
   // This ensures Print Setup, render canvas, and PDF placement all agree.
@@ -2074,7 +2086,13 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             </label>
             <select
               value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
+              disabled={generating}
+              onChange={(e) => {
+                setSelectedClassId(e.target.value)
+                setSelectedClassGrade("")
+                setSelectedDivision("")
+                clearGeneratedResults()
+              }}
               style={{
                 width: "100%",
                 height: 42,
@@ -2101,7 +2119,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             </label>
             <select
               value={selectedClassGrade}
-              disabled={filterOptionsLoading || generationFilterOptions.classes.length === 0}
+              disabled={generating || filterOptionsLoading || generationFilterOptions.classes.length === 0}
               onChange={(e) => {
                 setSelectedClassGrade(e.target.value)
                 setSelectedDivision("")
@@ -2134,7 +2152,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             </label>
             <select
               value={selectedDivision}
-              disabled={!selectedClassGrade || availableDivisions.length === 0}
+              disabled={generating || !selectedClassGrade || availableDivisions.length === 0}
               onChange={(e) => {
                 setSelectedDivision(e.target.value)
                 clearGeneratedResults()
@@ -2166,6 +2184,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             </label>
             <select
               value={statusFilter}
+              disabled={generating}
               onChange={(e) => setStatusFilter(e.target.value)}
               style={{
                 width: "100%",
@@ -2190,6 +2209,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             </label>
             <select
               value={outputFormat}
+              disabled={generating}
               onChange={(e) => setOutputFormat(e.target.value as OutputFormat)}
               style={{
                 width: "100%",
