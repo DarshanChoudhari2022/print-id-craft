@@ -89,7 +89,7 @@ const escapeXml = (value: string) => value
   .replace(/>/g, "&gt;")
   .replace(/"/g, "&quot;")
 
-type PhotoFit = "contain" | "cover" | "fill"
+type PhotoFit = "contain" | "cover"
 
 type BatchGeneratorProps = {
   schoolId: string
@@ -484,17 +484,12 @@ async function renderIdCard(
       if (student.photoUrl) {
         const photoImg = await getCachedImage(student.photoUrl)
         if (photoImg) {
-          // PDF uses fill-fit: the entire uploaded photo is resized to the
-          // mapped black-border placeholder without cropping the student.
+          // PDF cover-fit intentionally matches JpgCardPreview's placement so
+          // the downloaded PDF looks the same as the on-screen ID preview.
           const photoAspect = photoImg.naturalWidth / photoImg.naturalHeight
           const boxAspect = fw / fh
           let dx: number, dy: number, dw: number, dh: number
-          if (photoFit === "fill") {
-            dx = fx
-            dy = fy
-            dw = fw
-            dh = fh
-          } else if (photoFit === "cover") {
+          if (photoFit === "cover") {
             const placement = getCoverPhotoPlacement(
               photoImg.naturalWidth,
               photoImg.naturalHeight,
@@ -1618,7 +1613,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 getFlagUrl(student),
                 studentTemplate.cardWidthMm,
                 studentTemplate.cardHeightMm,
-                "fill",
+                "cover",
               )
               let backDataUrl: string | undefined
               if (studentTemplate.hasBackSide && studentTemplate.backTemplateImageUrl) {
@@ -1630,7 +1625,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                   getFlagUrl(student),
                   studentTemplate.cardWidthMm,
                   studentTemplate.cardHeightMm,
-                  "fill",
+                  "cover",
                 )
               }
               const scope = getGenerationStudentScope(student.formData)
