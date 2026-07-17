@@ -325,6 +325,13 @@ export default function SchoolDetailPage() {
   const [importResult, setImportResult] = useState<any>(null)
   const [dragOver, setDragOver] = useState(false)
 
+  // Information-only Excel update
+  const [infoUpdateOpen, setInfoUpdateOpen] = useState(false)
+  const [infoUpdateFile, setInfoUpdateFile] = useState<File | null>(null)
+  const [infoUpdateUploading, setInfoUpdateUploading] = useState(false)
+  const [infoUpdateResult, setInfoUpdateResult] = useState<any>(null)
+  const [infoUpdateDragOver, setInfoUpdateDragOver] = useState(false)
+
   // Bulk photo upload
   const [photoUploadOpen, setPhotoUploadOpen] = useState(false)
   const [photoUploadMode, setPhotoUploadMode] = useState<"bulk" | "replace">("bulk")
@@ -1483,6 +1490,44 @@ export default function SchoolDetailPage() {
     setImportClassId("")
     setImportPreview(null)
     setImportResult(null)
+  }
+
+  const resetInfoUpdate = () => {
+    setInfoUpdateOpen(false)
+    setInfoUpdateFile(null)
+    setInfoUpdateUploading(false)
+    setInfoUpdateResult(null)
+    setInfoUpdateDragOver(false)
+  }
+
+  const handleInfoUpdateExcel = async () => {
+    if (!infoUpdateFile) {
+      toast.error("Please select an Excel file.")
+      return
+    }
+
+    setInfoUpdateUploading(true)
+    setInfoUpdateResult(null)
+    try {
+      const fd = new FormData()
+      fd.append("file", infoUpdateFile)
+      const res = await fetch(`/api/schools/${schoolId}/students/update-info`, {
+        method: "POST",
+        body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Information update failed")
+      }
+      setInfoUpdateResult(data.data)
+      toast.success(`Updated ${data.data.updated} student record(s). Photos preserved.`)
+      fetchStudents(studentPage)
+      fetchSchool()
+    } catch (err: any) {
+      toast.error(err?.message || "Information update failed")
+    } finally {
+      setInfoUpdateUploading(false)
+    }
   }
 
   const openBulkPhotoUpload = (mode: "bulk" | "replace" = "bulk") => {
@@ -3133,6 +3178,10 @@ export default function SchoolDetailPage() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 1-15.3 6.4"/><path d="M3 12A9 9 0 0 1 18.3 5.6"/><path d="M3 19v-5h5"/><path d="M21 5v5h-5"/></svg>
                 Reupload All Photos
               </button>
+              <button className="btn btn-outline" onClick={() => setInfoUpdateOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#14b8a6', color: '#0f766e' }} title="Upload Excel to update existing student information by Serial Number. Existing photos are preserved.">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/><path d="M8 9h2"/></svg>
+                Update Info Excel
+              </button>
               <button className="btn btn-outline" onClick={() => openReprocessModal()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#8b5cf6', color: '#7c3aed' }} title="Select a section/class, then run local AI background removal and auto-save every processed photo">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
                 Process Class Photos (AI Background)
@@ -3964,6 +4013,100 @@ export default function SchoolDetailPage() {
 
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
                         <button className="btn btn-primary" onClick={resetImport} style={{ padding: '10px 28px' }}>Done ✓</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* INFORMATION-ONLY EXCEL UPDATE MODAL */}
+          {infoUpdateOpen && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }} onClick={() => { if (!infoUpdateUploading) resetInfoUpdate() }}>
+              <div style={{ background: 'white', borderRadius: 20, maxWidth: 640, width: '100%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
+                <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Update Info Excel</h2>
+                    <p style={{ fontSize: 13, color: '#64748b' }}>Update existing student information by Serial Number. Photos are preserved.</p>
+                  </div>
+                  {!infoUpdateUploading && <button onClick={resetInfoUpdate} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#f1f5f9', cursor: 'pointer', fontSize: 16 }}>✕</button>}
+                </div>
+
+                <div style={{ padding: 24 }}>
+                  {!infoUpdateResult ? (
+                    <>
+                      <div style={{ padding: 12, background: '#ecfdf5', border: '1px solid #86efac', borderRadius: 12, color: '#166534', fontSize: 13, lineHeight: 1.5, marginBottom: 16 }}>
+                        <strong>Safe update:</strong> This will update names, DOB, blood group, mobile, address, class grade, status, and search data for matching serial numbers. It will not use photo columns and will not replace existing photos.
+                      </div>
+
+                      <div
+                        onClick={() => document.getElementById('info-update-excel-input')?.click()}
+                        onDragOver={(e) => { e.preventDefault(); setInfoUpdateDragOver(true) }}
+                        onDragLeave={() => setInfoUpdateDragOver(false)}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          setInfoUpdateDragOver(false)
+                          const file = e.dataTransfer.files?.[0]
+                          if (file) setInfoUpdateFile(file)
+                        }}
+                        style={{
+                          border: `2px dashed ${infoUpdateFile ? '#22c55e' : infoUpdateDragOver ? '#14b8a6' : '#cbd5e1'}`,
+                          borderRadius: 16,
+                          padding: 28,
+                          textAlign: 'center',
+                          cursor: infoUpdateUploading ? 'not-allowed' : 'pointer',
+                          background: infoUpdateFile ? '#f0fdf4' : '#f8fafc',
+                          marginBottom: 16,
+                        }}
+                      >
+                        <input
+                          id="info-update-excel-input"
+                          type="file"
+                          accept=".xlsx,.xls"
+                          style={{ display: 'none' }}
+                          disabled={infoUpdateUploading}
+                          onChange={(e) => setInfoUpdateFile(e.target.files?.[0] || null)}
+                        />
+                        <div style={{ fontSize: 36, marginBottom: 8 }}>📄</div>
+                        <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+                          {infoUpdateFile ? infoUpdateFile.name : 'Choose Excel file'}
+                        </div>
+                        <p style={{ fontSize: 12, color: '#64748b' }}>Must include Serial Number column. Photo File / Photo URL columns are ignored.</p>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                        <button className="btn btn-outline" onClick={resetInfoUpdate} disabled={infoUpdateUploading}>Cancel</button>
+                        <button className="btn btn-primary" onClick={handleInfoUpdateExcel} disabled={!infoUpdateFile || infoUpdateUploading} style={{ minWidth: 170 }}>
+                          {infoUpdateUploading ? 'Updating...' : 'Update Information'}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <div style={{ padding: 16, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 12, marginBottom: 16 }}>
+                        <h3 style={{ fontSize: 16, fontWeight: 800, color: '#166534', marginBottom: 8 }}>Information update complete</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, fontSize: 13 }}>
+                          <div><strong>{infoUpdateResult.totalRows}</strong><br /><span style={{ color: '#64748b' }}>Excel rows</span></div>
+                          <div><strong>{infoUpdateResult.updated}</strong><br /><span style={{ color: '#64748b' }}>Updated</span></div>
+                          <div><strong>{infoUpdateResult.unmatched}</strong><br /><span style={{ color: '#64748b' }}>Unmatched</span></div>
+                        </div>
+                        <p style={{ fontSize: 12, color: '#166534', marginTop: 10 }}>Photos preserved: {infoUpdateResult.photosPreserved ? 'Yes' : 'No'}</p>
+                      </div>
+
+                      {infoUpdateResult.unmatchedRows?.length > 0 && (
+                        <div style={{ padding: 12, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, marginBottom: 16 }}>
+                          <h4 style={{ fontSize: 13, fontWeight: 700, color: '#9a3412', marginBottom: 8 }}>Unmatched serial numbers</h4>
+                          <div style={{ maxHeight: 160, overflow: 'auto', fontSize: 12, color: '#9a3412' }}>
+                            {infoUpdateResult.unmatchedRows.map((row: any, i: number) => (
+                              <div key={i}>Row {row.row}: {row.serialNumber || '(missing serial number)'}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <button className="btn btn-primary" onClick={resetInfoUpdate} style={{ padding: '10px 28px' }}>Done ✓</button>
                       </div>
                     </div>
                   )}
