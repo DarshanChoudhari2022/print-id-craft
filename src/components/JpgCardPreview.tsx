@@ -13,6 +13,7 @@ import {
 } from "@/lib/card-dimensions"
 import { getCoverPhotoPlacement } from "@/lib/card-photo-placement"
 import { getHouseFlagRenderLayout } from "@/lib/house-flags"
+import { formatSchoolCardFieldValue } from "@/lib/school-card-display"
 
 type FieldMapping = {
   id: string
@@ -153,6 +154,7 @@ type JpgCardPreviewProps = {
   scale?: number
   className?: string
   watermark?: string
+  schoolName?: string
   /**
    * Card physical size in millimetres. When provided, the preview canvas
    * uses this aspect ratio (cardWidthMm × DPI / 25.4 wide) instead of the
@@ -366,6 +368,7 @@ export default function JpgCardPreview({
   scale = 1,
   className,
   watermark,
+  schoolName,
   cardWidthMm,
   cardHeightMm,
 }: JpgCardPreviewProps) {
@@ -468,6 +471,7 @@ export default function JpgCardPreview({
             (x) => x.type !== "photo" && x.type !== "flag" && (x.fieldKey === "division" || x.fieldKey === "div")
           )
           let value = resolveCardFieldValue(formData, field.fieldKey, hasDivisionPlaceholder)
+          value = formatSchoolCardFieldValue(schoolName, field.fieldKey, value)
           if (field.dateFormat && value) value = formatDateValue(value, field.dateFormat)
           const transform = field.textTransform || "none"
           if (transform === "uppercase") value = value.toUpperCase()
@@ -558,7 +562,7 @@ export default function JpgCardPreview({
     } catch (err) {
       console.error("Render failed", err)
     }
-  }, [templateImageUrl, fieldMappings, formData, studentPhoto, flagImageUrl, scale, watermark, cardWidthMm, cardHeightMm])
+  }, [templateImageUrl, fieldMappings, formData, studentPhoto, flagImageUrl, scale, watermark, schoolName, cardWidthMm, cardHeightMm])
 
   const renderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -597,6 +601,7 @@ export async function generateJpgCard(
   outputScale: number = 1,
   flagImageUrl?: string,
   cardWidthMm: number = DEFAULT_CARD_WIDTH_MM,
+  schoolName?: string,
 ): Promise<string> {
   const canvas = document.createElement("canvas")
   const ctx = canvas.getContext("2d")
@@ -662,7 +667,8 @@ export async function generateJpgCard(
       const hasDivisionPlaceholder = fieldMappings.some(
         (x) => x.type !== "photo" && x.type !== "flag" && (x.fieldKey === "division" || x.fieldKey === "div")
       )
-      const value = resolveCardFieldValue(formData, field.fieldKey, hasDivisionPlaceholder)
+      let value = resolveCardFieldValue(formData, field.fieldKey, hasDivisionPlaceholder)
+      value = formatSchoolCardFieldValue(schoolName, field.fieldKey, value)
       if (value) {
         const padding = 4 * outputScale
         const fontFamily = field.fontFamily || "Arial"

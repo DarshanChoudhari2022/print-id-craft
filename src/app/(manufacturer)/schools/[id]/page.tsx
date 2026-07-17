@@ -4906,6 +4906,7 @@ export default function SchoolDetailPage() {
                         flagImageUrl={resolveHouseImageUrl(selectedStudent.formData as Record<string, string>, flagImages)}
                         scale={1}
                         watermark="PREVIEW"
+                        schoolName={school.name}
                         cardWidthMm={(studentTemplate as any).cardWidthMm}
                         cardHeightMm={(studentTemplate as any).cardHeightMm}
                       />
@@ -4922,6 +4923,7 @@ export default function SchoolDetailPage() {
                           flagImageUrl={resolveHouseImageUrl(selectedStudent.formData as Record<string, string>, flagImages)}
                           scale={1}
                           watermark="PREVIEW"
+                          schoolName={school.name}
                           cardWidthMm={(studentTemplate as any).cardWidthMm}
                           cardHeightMm={(studentTemplate as any).cardHeightMm}
                         />

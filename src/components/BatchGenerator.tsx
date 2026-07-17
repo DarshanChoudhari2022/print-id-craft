@@ -29,6 +29,7 @@ import {
   reconcileGenerationScopeSelection,
   type GenerationFilterOptions,
 } from "@/lib/generation-scope"
+import { formatSchoolCardFieldValue } from "@/lib/school-card-display"
 
 type FieldMapping = {
   id: string
@@ -438,6 +439,7 @@ async function renderIdCard(
   templateImageUrl: string,
   fieldMappings: FieldMapping[],
   student: StudentRenderData,
+  schoolName: string,
   flagImageUrl?: string,
   cardWidthMm?: number,
   cardHeightMm?: number,
@@ -537,7 +539,11 @@ async function renderIdCard(
                    field.fieldKey === "serialNumber" ? student.serialNumber : "")
       
       // Apply dateFormat + textTransform before rendering (matches mapper preview).
-      let value = String(val || "").trim()
+      let value = formatSchoolCardFieldValue(
+        schoolName,
+        field.fieldKey,
+        String(val || ""),
+      ).trim()
       if (field.dateFormat && value) value = formatDateValue(value, field.dateFormat)
       const transform = field.textTransform || "none"
       if (transform === "uppercase") value = value.toUpperCase()
@@ -624,6 +630,7 @@ async function renderIdCardSvg(
   templateImageUrl: string,
   fieldMappings: FieldMapping[],
   student: StudentRenderData,
+  schoolName: string,
   flagImageUrl?: string,
   cardWidthMm?: number,
   cardHeightMm?: number,
@@ -703,7 +710,11 @@ async function renderIdCardSvg(
       const val = resolveDisplayFieldValue(student.formData, pId, hasDivisionPlaceholder) ||
                   (field.fieldKey === "class" ? student.className :
                    field.fieldKey === "serialNumber" ? student.serialNumber : "")
-      const value = String(val || "").trim()
+      const value = formatSchoolCardFieldValue(
+        schoolName,
+        field.fieldKey,
+        String(val || ""),
+      ).trim()
       if (value) {
         const wrapMode = getCardTextWrapMode(field.fieldKey, (field as any).textWrap)
         const effectiveTextAlign = wrapMode === "centeredWrap" ? "center" : field.textAlign
@@ -1524,6 +1535,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 studentTemplate.templateImageUrl,
                 studentTemplate.fieldMappings,
                 student,
+                schoolName,
                 getFlagUrl(student),
                 studentTemplate.cardWidthMm,
                 studentTemplate.cardHeightMm,
@@ -1535,6 +1547,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                   studentTemplate.backTemplateImageUrl,
                   studentTemplate.backFieldMappings,
                   student,
+                  schoolName,
                   getFlagUrl(student),
                   studentTemplate.cardWidthMm,
                   studentTemplate.cardHeightMm,
@@ -1636,14 +1649,14 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           const chunk = students.slice(i, i + CHUNK_SIZE)
           const promises = chunk.map(async (student: any) => {
             try {
-              const frontSvg = await renderIdCardSvg(templateImageUrl, fieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+              const frontSvg = await renderIdCardSvg(templateImageUrl, fieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
               const result: { front: { name: string; svgContent: string }; back?: { name: string; svgContent: string }; id: string } = {
                 front: { name: `${student.serialNumber}_front.svg`, svgContent: frontSvg },
                 id: student.id,
               }
 
               if (hasBackSide && backTemplateImageUrl) {
-                const backSvg = await renderIdCardSvg(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+                const backSvg = await renderIdCardSvg(backTemplateImageUrl, backFieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
                 result.back = { name: `${student.serialNumber}_back.svg`, svgContent: backSvg }
               }
               return result
@@ -1665,10 +1678,10 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             for (const student of chunk) {
               if (previewData.length >= 8) break
               try {
-                const previewFront = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+                const previewFront = await renderIdCard(templateImageUrl, fieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
                 let previewBack: string | undefined
                 if (hasBackSide && backTemplateImageUrl) {
-                  previewBack = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+                  previewBack = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
                 }
                 previewData.push({ serialNumber: student.serialNumber, frontDataUrl: previewFront, backDataUrl: previewBack })
               } catch {}
@@ -1716,10 +1729,10 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           const chunk = students.slice(i, i + CHUNK_SIZE)
           const promises = chunk.map(async (student: any) => {
             try {
-              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
               let backDataUrl: string | undefined
               if (hasBackSide && backTemplateImageUrl) {
-                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
               }
               return { serialNumber: student.serialNumber, frontDataUrl, backDataUrl, id: student.id }
             } catch (err) {
@@ -1822,10 +1835,10 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           const chunk = students.slice(i, i + CHUNK_SIZE)
           const promises = chunk.map(async (student: any) => {
             try {
-              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
               let backDataUrl: string | undefined
               if (hasBackSide && backTemplateImageUrl) {
-                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, getFlagUrl(student), cardWidthMm, cardHeightMm)
+                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
               }
               return {
                 name: `${student.serialNumber}_front.jpg`,
