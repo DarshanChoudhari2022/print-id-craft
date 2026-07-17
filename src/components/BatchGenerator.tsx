@@ -26,6 +26,7 @@ import {
 } from "@/lib/house-flags"
 import {
   buildGenerationScopeName,
+  getGenerationStudentScope,
   reconcileGenerationScopeSelection,
   type GenerationFilterOptions,
 } from "@/lib/generation-scope"
@@ -88,7 +89,7 @@ const escapeXml = (value: string) => value
   .replace(/>/g, "&gt;")
   .replace(/"/g, "&quot;")
 
-type PhotoFit = "contain" | "cover"
+type PhotoFit = "contain" | "cover" | "fill"
 
 type BatchGeneratorProps = {
   schoolId: string
@@ -483,11 +484,17 @@ async function renderIdCard(
       if (student.photoUrl) {
         const photoImg = await getCachedImage(student.photoUrl)
         if (photoImg) {
-          // PDF explicitly uses cover-fit; existing raster callers retain contain-fit.
+          // PDF uses fill-fit: the entire uploaded photo is resized to the
+          // mapped black-border placeholder without cropping the student.
           const photoAspect = photoImg.naturalWidth / photoImg.naturalHeight
           const boxAspect = fw / fh
           let dx: number, dy: number, dw: number, dh: number
-          if (photoFit === "cover") {
+          if (photoFit === "fill") {
+            dx = fx
+            dy = fy
+            dw = fw
+            dh = fh
+          } else if (photoFit === "cover") {
             const placement = getCoverPhotoPlacement(
               photoImg.naturalWidth,
               photoImg.naturalHeight,
@@ -962,6 +969,72 @@ async function downloadAsCdrZip(
 type OutputFormat = "JPEG" | "CDR" | "PDF_PRINT" | "BMP"
 const MAX_SAFE_AUTO_PDF_CARDS = 50
 
+type PdfRenderCard = {
+  serialNumber: string
+  frontDataUrl: string
+  backDataUrl?: string
+  classKey?: string
+  classLabel?: string
+}
+
+function normalizePdfClassKey(value: string) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "")
+}
+
+function safePdfSuffixPart(value: string) {
+  return String(value || "")
+    .trim()
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    || "Class"
+}
+
+function buildPdfDownloadChunks(cards: PdfRenderCard[], chunkSize: number) {
+  const effectiveChunkSize = chunkSize > 0
+    ? chunkSize
+    : Math.min(cards.length, MAX_SAFE_AUTO_PDF_CARDS)
+  if (effectiveChunkSize <= 0) return []
+
+  const chunks: Array<{
+    cards: PdfRenderCard[]
+    start: number
+    end: number
+    classLabel?: string
+  }> = []
+  const hasClassGroups = cards.some(card => card.classKey)
+
+  if (!hasClassGroups) {
+    for (let start = 0; start < cards.length; start += effectiveChunkSize) {
+      const end = Math.min(start + effectiveChunkSize, cards.length)
+      chunks.push({ cards: cards.slice(start, end), start: start + 1, end })
+    }
+    return chunks
+  }
+
+  let groupStart = 0
+  while (groupStart < cards.length) {
+    const key = cards[groupStart].classKey || `ungrouped-${groupStart}`
+    const label = cards[groupStart].classLabel || "Class"
+    let groupEnd = groupStart + 1
+    while (groupEnd < cards.length && (cards[groupEnd].classKey || "") === key) {
+      groupEnd++
+    }
+
+    for (let start = groupStart; start < groupEnd; start += effectiveChunkSize) {
+      const end = Math.min(start + effectiveChunkSize, groupEnd)
+      chunks.push({
+        cards: cards.slice(start, end),
+        start: start + 1,
+        end,
+        classLabel: label,
+      })
+    }
+    groupStart = groupEnd
+  }
+
+  return chunks
+}
+
 /**
  * Encode raw RGBA pixel data (top-down, 4 bytes/pixel) to a 24-bit BMP ArrayBuffer.
  * The BMP file format stores rows bottom-up in BGR order with each row padded to
@@ -1206,8 +1279,8 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
   const [pdfChunkSize, setPdfChunkSize] = useState(100)
   const [generating, setGenerating] = useState(false)
   const [progress, setProgress] = useState({ current: 0, total: 0, status: "" })
-  const [previewCards, setPreviewCards] = useState<{ serialNumber: string; frontDataUrl: string; backDataUrl?: string }[]>([])
-  const [pdfPrintCards, setPdfPrintCards] = useState<{ serialNumber: string; frontDataUrl: string; backDataUrl?: string }[]>([])
+  const [previewCards, setPreviewCards] = useState<PdfRenderCard[]>([])
+  const [pdfPrintCards, setPdfPrintCards] = useState<PdfRenderCard[]>([])
   const [lastCardDims, setLastCardDims] = useState({ w: DEFAULT_CARD_WIDTH_MM, h: DEFAULT_CARD_HEIGHT_MM })
   // Preview-first download flow: after rendering, hold a closure that performs
   // the actual file write. User must click "Download" to commit. This lets them
@@ -1228,7 +1301,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     rows?: number
     totalPages?: number
     // For PDF: keep raw rendered cards + studentIds so we can re-stage when user edits layout
-    pdfCards?: { serialNumber: string; frontDataUrl: string; backDataUrl?: string }[]
+    pdfCards?: PdfRenderCard[]
     pdfStudentIds?: string[]
     pdfChunkSize?: number
     save: () => Promise<void>
@@ -1377,14 +1450,15 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     } catch { /* non-fatal */ }
   }
 
-  const getPdfFileCount = useCallback((cardCount: number, chunkSize = pdfChunkSize) => {
+  const getPdfFileCount = useCallback((cardCount: number, chunkSize = pdfChunkSize, cards?: PdfRenderCard[]) => {
+    if (cards?.length) return buildPdfDownloadChunks(cards, chunkSize).length
     const effectiveChunkSize = chunkSize > 0 ? chunkSize : Math.min(cardCount, MAX_SAFE_AUTO_PDF_CARDS)
     if (effectiveChunkSize <= 0 || effectiveChunkSize >= cardCount) return 1
     return Math.ceil(cardCount / effectiveChunkSize)
   }, [pdfChunkSize])
 
   const downloadPdfInChunks = useCallback(async (
-    cards: { serialNumber: string; frontDataUrl: string; backDataUrl?: string }[],
+    cards: PdfRenderCard[],
     layout: {
       paperWidth: number
       paperHeight: number
@@ -1397,26 +1471,24 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     },
     chunkSize = pdfChunkSize,
   ) => {
-    const effectiveChunkSize = chunkSize > 0
-      ? chunkSize
-      : Math.min(cards.length, MAX_SAFE_AUTO_PDF_CARDS)
-    const totalFiles = getPdfFileCount(cards.length, effectiveChunkSize)
+    const chunks = buildPdfDownloadChunks(cards, chunkSize)
+    const totalFiles = chunks.length
     if (chunkSize <= 0 && cards.length > MAX_SAFE_AUTO_PDF_CARDS) {
       toast.info(`Large all-in-one PDFs can freeze the browser, so this download will be safely split into ${totalFiles} class-wise PDF files.`)
     }
 
-    for (let start = 0; start < cards.length; start += effectiveChunkSize) {
-      const end = Math.min(start + effectiveChunkSize, cards.length)
-      const chunk = cards.slice(start, end)
+    for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      const { cards: chunk, start, end, classLabel } = chunks[chunkIndex]
+      const classSuffix = classLabel ? `${safePdfSuffixPart(classLabel)}-` : ""
       const suffix = totalFiles > 1
-        ? `${String(start + 1).padStart(3, "0")}-${String(end).padStart(3, "0")}`
+        ? `${classSuffix}${String(start).padStart(3, "0")}-${String(end).padStart(3, "0")}`
         : undefined
 
       setProgress({
         current: end,
         total: cards.length,
         status: totalFiles > 1
-          ? `Downloading PDF ${Math.floor(start / effectiveChunkSize) + 1}/${totalFiles} (${start + 1}-${end})...`
+          ? `Downloading PDF ${chunkIndex + 1}/${totalFiles}${classLabel ? ` (${classLabel})` : ""} (${start}-${end})...`
           : "Downloading PDF...",
       })
 
@@ -1436,7 +1508,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         filenameSuffix: suffix,
       })
 
-      if (totalFiles > 1 && end < cards.length) {
+      if (totalFiles > 1 && chunkIndex < chunks.length - 1) {
         await new Promise((resolve) => setTimeout(resolve, 350))
       }
     }
@@ -1546,7 +1618,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 getFlagUrl(student),
                 studentTemplate.cardWidthMm,
                 studentTemplate.cardHeightMm,
-                "cover",
+                "fill",
               )
               let backDataUrl: string | undefined
               if (studentTemplate.hasBackSide && studentTemplate.backTemplateImageUrl) {
@@ -1558,10 +1630,18 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                   getFlagUrl(student),
                   studentTemplate.cardWidthMm,
                   studentTemplate.cardHeightMm,
-                  "cover",
+                  "fill",
                 )
               }
-              return { serialNumber: student.serialNumber, frontDataUrl, backDataUrl }
+              const scope = getGenerationStudentScope(student.formData)
+              const classLabel = scope.classGrade || student.className || ""
+              return {
+                serialNumber: student.serialNumber,
+                frontDataUrl,
+                backDataUrl,
+                classLabel,
+                classKey: normalizePdfClassKey(classLabel),
+              }
             } catch (err) {
               console.error(`Error rendering ${student.serialNumber}`, err)
               return null
@@ -1632,7 +1712,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         setProgress({
           current: totalCount,
           total: totalCount,
-          status: `Ready! Verify layout below, then click Download. (${cols}×${rows} = ${cols*rows} per page · ${totalPages} pages · ${getPdfFileCount(allCards.length, pdfChunkSize)} PDF file(s))`,
+          status: `Ready! Verify layout below, then click Download. (${cols}×${rows} = ${cols*rows} per page · ${totalPages} pages · ${getPdfFileCount(allCards.length, pdfChunkSize, allCards)} class-wise PDF file(s))`,
         })
 
       // ──── CDR (SVG) PATH ────
@@ -1922,7 +2002,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     try {
       await pendingSave.save()
       const fileCount = pendingSave.format === "PDF_PRINT"
-        ? getPdfFileCount(pendingSave.cardCount, pendingSave.pdfChunkSize ?? pdfChunkSize)
+        ? getPdfFileCount(pendingSave.cardCount, pendingSave.pdfChunkSize ?? pdfChunkSize, pendingSave.pdfCards)
         : 1
       setProgress({
         current: pendingSave.cardCount,
