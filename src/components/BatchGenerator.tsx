@@ -976,14 +976,6 @@ function normalizePdfClassKey(value: string) {
   return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "")
 }
 
-function safePdfSuffixPart(value: string) {
-  return String(value || "")
-    .trim()
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-+|-+$/g, "")
-    || "Class"
-}
-
 function buildPdfDownloadChunks(cards: PdfRenderCard[], chunkSize: number) {
   const effectiveChunkSize = chunkSize > 0
     ? chunkSize
@@ -994,37 +986,15 @@ function buildPdfDownloadChunks(cards: PdfRenderCard[], chunkSize: number) {
     cards: PdfRenderCard[]
     start: number
     end: number
-    classLabel?: string
   }> = []
-  const hasClassGroups = cards.some(card => card.classKey)
 
-  if (!hasClassGroups) {
-    for (let start = 0; start < cards.length; start += effectiveChunkSize) {
-      const end = Math.min(start + effectiveChunkSize, cards.length)
-      chunks.push({ cards: cards.slice(start, end), start: start + 1, end })
-    }
-    return chunks
-  }
-
-  let groupStart = 0
-  while (groupStart < cards.length) {
-    const key = cards[groupStart].classKey || `ungrouped-${groupStart}`
-    const label = cards[groupStart].classLabel || "Class"
-    let groupEnd = groupStart + 1
-    while (groupEnd < cards.length && (cards[groupEnd].classKey || "") === key) {
-      groupEnd++
-    }
-
-    for (let start = groupStart; start < groupEnd; start += effectiveChunkSize) {
-      const end = Math.min(start + effectiveChunkSize, groupEnd)
-      chunks.push({
-        cards: cards.slice(start, end),
-        start: start + 1,
-        end,
-        classLabel: label,
-      })
-    }
-    groupStart = groupEnd
+  for (let start = 0; start < cards.length; start += effectiveChunkSize) {
+    const end = Math.min(start + effectiveChunkSize, cards.length)
+    chunks.push({
+      cards: cards.slice(start, end),
+      start: start + 1,
+      end,
+    })
   }
 
   return chunks
@@ -1469,21 +1439,20 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     const chunks = buildPdfDownloadChunks(cards, chunkSize)
     const totalFiles = chunks.length
     if (chunkSize <= 0 && cards.length > MAX_SAFE_AUTO_PDF_CARDS) {
-      toast.info(`Large all-in-one PDFs can freeze the browser, so this download will be safely split into ${totalFiles} class-wise PDF files.`)
+      toast.info(`Large all-in-one PDFs can freeze the browser, so this download will be safely split into ${totalFiles} continuous class-ordered PDF files.`)
     }
 
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-      const { cards: chunk, start, end, classLabel } = chunks[chunkIndex]
-      const classSuffix = classLabel ? `${safePdfSuffixPart(classLabel)}-` : ""
+      const { cards: chunk, start, end } = chunks[chunkIndex]
       const suffix = totalFiles > 1
-        ? `${classSuffix}${String(start).padStart(3, "0")}-${String(end).padStart(3, "0")}`
+        ? `${String(start).padStart(3, "0")}-${String(end).padStart(3, "0")}`
         : undefined
 
       setProgress({
         current: end,
         total: cards.length,
         status: totalFiles > 1
-          ? `Downloading PDF ${chunkIndex + 1}/${totalFiles}${classLabel ? ` (${classLabel})` : ""} (${start}-${end})...`
+          ? `Downloading PDF ${chunkIndex + 1}/${totalFiles} (${start}-${end})...`
           : "Downloading PDF...",
       })
 
@@ -1707,7 +1676,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         setProgress({
           current: totalCount,
           total: totalCount,
-          status: `Ready! Verify layout below, then click Download. (${cols}×${rows} = ${cols*rows} per page · ${totalPages} pages · ${getPdfFileCount(allCards.length, pdfChunkSize, allCards)} class-wise PDF file(s))`,
+          status: `Ready! Verify layout below, then click Download. (${cols}×${rows} = ${cols*rows} per page · ${totalPages} pages · ${getPdfFileCount(allCards.length, pdfChunkSize, allCards)} continuous class-ordered PDF file(s))`,
         })
 
       // ──── CDR (SVG) PATH ────
