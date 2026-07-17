@@ -28,6 +28,8 @@ type LookupMaps = {
   bySerial: Map<string, StudentRow>
   byRollNo: Map<string, StudentRow>
   byName: Map<string, StudentRow>
+  byStrictName: Map<string, StudentRow>
+  duplicateStrictNames: Set<string>
   byFather: Map<string, StudentRow>
   byStudentName: Map<string, StudentRow>
   count: number
@@ -71,6 +73,8 @@ async function getLookupMaps(schoolId: string): Promise<LookupMaps> {
     bySerial: new Map(),
     byRollNo: new Map(),
     byName: new Map(),
+    byStrictName: new Map(),
+    duplicateStrictNames: new Set(),
     byFather: new Map(),
     byStudentName: new Map(),
     count: students.length,
@@ -121,7 +125,16 @@ function buildIndexForStudent(s: StudentRow, maps: LookupMaps) {
   const name = fd?.fullName || fd?.["Full Name"] || fd?.name || fd?.["Student Name"] || fd?.Student_Name || ""
   if (name) {
     const nameLower = name.toLowerCase().trim()
+    const strictName = normalizeNameMatchKey(name)
     maps.byName.set(nameLower, s)
+    if (strictName) {
+      if (maps.byStrictName.has(strictName)) {
+        maps.duplicateStrictNames.add(strictName)
+        maps.byStrictName.delete(strictName)
+      } else if (!maps.duplicateStrictNames.has(strictName)) {
+        maps.byStrictName.set(strictName, s)
+      }
+    }
     maps.byStudentName.set(nameLower.replace(/\s+/g, ""), s)
     maps.byStudentName.set(nameLower.replace(/\s+/g, "_"), s)
   }
@@ -131,6 +144,16 @@ function buildIndexForStudent(s: StudentRow, maps: LookupMaps) {
 
   const fatherPhone = fd?.fatherPhone || fd?.["Mob.- Father -"] || fd?.["mob_father"] || fd?.["Father Phone"] || ""
   if (fatherPhone) maps.byFather.set(String(fatherPhone).toLowerCase().trim(), s)
+}
+
+function normalizeNameMatchKey(value: string): string {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
 }
 
 // Allow callers to invalidate the cache after they finish writing photoUrl
@@ -168,10 +191,12 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     if (maps.count === 0) {
       return NextResponse.json({ error: "No students found in this school. Import students first." }, { status: 400 })
     }
-    const { byId, byPhotoId, bySerial, byRollNo, byName, byFather, byStudentName } = maps
+    const { byId, byPhotoId, bySerial, byRollNo, byName, byStrictName, duplicateStrictNames, byFather, byStudentName } = maps
 
     const formData = await req.formData()
     const files = formData.getAll("photos") as File[]
+    const mode = String(formData.get("mode") || "")
+    const replaceByName = mode === "replace-by-name"
 
     if (!files || files.length === 0) {
       return NextResponse.json({ error: "No photos uploaded" }, { status: 400 })
@@ -203,6 +228,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         // Strip extension to get the identity key
         const baseName = fileNameOnly.replace(/\.[^.]+$/, "").trim()
         const baseNameLower = baseName.toLowerCase()
+        const baseNameStrict = normalizeNameMatchKey(baseName)
         // Also strip underscores/hyphens for fuzzy match
         const baseNameNormalized = baseNameLower.replace(/[\s_-]+/g, "")
 
@@ -216,90 +242,101 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
           return
         }
 
-        // Try to match: photoId → serial → rollNo → name → father → studentName (priority order)
-        let student: StudentRow | undefined = byPhotoId.get(baseNameLower)
-        let matchedBy = "Photo ID"
+        let student: StudentRow | undefined
+        let matchedBy = "Full Name"
 
-        if (!student) {
-          student = bySerial.get(baseNameLower)
-          matchedBy = "Serial Number"
-        }
-        if (!student) {
-          student = byRollNo.get(baseNameLower)
-          matchedBy = "Roll No."
-        }
-        if (!student) {
-          student = byName.get(baseNameLower)
-          matchedBy = "Full Name"
-        }
-        // Try student name with stripped spaces (e.g., "RahulSharma" → match "rahul sharma")
-        if (!student) {
-          student = byStudentName.get(baseNameNormalized)
-          matchedBy = "Student Name"
-        }
-        // Try father name/number match
-        if (!student) {
-          student = byFather.get(baseNameLower)
-          matchedBy = "Father Name/No."
-        }
-
-        // Also try matching just the numeric part (e.g., "DSC_8574" → "8574")
-        if (!student) {
-          const numericOnly = baseName.replace(/\D/g, "")
-          if (numericOnly) {
-            student = byRollNo.get(numericOnly) || byRollNo.get(numericOnly.replace(/^0+/, ""))
-            matchedBy = "Roll No. (numeric)"
+        if (replaceByName) {
+          if (duplicateStrictNames.has(baseNameStrict)) {
+            errors.push({ filename, error: "Duplicate student name found. Rename or update the student name before reuploading this photo." })
+            return
           }
-        }
+          student = byStrictName.get(baseNameStrict)
+        } else {
+          // Try to match: photoId → serial → rollNo → name → father → studentName (priority order)
+          student = byPhotoId.get(baseNameLower)
+          matchedBy = "Photo ID"
 
-        // Try extracting number after prefix (e.g., "DSC_8574" → "8574", "BB25035" → "25035")
-        if (!student) {
-          const prefixMatch = baseName.match(/^[A-Za-z]+[_-]?(\d+)$/)
-          if (prefixMatch) {
-            const num = prefixMatch[1]
-            // Try as Photo ID number part
-            for (const [pid, s] of Array.from(byPhotoId)) {
-              const pidNum = pid.replace(/\D/g, "")
-              if (pidNum && pidNum === num) {
+          if (!student) {
+            student = bySerial.get(baseNameLower)
+            matchedBy = "Serial Number"
+          }
+          if (!student) {
+            student = byRollNo.get(baseNameLower)
+            matchedBy = "Roll No."
+          }
+          if (!student) {
+            student = byName.get(baseNameLower)
+            matchedBy = "Full Name"
+          }
+          // Try student name with stripped spaces (e.g., "RahulSharma" → match "rahul sharma")
+          if (!student) {
+            student = byStudentName.get(baseNameNormalized)
+            matchedBy = "Student Name"
+          }
+          // Try father name/number match
+          if (!student) {
+            student = byFather.get(baseNameLower)
+            matchedBy = "Father Name/No."
+          }
+
+          // Also try matching just the numeric part (e.g., "DSC_8574" → "8574")
+          if (!student) {
+            const numericOnly = baseName.replace(/\D/g, "")
+            if (numericOnly) {
+              student = byRollNo.get(numericOnly) || byRollNo.get(numericOnly.replace(/^0+/, ""))
+              matchedBy = "Roll No. (numeric)"
+            }
+          }
+
+          // Try extracting number after prefix (e.g., "DSC_8574" → "8574", "BB25035" → "25035")
+          if (!student) {
+            const prefixMatch = baseName.match(/^[A-Za-z]+[_-]?(\d+)$/)
+            if (prefixMatch) {
+              const num = prefixMatch[1]
+              // Try as Photo ID number part
+              for (const [pid, s] of Array.from(byPhotoId)) {
+                const pidNum = pid.replace(/\D/g, "")
+                if (pidNum && pidNum === num) {
+                  student = s
+                  matchedBy = "Photo ID (number)"
+                  break
+                }
+              }
+            }
+          }
+
+          // Try partial serial match (last part after dash)
+          if (!student) {
+            for (const [serial, s] of Array.from(bySerial)) {
+              const parts = serial.split("-")
+              const lastPart = parts[parts.length - 1]
+              if (lastPart && baseNameLower === lastPart) {
                 student = s
-                matchedBy = "Photo ID (number)"
+                matchedBy = "Serial (partial)"
                 break
               }
             }
           }
-        }
 
-        // Try partial serial match (last part after dash)
-        if (!student) {
-          for (const [serial, s] of Array.from(bySerial)) {
-            const parts = serial.split("-")
-            const lastPart = parts[parts.length - 1]
-            if (lastPart && baseNameLower === lastPart) {
-              student = s
-              matchedBy = "Serial (partial)"
-              break
+          // Try case-insensitive substring match on photoId (e.g., "BB25035" matches "bb25035")
+          if (!student) {
+            for (const [pid, s] of Array.from(byPhotoId)) {
+              if (pid === baseNameLower || baseNameLower.includes(pid) || pid.includes(baseNameLower)) {
+                student = s
+                matchedBy = "Photo ID (partial)"
+                break
+              }
             }
           }
-        }
 
-        // Try case-insensitive substring match on photoId (e.g., "BB25035" matches "bb25035")
-        if (!student) {
-          for (const [pid, s] of Array.from(byPhotoId)) {
-            if (pid === baseNameLower || baseNameLower.includes(pid) || pid.includes(baseNameLower)) {
-              student = s
-              matchedBy = "Photo ID (partial)"
-              break
-            }
-          }
-        }
-
-        // Final try: fuzzy name match — check if filename contains a student name or vice versa
-        if (!student) {
-          for (const [nameKey, s] of Array.from(byName)) {
-            if (baseNameLower.includes(nameKey) || nameKey.includes(baseNameLower)) {
-              student = s
-              matchedBy = "Name (fuzzy)"
-              break
+          // Final try: fuzzy name match — check if filename contains a student name or vice versa
+          if (!student) {
+            for (const [nameKey, s] of Array.from(byName)) {
+              if (baseNameLower.includes(nameKey) || nameKey.includes(baseNameLower)) {
+                student = s
+                matchedBy = "Name (fuzzy)"
+                break
+              }
             }
           }
         }

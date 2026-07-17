@@ -327,6 +327,7 @@ export default function SchoolDetailPage() {
 
   // Bulk photo upload
   const [photoUploadOpen, setPhotoUploadOpen] = useState(false)
+  const [photoUploadMode, setPhotoUploadMode] = useState<"bulk" | "replace">("bulk")
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
   const [photoUploading, setPhotoUploading] = useState(false)
   const [photoResult, setPhotoResult] = useState<any>(null)
@@ -1484,6 +1485,16 @@ export default function SchoolDetailPage() {
     setImportResult(null)
   }
 
+  const openBulkPhotoUpload = (mode: "bulk" | "replace" = "bulk") => {
+    setPhotoUploadMode(mode)
+    setPhotoFiles([])
+    setPhotoResult(null)
+    setUnmatchedFileMap({})
+    setPhotoUploadProgress(0)
+    setPhotoUploadStatus("")
+    setPhotoUploadOpen(true)
+  }
+
   // Bulk photo upload handlers
   const handleBulkPhotoUpload = async () => {
     if (photoFiles.length === 0) {
@@ -1612,6 +1623,7 @@ export default function SchoolDetailPage() {
       const uploadBatch = async (batch: File[]) => {
         const fd = new FormData()
         for (const file of batch) fd.append("photos", file)
+        if (photoUploadMode === "replace") fd.append("mode", "replace-by-name")
         // One retry on transient network errors — bulk uploads frequently hit
         // a momentary network blip, and the server is idempotent (upsert).
         for (let attempt = 0; attempt < 2; attempt++) {
@@ -1701,7 +1713,11 @@ export default function SchoolDetailPage() {
         errorFiles: allErrors.slice(0, 20),
       }
       setPhotoResult(result)
-      toast.success(`${result.matched} of ${totalFiles} photos matched to students!`)
+      toast.success(
+        photoUploadMode === "replace"
+          ? `${result.matched} of ${totalFiles} photos replaced by student name!`
+          : `${result.matched} of ${totalFiles} photos matched to students!`
+      )
       fetchStudents(studentPage)
     } catch (err) {
       toast.error("Bulk photo upload failed")
@@ -1725,6 +1741,7 @@ export default function SchoolDetailPage() {
 
   const resetPhotoUpload = () => {
     setPhotoUploadOpen(false)
+    setPhotoUploadMode("bulk")
     setPhotoFiles([])
     setPhotoResult(null)
     setPhotoUploadProgress(0)
@@ -3108,9 +3125,13 @@ export default function SchoolDetailPage() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
                 Bulk Import Excel
               </button>
-              <button className="btn btn-outline" onClick={() => setPhotoUploadOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#8b5cf6', color: '#7c3aed' }}>
+              <button className="btn btn-outline" onClick={() => openBulkPhotoUpload("bulk")} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#8b5cf6', color: '#7c3aed' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
                 Bulk Upload Photos
+              </button>
+              <button className="btn btn-outline" onClick={() => openBulkPhotoUpload("replace")} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#0ea5e9', color: '#0284c7' }} title="Upload an edited photo folder again. Filenames must match student names and existing photos will be replaced.">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 1-15.3 6.4"/><path d="M3 12A9 9 0 0 1 18.3 5.6"/><path d="M3 19v-5h5"/><path d="M21 5v5h-5"/></svg>
+                Reupload All Photos
               </button>
               <button className="btn btn-outline" onClick={() => openReprocessModal()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#8b5cf6', color: '#7c3aed' }} title="Select a section/class, then run local AI background removal and auto-save every processed photo">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
@@ -3957,9 +3978,17 @@ export default function SchoolDetailPage() {
               <div style={{ background: 'white', borderRadius: 20, maxWidth: 700, width: '100%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>📸 Bulk Upload Photos</h2>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+                      {photoUploadMode === "replace" ? "Reupload All Photos" : "📸 Bulk Upload Photos"}
+                    </h2>
                     <p style={{ fontSize: 13, color: '#64748b' }}>
-                      {photoResult ? 'Upload results' : photoUploading ? 'Uploading photos...' : 'Upload a folder of student photos — auto-matched by Photo ID from Excel'}
+                      {photoResult
+                        ? 'Upload results'
+                        : photoUploading
+                          ? 'Uploading photos...'
+                          : photoUploadMode === "replace"
+                            ? 'Upload the edited photo folder again — filenames are matched strictly by student name and existing photos are replaced'
+                            : 'Upload a folder of student photos — auto-matched by Photo ID from Excel'}
                     </p>
                   </div>
                   {!photoUploading && <button onClick={resetPhotoUpload} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#f1f5f9', cursor: 'pointer', fontSize: 16 }}>✕</button>}
@@ -4086,24 +4115,36 @@ export default function SchoolDetailPage() {
 
                       {/* Photo ID matching guide */}
                       <div style={{ marginTop: 16, padding: 14, background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe' }}>
-                        <div style={{ fontSize: 13, color: '#1e40af', fontWeight: 600, marginBottom: 6 }}>🔗 How Photo Matching Works</div>
-                        <div style={{ fontSize: 12, color: '#2563eb', lineHeight: 1.8 }}>
-                          Photos are matched to students automatically. The filename (without extension) is matched in this <strong>priority order</strong>:
+                        <div style={{ fontSize: 13, color: '#1e40af', fontWeight: 600, marginBottom: 6 }}>
+                          {photoUploadMode === "replace" ? "How Reupload Matching Works" : "🔗 How Photo Matching Works"}
                         </div>
-                        <ol style={{ margin: '6px 0 0 0', paddingLeft: 20, fontSize: 12, color: '#3b82f6', lineHeight: 2 }}>
-                          <li><strong>Photo ID</strong> column from Excel — e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>BB25035.jpg</code> matches Photo ID <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>BB25035</code></li>
-                          <li><strong>Serial Number</strong> — e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>AARYAN-0078.jpg</code></li>
-                          <li><strong>Roll No.</strong> — e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>23.jpg</code></li>
-                          <li><strong>Full Name</strong> — e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>Aarav Sharma.png</code></li>
-                        </ol>
+                        {photoUploadMode === "replace" ? (
+                          <div style={{ fontSize: 12, color: '#2563eb', lineHeight: 1.8 }}>
+                            Each filename must match the student name exactly after ignoring case, punctuation, and extra spaces. Example: <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>Mohammad Owais Sajid Hussain.jpg</code> replaces that student's current photo. Duplicate student names are reported as errors so the system does not guess.
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: 12, color: '#2563eb', lineHeight: 1.8 }}>
+                              Photos are matched to students automatically. The filename (without extension) is matched in this <strong>priority order</strong>:
+                            </div>
+                            <ol style={{ margin: '6px 0 0 0', paddingLeft: 20, fontSize: 12, color: '#3b82f6', lineHeight: 2 }}>
+                              <li><strong>Photo ID</strong> column from Excel — e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>BB25035.jpg</code> matches Photo ID <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>BB25035</code></li>
+                              <li><strong>Serial Number</strong> — e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>AARYAN-0078.jpg</code></li>
+                              <li><strong>Roll No.</strong> — e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>23.jpg</code></li>
+                              <li><strong>Full Name</strong> — e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>Aarav Sharma.png</code></li>
+                            </ol>
+                          </>
+                        )}
                       </div>
 
                       {/* Tip for Photo ID */}
+                      {photoUploadMode === "bulk" && (
                       <div style={{ marginTop: 10, padding: 12, background: '#fefce8', borderRadius: 10, border: '1px solid #fde68a' }}>
                         <div style={{ fontSize: 12, color: '#92400e' }}>
                           💡 <strong>Tip:</strong> If your Excel has a &quot;<strong>Photo ID</strong>&quot; column (e.g. BB25035, DSC_8541), simply keep your photo filenames as-is — the system will match them automatically!
                         </div>
                       </div>
+                      )}
 
                       {/* Actions */}
                       <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'flex-end' }}>
@@ -4114,7 +4155,9 @@ export default function SchoolDetailPage() {
                           disabled={photoFiles.length === 0 || photoUploading}
                           style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' }}
                         >
-                          {`Upload & Match ${photoFiles.length} Photos`}
+                          {photoUploadMode === "replace"
+                            ? `Replace ${photoFiles.length} Photos`
+                            : `Upload & Match ${photoFiles.length} Photos`}
                         </button>
                       </div>
                     </div>
@@ -4126,7 +4169,7 @@ export default function SchoolDetailPage() {
                       <div style={{ textAlign: 'center', marginBottom: 20 }}>
                         <div style={{ fontSize: 48, marginBottom: 8 }}>{photoResult.matched > 0 ? '🎉' : '⚠️'}</div>
                         <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
-                          {photoResult.matched} of {photoResult.total} Photos Matched!
+                          {photoResult.matched} of {photoResult.total} Photos {photoUploadMode === "replace" ? "Replaced" : "Matched"}!
                         </h3>
                       </div>
 
