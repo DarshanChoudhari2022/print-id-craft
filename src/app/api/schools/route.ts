@@ -219,7 +219,7 @@ export async function POST(req: Request) {
         data: {
           email: accountEmail,
           password: defaultPassword,
-          name: validated.workspaceKind === "company" ? "Company Representative" : "Main Teacher",
+          name: validated.workspaceKind === "company" ? "ID Card Coordinator" : "Main ID Card Coordinator",
           role: "TEACHER",
           schoolId: school.id,
           isMainTeacher: true,

@@ -9,7 +9,7 @@ import { storageUpload } from "@/lib/storage"
 import { reportError } from "@/lib/observability"
 import type { GeneratePrintBatchPayload } from "../types"
 import { EXPORT_BUCKET } from "../types"
-import { applyFixedOfficeNumberToFormData } from "@/lib/fixed-template-values"
+import { applyFixedTemplateValuesToFormData } from "@/lib/fixed-template-values"
 
 function generateSimplePdf(
   students: any[],
@@ -183,16 +183,14 @@ export async function processGeneratePrintBatch(schoolId: string, payload: Gener
   })
 
   const template = await getDefaultTemplate(schoolId)
-  const fixedOfficeNo = ((template?.printConfig as { fixedOfficeNo?: string } | null)?.fixedOfficeNo || "").trim()
   const templateFields = [
     ...(((template?.fieldMappings as any[]) || [])),
     ...(((template?.backFieldMappings as any[]) || [])),
   ]
   const studentsForPrint = students.map(student => ({
     ...student,
-    formData: applyFixedOfficeNumberToFormData(
+    formData: applyFixedTemplateValuesToFormData(
       (student.formData || {}) as Record<string, unknown>,
-      fixedOfficeNo,
       templateFields,
     ),
   }))

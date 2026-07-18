@@ -10,21 +10,30 @@ import {
 const students = [
   {
     id: "s1",
+    serialNumber: "EIC-0001",
     status: "SUBMITTED",
     class: { name: "MithaNagar" },
-    formData: { classgrade: "Nursery", Division: "A" },
+    teacherComment: null,
+    flagNote: null,
+    formData: { classgrade: "Nursery", Division: "A", fullName: "Asha Pawar", mobile: "9000000001" },
   },
   {
     id: "s2",
+    serialNumber: "EIC-0002",
     status: "APPROVED",
     class: { name: "MithaNagar" },
-    formData: { Class: "Nursery", division: "B" },
+    teacherComment: "Photo checked",
+    flagNote: null,
+    formData: { Class: "Nursery", division: "B", fullName: "Bhaskar Labde", mobile: "9000000002" },
   },
   {
     id: "s3",
+    serialNumber: "EIC-0003",
     status: "FLAGGED",
     class: { name: "Nalasopara" },
-    formData: { ClassGrade: "I", div: "A" },
+    teacherComment: null,
+    flagNote: "Name mismatch",
+    formData: { ClassGrade: "I", div: "A", fullName: "Chitra Patil", mobile: "9000000003" },
   },
 ]
 
@@ -53,9 +62,16 @@ describe("teacher student view helpers", () => {
       grade: "",
       division: "",
       status: "",
+      search: "",
     })
 
     expect(filtered).toHaveLength(students.length)
+  })
+
+  it("searches serial, comments, and submitted form fields", () => {
+    expect(filterTeacherStudents(students, { search: "eic-0002" }).map((student) => student.id)).toEqual(["s2"])
+    expect(filterTeacherStudents(students, { search: "name mismatch" }).map((student) => student.id)).toEqual(["s3"])
+    expect(filterTeacherStudents(students, { search: "asha" }).map((student) => student.id)).toEqual(["s1"])
   })
 
   it("updates one student and keeps status counters correct without a full refetch", () => {

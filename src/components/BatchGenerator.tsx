@@ -31,12 +31,15 @@ import {
   type GenerationFilterOptions,
 } from "@/lib/generation-scope"
 import { formatSchoolCardFieldValue } from "@/lib/school-card-display"
+import { getFixedTemplateValue } from "@/lib/fixed-template-values"
 
 type FieldMapping = {
   id: string
   fieldKey: string
   label: string
   type: "text" | "photo" | "flag"
+  useFixedValue?: boolean
+  fixedValue?: string
   x: number
   y: number
   width: number
@@ -537,7 +540,10 @@ async function renderIdCard(
       const hasDivisionPlaceholder = fieldMappings.some(
         (x) => x.type !== "photo" && x.type !== "flag" && (x.fieldKey === "division" || x.fieldKey === "div")
       )
-      const val = resolveDisplayFieldValue(student.formData, pId, hasDivisionPlaceholder) || 
+      const fixedValue = getFixedTemplateValue(field)
+      const val = fixedValue !== undefined
+        ? fixedValue
+        : resolveDisplayFieldValue(student.formData, pId, hasDivisionPlaceholder) ||
                   (field.fieldKey === "class" ? student.className : 
                    field.fieldKey === "serialNumber" ? student.serialNumber : "")
       
@@ -710,7 +716,10 @@ async function renderIdCardSvg(
       const hasDivisionPlaceholder = fieldMappings.some(
         (x) => x.type !== "photo" && x.type !== "flag" && (x.fieldKey === "division" || x.fieldKey === "div")
       )
-      const val = resolveDisplayFieldValue(student.formData, pId, hasDivisionPlaceholder) ||
+      const fixedValue = getFixedTemplateValue(field)
+      const val = fixedValue !== undefined
+        ? fixedValue
+        : resolveDisplayFieldValue(student.formData, pId, hasDivisionPlaceholder) ||
                   (field.fieldKey === "class" ? student.className :
                    field.fieldKey === "serialNumber" ? student.serialNumber : "")
       const value = formatSchoolCardFieldValue(

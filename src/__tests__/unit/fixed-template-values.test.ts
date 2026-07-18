@@ -1,23 +1,37 @@
-import { describe, expect, it } from "vitest"
 import { readFileSync } from "node:fs"
-import {
-  applyFixedOfficeNumberToFormData,
-  fixedOfficeNumberForField,
-  isOfficeNumberField,
-} from "@/lib/fixed-template-values"
+import { describe, expect, it } from "vitest"
 
-describe("fixed company template values", () => {
-  it("recognizes common office number field names accurately", () => {
-    expect(isOfficeNumberField("officeNo")).toBe(true)
-    expect(isOfficeNumberField("custom_1", "Office no")).toBe(true)
-    expect(isOfficeNumberField("officeAddress", "Office Address")).toBe(false)
+import {
+  applyFixedTemplateValuesToFormData,
+  getFixedTemplateFieldKeys,
+  getFixedTemplateValue,
+} from "@/lib/fixed-template-values"
+import { buildTemplateFallbackFields } from "@/lib/submit-fields"
+
+describe("optional fixed template field values", () => {
+  it("supports a fixed value on any explicitly enabled field", () => {
+    expect(getFixedTemplateValue({
+      fieldKey: "officeNo",
+      useFixedValue: true,
+      fixedValue: " 020-12345678 ",
+    })).toBe("020-12345678")
+    expect(getFixedTemplateValue({
+      fieldKey: "department",
+      useFixedValue: true,
+      fixedValue: "Operations",
+    })).toBe("Operations")
+    expect(getFixedTemplateValue({
+      fieldKey: "officeNo",
+      useFixedValue: false,
+      fixedValue: "020-12345678",
+    })).toBeUndefined()
   })
 
-  it("overrides only office number fields without mutating employee data", () => {
-    const original = { officeNo: "old", mobile: "9999999999", name: "Asha" }
-    const result = applyFixedOfficeNumberToFormData(original, "020-12345678", [
-      { fieldKey: "officeNo", label: "Office no" },
-      { fieldKey: "mobile", label: "Employee Contact Number" },
+  it("overrides only enabled mappings without mutating employee data", () => {
+    const original = { officeNo: "employee value", mobile: "9999999999", name: "Asha" }
+    const result = applyFixedTemplateValuesToFormData(original, [
+      { fieldKey: "officeNo", useFixedValue: true, fixedValue: "020-12345678" },
+      { fieldKey: "mobile", useFixedValue: false, fixedValue: "0000000000" },
     ])
 
     expect(result).toEqual({
@@ -25,28 +39,47 @@ describe("fixed company template values", () => {
       mobile: "9999999999",
       name: "Asha",
     })
-    expect(original.officeNo).toBe("old")
+    expect(original.officeNo).toBe("employee value")
   })
 
-  it("returns the fixed value only for an office number mapping", () => {
-    expect(fixedOfficeNumberForField(" 020-12345678 ", "officeNo", "Office no")).toBe("020-12345678")
-    expect(fixedOfficeNumberForField("020-12345678", "mobile", "Employee Contact")).toBe("")
+  it("removes fixed mappings from compulsory registration questions", () => {
+    const fields = buildTemplateFallbackFields({
+      fieldMappings: [
+        {
+          fieldKey: "officeNo",
+          label: "Office No",
+          type: "text",
+          required: false,
+          useFixedValue: true,
+          fixedValue: "020-12345678",
+        },
+        { fieldKey: "mobile", label: "Employee Contact", type: "text", required: true },
+      ],
+      fieldConfig: [
+        { key: "officeNo", label: "Office No", type: "text", required: true },
+        { key: "mobile", label: "Employee Contact", type: "tel", required: true },
+      ],
+    })
+
+    expect(fields.map(field => field.key)).toEqual(["mobile"])
+    expect(getFixedTemplateFieldKeys([
+      { fieldKey: "officeNo", useFixedValue: true, fixedValue: "020-12345678" },
+    ])).toEqual(new Set(["officeno"]))
   })
 
-  it("is wired into saved templates, previews, and print generation", () => {
+  it("is wired into editor, previews, browser generation, and server generation", () => {
     const mapper = readFileSync("src/components/JpgTemplateMapper.tsx", "utf8")
     const preview = readFileSync("src/components/JpgCardPreview.tsx", "utf8")
+    const batchGenerator = readFileSync("src/components/BatchGenerator.tsx", "utf8")
     const generateRoute = readFileSync("src/app/api/schools/[id]/generate/route.ts", "utf8")
     const printBatch = readFileSync("src/lib/jobs/processors/generate-print-batch.ts", "utf8")
-    const fixedValueRoute = readFileSync("src/app/api/schools/[id]/fixed-office-number/route.ts", "utf8")
-    const templatesRoute = readFileSync("src/app/api/schools/[id]/templates/route.ts", "utf8")
 
-    expect(mapper).toContain("Fixed Office Number (Optional)")
-    expect(mapper).toContain("fixedOfficeNo,")
-    expect(preview).toContain("fixedOfficeNumberForField")
-    expect(generateRoute).toContain("applyFixedOfficeNumberToFormData")
-    expect(printBatch).toContain("studentsForPrint")
-    expect(fixedValueRoute).toContain("updatedTemplates")
-    expect(templatesRoute).toContain("companyFixedOfficeNo")
+    expect(mapper).toContain("Use a fixed / hardcoded value on every ID card")
+    expect(mapper).toContain("useFixedValue")
+    expect(preview).toContain("getFixedTemplateValue(field)")
+    expect(batchGenerator).toContain("getFixedTemplateValue(field)")
+    expect(generateRoute).toContain("applyFixedTemplateValuesToFormData")
+    expect(printBatch).toContain("applyFixedTemplateValuesToFormData")
+    expect(mapper).not.toContain("Fixed Office Number")
   })
 })

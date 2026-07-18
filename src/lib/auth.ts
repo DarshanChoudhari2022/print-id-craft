@@ -56,7 +56,7 @@ export const authOptions: NextAuthOptions = {
         if (credentials.expectedRole && user.role !== credentials.expectedRole) {
           authWarn("[AUTH] Role mismatch", `[AUTH] Role mismatch for ${email}. Expected: ${credentials.expectedRole}, Actual: ${user.role}`)
           if (credentials.expectedRole === "TEACHER" && user.role === "MANUFACTURER") {
-            throw new Error("This is the Teacher Login portal. Manufacturer accounts cannot login here.")
+            throw new Error("This is the ID Card Coordinator Login portal. Manufacturer accounts cannot login here.")
           }
           if (credentials.expectedRole === "MANUFACTURER" && user.role === "TEACHER") {
             throw new Error("This is the Manufacturer portal. Teacher accounts cannot login here.")

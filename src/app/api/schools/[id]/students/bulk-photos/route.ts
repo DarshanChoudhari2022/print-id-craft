@@ -156,6 +156,29 @@ function normalizeNameMatchKey(value: string): string {
     .toLowerCase()
 }
 
+function nameMatchCandidatesFromFilename(baseName: string): string[] {
+  const withoutLeadingOrdinal = baseName.replace(/^\s*\d+[\s._-]+/, "")
+  const genericWordsRemoved = withoutLeadingOrdinal.replace(
+    /\b(passport|size|pic|photo|image|img|employee|student|staff|id|card)\b/gi,
+    " ",
+  )
+  const parts = genericWordsRemoved.split(/\s+-\s+|[-–—]/)
+  return Array.from(new Set([
+    normalizeNameMatchKey(baseName),
+    normalizeNameMatchKey(withoutLeadingOrdinal),
+    normalizeNameMatchKey(genericWordsRemoved),
+    ...parts.map(part => normalizeNameMatchKey(part)),
+  ].filter(Boolean)))
+}
+
+function isNumericIdentifierFilename(baseName: string): boolean {
+  const cleaned = baseName
+    .replace(/\.[^.]+$/, "")
+    .replace(/^\s*(dsc|img|image|photo|pic)[_\-\s]*/i, "")
+    .trim()
+  return /^[a-z]{0,5}[\s_-]?\d+[a-z]?$/i.test(cleaned)
+}
+
 // Allow callers to invalidate the cache after they finish writing photoUrl
 // updates so subsequent requests see the freshest state.
 function invalidateLookupCache(schoolId: string) {
@@ -229,6 +252,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         const baseName = fileNameOnly.replace(/\.[^.]+$/, "").trim()
         const baseNameLower = baseName.toLowerCase()
         const baseNameStrict = normalizeNameMatchKey(baseName)
+        const nameCandidates = nameMatchCandidatesFromFilename(baseName)
         // Also strip underscores/hyphens for fuzzy match
         const baseNameNormalized = baseNameLower.replace(/[\s_-]+/g, "")
 
@@ -273,6 +297,19 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
             student = byStudentName.get(baseNameNormalized)
             matchedBy = "Student Name"
           }
+          // Try cleaner name candidates before loose numeric fallbacks. This
+          // prevents files like "6. passport size pic M Deepak - Deepak M.jpg"
+          // from matching roll/photo number 6 instead of the employee name.
+          if (!student) {
+            for (const candidate of nameCandidates) {
+              const strictMatch = byStrictName.get(candidate)
+              if (strictMatch) {
+                student = strictMatch
+                matchedBy = "Full Name (filename)"
+                break
+              }
+            }
+          }
           // Try father name/number match
           if (!student) {
             student = byFather.get(baseNameLower)
@@ -280,7 +317,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
           }
 
           // Also try matching just the numeric part (e.g., "DSC_8574" → "8574")
-          if (!student) {
+          if (!student && isNumericIdentifierFilename(baseName)) {
             const numericOnly = baseName.replace(/\D/g, "")
             if (numericOnly) {
               student = byRollNo.get(numericOnly) || byRollNo.get(numericOnly.replace(/^0+/, ""))
@@ -289,7 +326,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
           }
 
           // Try extracting number after prefix (e.g., "DSC_8574" → "8574", "BB25035" → "25035")
-          if (!student) {
+          if (!student && isNumericIdentifierFilename(baseName)) {
             const prefixMatch = baseName.match(/^[A-Za-z]+[_-]?(\d+)$/)
             if (prefixMatch) {
               const num = prefixMatch[1]
@@ -306,7 +343,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
           }
 
           // Try partial serial match (last part after dash)
-          if (!student) {
+          if (!student && isNumericIdentifierFilename(baseName)) {
             for (const [serial, s] of Array.from(bySerial)) {
               const parts = serial.split("-")
               const lastPart = parts[parts.length - 1]
@@ -331,8 +368,8 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
 
           // Final try: fuzzy name match — check if filename contains a student name or vice versa
           if (!student) {
-            for (const [nameKey, s] of Array.from(byName)) {
-              if (baseNameLower.includes(nameKey) || nameKey.includes(baseNameLower)) {
+            for (const [nameKey, s] of Array.from(byStrictName)) {
+              if (nameCandidates.some(candidate => candidate.includes(nameKey) || nameKey.includes(candidate))) {
                 student = s
                 matchedBy = "Name (fuzzy)"
                 break

@@ -19,4 +19,11 @@ describe("reupload all photos wiring", () => {
     expect(bulkPhotoRouteSource).toContain("duplicateStrictNames")
     expect(bulkPhotoRouteSource).toContain("Duplicate student name found")
   })
+
+  it("does not let a leading photo filename number override the employee name", () => {
+    expect(bulkPhotoRouteSource).toContain("nameMatchCandidatesFromFilename")
+    expect(bulkPhotoRouteSource).toContain('"6. passport size pic M Deepak - Deepak M.jpg"')
+    expect(bulkPhotoRouteSource).toContain("isNumericIdentifierFilename(baseName)")
+    expect(bulkPhotoRouteSource).toContain('matchedBy = "Full Name (filename)"')
+  })
 })

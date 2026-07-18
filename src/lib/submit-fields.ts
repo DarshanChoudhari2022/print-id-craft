@@ -20,6 +20,7 @@ import {
   resolveFieldValue,
 } from "@/lib/field-resolver"
 import { buildStudentIndexData, normalizeScopedRollNo } from "@/lib/student-index"
+import { getFixedTemplateFieldKeys } from "@/lib/fixed-template-values"
 import {
   isHiddenFixedBranchField,
   stripIndianPrefix,
@@ -130,6 +131,7 @@ export function buildTemplateFallbackFields(template: any): FormField[] {
   const backMappings = (template?.backFieldMappings || []) as any[]
   const rawFieldConf = (template?.fieldConfig || []) as any[]
   const fallback: FormField[] = []
+  const fixedMappingKeys = getFixedTemplateFieldKeys([...rawMappings, ...backMappings])
   const optionalMappingKeys = new Set(
     rawMappings
       .filter((m) => m.type !== "photo" && m.required === false)
@@ -139,6 +141,7 @@ export function buildTemplateFallbackFields(template: any): FormField[] {
 
   if (rawFieldConf.length > 0) {
     for (const f of rawFieldConf) {
+      if (fixedMappingKeys.has(normalizeKey(f.key || ""))) continue
       if (FORM_SKIP_KEYS.has(f.key)) continue
       if (FORM_SKIP_LABELS.has((f.label || "").toLowerCase().trim())) continue
       const k = (f.key || "").toLowerCase()
@@ -151,6 +154,7 @@ export function buildTemplateFallbackFields(template: any): FormField[] {
   } else if (rawMappings.length > 0) {
     for (const m of rawMappings) {
       if (m.type === "photo") continue
+      if (m.useFixedValue) continue
       const k = (m.fieldKey || "").toLowerCase()
       let formType = "text"
       if (k.includes("phone") || k.includes("mob") || k === "mob_father" || k === "mother_phone") formType = "tel"
@@ -178,10 +182,16 @@ export function buildTemplateFallbackFields(template: any): FormField[] {
 export async function getPublicSubmissionFields(schoolId: string, template: any): Promise<FormField[]> {
   const fallback = buildTemplateFallbackFields(template)
   const fields = await buildFormFields(schoolId, fallback)
-  return fields.map((field) => ({
+  const fixedMappingKeys = getFixedTemplateFieldKeys([
+    ...((template?.fieldMappings || []) as any[]),
+    ...((template?.backFieldMappings || []) as any[]),
+  ])
+  return fields
+    .filter(field => !fixedMappingKeys.has(normalizeKey(field.key || "")))
+    .map((field) => ({
     ...field,
     role: field.role || getFieldRole(field.key, field.label),
-  }))
+    }))
 }
 
 /**

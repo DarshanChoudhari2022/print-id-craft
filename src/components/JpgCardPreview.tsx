@@ -14,13 +14,15 @@ import {
 import { getCoverPhotoPlacement } from "@/lib/card-photo-placement"
 import { getHouseFlagRenderLayout } from "@/lib/house-flags"
 import { formatSchoolCardFieldValue } from "@/lib/school-card-display"
-import { fixedOfficeNumberForField } from "@/lib/fixed-template-values"
+import { getFixedTemplateValue } from "@/lib/fixed-template-values"
 
 type FieldMapping = {
   id: string
   fieldKey: string
   label: string
   type: "text" | "photo" | "flag"
+  useFixedValue?: boolean
+  fixedValue?: string
   x: number
   y: number
   width: number
@@ -156,7 +158,6 @@ type JpgCardPreviewProps = {
   className?: string
   watermark?: string
   schoolName?: string
-  fixedOfficeNo?: string
   /**
    * Card physical size in millimetres. When provided, the preview canvas
    * uses this aspect ratio (cardWidthMm × DPI / 25.4 wide) instead of the
@@ -229,14 +230,12 @@ export function resolveFieldValue(fd: Record<string, string>, fieldKey: string):
 
 function resolveCardFieldValue(
   fd: Record<string, string>,
-  fieldKey: string,
+  field: Pick<FieldMapping, "fieldKey" | "useFixedValue" | "fixedValue">,
   hasDivisionPlaceholder?: boolean,
-  label?: string,
-  fixedOfficeNo?: string,
 ): string {
-  const fixedValue = fixedOfficeNumberForField(fixedOfficeNo, fieldKey, label)
-  if (fixedValue) return fixedValue
-  return resolveDisplayFieldValueShared(fd, fieldKey, hasDivisionPlaceholder)
+  const fixedValue = getFixedTemplateValue(field)
+  if (fixedValue !== undefined) return fixedValue
+  return resolveDisplayFieldValueShared(fd, field.fieldKey, hasDivisionPlaceholder)
 }
 
 /**
@@ -375,7 +374,6 @@ export default function JpgCardPreview({
   className,
   watermark,
   schoolName,
-  fixedOfficeNo,
   cardWidthMm,
   cardHeightMm,
 }: JpgCardPreviewProps) {
@@ -477,7 +475,7 @@ export default function JpgCardPreview({
           const hasDivisionPlaceholder = fieldMappings.some(
             (x) => x.type !== "photo" && x.type !== "flag" && (x.fieldKey === "division" || x.fieldKey === "div")
           )
-          let value = resolveCardFieldValue(formData, field.fieldKey, hasDivisionPlaceholder, field.label, fixedOfficeNo)
+          let value = resolveCardFieldValue(formData, field, hasDivisionPlaceholder)
           value = formatSchoolCardFieldValue(schoolName, field.fieldKey, value)
           if (field.dateFormat && value) value = formatDateValue(value, field.dateFormat)
           const transform = field.textTransform || "none"
@@ -569,7 +567,7 @@ export default function JpgCardPreview({
     } catch (err) {
       console.error("Render failed", err)
     }
-  }, [templateImageUrl, fieldMappings, formData, studentPhoto, flagImageUrl, scale, watermark, schoolName, fixedOfficeNo, cardWidthMm, cardHeightMm])
+  }, [templateImageUrl, fieldMappings, formData, studentPhoto, flagImageUrl, scale, watermark, schoolName, cardWidthMm, cardHeightMm])
 
   const renderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -609,7 +607,6 @@ export async function generateJpgCard(
   flagImageUrl?: string,
   cardWidthMm: number = DEFAULT_CARD_WIDTH_MM,
   schoolName?: string,
-  fixedOfficeNo?: string,
 ): Promise<string> {
   const canvas = document.createElement("canvas")
   const ctx = canvas.getContext("2d")
@@ -675,7 +672,7 @@ export async function generateJpgCard(
       const hasDivisionPlaceholder = fieldMappings.some(
         (x) => x.type !== "photo" && x.type !== "flag" && (x.fieldKey === "division" || x.fieldKey === "div")
       )
-      let value = resolveCardFieldValue(formData, field.fieldKey, hasDivisionPlaceholder, field.label, fixedOfficeNo)
+      let value = resolveCardFieldValue(formData, field, hasDivisionPlaceholder)
       value = formatSchoolCardFieldValue(schoolName, field.fieldKey, value)
       if (value) {
         const padding = 4 * outputScale

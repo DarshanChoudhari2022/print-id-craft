@@ -37,7 +37,7 @@ function deriveFieldConfigFromMappings(fieldMappings: any[]): any[] {
   if (!Array.isArray(fieldMappings) || fieldMappings.length === 0) return []
 
   return fieldMappings
-    .filter((m) => m.type !== "photo") // photo is handled separately in form
+    .filter((m) => m.type !== "photo" && !m.useFixedValue) // fixed values are printed, not requested
     .map((m) => {
       // Determine form field type based on the key/label
       let formType = "text"

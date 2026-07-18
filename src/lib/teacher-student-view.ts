@@ -1,7 +1,10 @@
 type StudentLike = {
   id: string
+  serialNumber?: string | null
   status: string
   class?: { name?: string | null } | null
+  teacherComment?: string | null
+  flagNote?: string | null
   formData?: Record<string, unknown> | null
 }
 
@@ -10,6 +13,7 @@ type TeacherStudentFilters = {
   grade?: string
   division?: string
   status?: string
+  search?: string
 }
 
 type TeacherStats = {
@@ -47,11 +51,30 @@ export function filterTeacherStudents<T extends StudentLike>(
   students: T[] | undefined,
   filters: TeacherStudentFilters,
 ): T[] {
+  const search = filters.search?.trim().toLowerCase() || ""
+
   return (students || []).filter((student) => {
     if (filters.section && student.class?.name !== filters.section) return false
     if (filters.status && student.status !== filters.status) return false
     if (filters.grade && getStudentGrade(student) !== filters.grade) return false
     if (filters.division && getStudentDivision(student) !== filters.division) return false
+    if (search) {
+      const searchableValues = [
+        student.id,
+        student.serialNumber,
+        student.status,
+        student.class?.name,
+        student.teacherComment,
+        student.flagNote,
+        ...Object.values(student.formData || {}),
+      ]
+      const matched = searchableValues.some((value) => (
+        value !== null &&
+        value !== undefined &&
+        String(value).toLowerCase().includes(search)
+      ))
+      if (!matched) return false
+    }
     return true
   })
 }

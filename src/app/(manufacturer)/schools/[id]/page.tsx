@@ -2401,13 +2401,13 @@ export default function SchoolDetailPage() {
             {/* Workspace administrator login credentials */}
             <div style={{ marginTop: 24, background: 'linear-gradient(135deg, #f8fafc, #eff6ff)', borderRadius: 16, border: '1px solid #bfdbfe', padding: 24 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e3a8a', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span>🔑</span> {companyMode ? "Company Representative Login" : "Main Teacher Login"}
+                <span>🔑</span> {companyMode ? "ID Card Coordinator Login" : "Main ID Card Coordinator Login"}
               </h3>
               <p style={{ fontSize: 13, color: '#3b82f6', marginBottom: 16 }}>
                 {companyMode ? (
-                  <>These are the credentials for the company representative. They can log in, manage departments and employees, and map ID-card templates. Default password: <b>Company@123</b>.</>
+                  <>These are the credentials for the ID card coordinator. They can log in, manage departments and employees, and map ID-card templates. Default password: <b>Company@123</b>.</>
                 ) : (
-                  <>These are the credentials for the school administrator. Hand these over to the school so they can log in, add classes, map templates, and assign sub-teachers. Note: default password is <b>Teacher@123</b>.</>
+                  <>These are the credentials for the main ID card coordinator. Hand these over so they can log in, add classes, map templates, and assign class coordinators. Note: default password is <b>Teacher@123</b>.</>
                 )}
               </p>
               
@@ -2429,7 +2429,7 @@ export default function SchoolDetailPage() {
                         <div style={{ display: 'flex', gap: 4 }}>
                           <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 11, minHeight: 0 }} onClick={() => { navigator.clipboard.writeText(t.email); toast.success('Copied Email') }}>Copy</button>
                           <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 11, minHeight: 0, color: '#dc2626' }} onClick={async () => {
-                            if (confirm(companyMode ? "Reset the company representative password to Company@123?" : "Reset this teacher's password to Teacher@123?")) {
+                            if (confirm(companyMode ? "Reset the ID card coordinator password to Company@123?" : "Reset this coordinator's password to Teacher@123?")) {
                               const res = await fetch(`/api/schools/${schoolId}/main-teacher`, { method: "POST", body: JSON.stringify({ reset: true }) })
                               if (res.ok) toast.success("Password Reset!"); else toast.error("Failed to reset.")
                             }
@@ -2444,12 +2444,12 @@ export default function SchoolDetailPage() {
                 {(!school.teachers || !school.teachers.some((t: any) => t.isMainTeacher)) && (
                   <div style={{ padding: 16, background: 'white', borderRadius: 12, border: '1px dashed #cbd5e1', display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <div style={{ textAlign: 'center' }}>
-                      <p style={{ color: '#64748b', fontSize: 13, marginBottom: 8 }}>Set up {companyMode ? "company representative" : "school administrator"} account</p>
+                      <p style={{ color: '#64748b', fontSize: 13, marginBottom: 8 }}>Set up {companyMode ? "ID card coordinator" : "main ID card coordinator"} account</p>
                       <button 
                         className="btn btn-primary" 
                         style={{ width: '100%' }}
                         onClick={async () => {
-                          if (!confirm(companyMode ? "Auto-generate a Company Representative login?" : "Auto-generate a Main Teacher login?")) return
+                          if (!confirm(companyMode ? "Auto-generate an ID Card Coordinator login?" : "Auto-generate a Main ID Card Coordinator login?")) return
                           const res = await fetch(`/api/schools/${schoolId}/main-teacher`, { method: "POST" })
                           if (res.ok) { toast.success("Created!"); fetchSchool() } else toast.error("Error")
                         }}
@@ -2464,7 +2464,7 @@ export default function SchoolDetailPage() {
                         <input 
                           type="email" 
                           id="manual-teacher-email" 
-                          placeholder={companyMode ? "representative@company.com" : "principal@school.com"}
+                          placeholder={companyMode ? "coordinator@company.com" : "coordinator@school.com"}
                           style={{ flex: 1, padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13 }}
                         />
                         <button 
@@ -2699,7 +2699,7 @@ export default function SchoolDetailPage() {
                     <th>{companyMode ? (legacyCompanyPortfolio ? "Company" : "Department") : "Section"}</th>
                     {!companyMode && <th>Classes (Roman)</th>}
                     <th>Template</th>
-                    <th>{companyMode ? `${legacyCompanyPortfolio ? "Company" : "Department"} Representative` : "Approval Teacher"}</th>
+                    <th>{companyMode ? `${legacyCompanyPortfolio ? "Company" : "Department"} Coordinator` : "Approval Coordinator"}</th>
                     <th>{companyMode ? "Employees" : "Students"}</th>
                     <th>Status</th>
                     <th>Link</th>
@@ -3144,7 +3144,6 @@ export default function SchoolDetailPage() {
                       backMappings: classTemplateEditor.templateData.backFieldMappings || [],
                       cardSizeLocked: classTemplateEditor.templateData.cardSizeLocked || false,
                       fixedBranch: (classTemplateEditor.templateData.printConfig as any)?.fixedBranch || "",
-                      fixedOfficeNo: (classTemplateEditor.templateData.printConfig as any)?.fixedOfficeNo || "",
                     } : undefined}
                     previewStudent={students.find(s => s.classId === classTemplateEditor.classId) ? {
                       formData: students.find(s => s.classId === classTemplateEditor.classId)!.formData as Record<string, string>,
@@ -3173,7 +3172,6 @@ export default function SchoolDetailPage() {
                               cardSizeLocked: cardSettings.cardSizeLocked,
                               printConfig: {
                                 fixedBranch: cardSettings.fixedBranch || "",
-                                fixedOfficeNo: cardSettings.fixedOfficeNo || "",
                               },
                             } : {}),
                           }),
@@ -4897,7 +4895,6 @@ export default function SchoolDetailPage() {
                     backMappings: (template.backFieldMappings as any) || [],
                     cardSizeLocked: template.cardSizeLocked || false,
                     fixedBranch: (template.printConfig as any)?.fixedBranch || "",
-                    fixedOfficeNo: (template.printConfig as any)?.fixedOfficeNo || "",
                   }}
                   previewStudent={students[0] ? {
                     formData: students[0].formData as Record<string, string>,
@@ -4924,7 +4921,6 @@ export default function SchoolDetailPage() {
                             cardSizeLocked: cardSettings.cardSizeLocked,
                             printConfig: {
                               fixedBranch: cardSettings.fixedBranch || "",
-                              fixedOfficeNo: cardSettings.fixedOfficeNo || "",
                             },
                           } : {}),
                         }),
@@ -5223,7 +5219,6 @@ export default function SchoolDetailPage() {
                         scale={1}
                         watermark="PREVIEW"
                         schoolName={school.name}
-                        fixedOfficeNo={(studentTemplate.printConfig as any)?.fixedOfficeNo || ""}
                         cardWidthMm={(studentTemplate as any).cardWidthMm}
                         cardHeightMm={(studentTemplate as any).cardHeightMm}
                       />
@@ -5241,7 +5236,6 @@ export default function SchoolDetailPage() {
                           scale={1}
                           watermark="PREVIEW"
                           schoolName={school.name}
-                          fixedOfficeNo={(studentTemplate.printConfig as any)?.fixedOfficeNo || ""}
                           cardWidthMm={(studentTemplate as any).cardWidthMm}
                           cardHeightMm={(studentTemplate as any).cardHeightMm}
                         />

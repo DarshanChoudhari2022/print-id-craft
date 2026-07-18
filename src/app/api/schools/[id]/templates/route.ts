@@ -60,14 +60,6 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       return NextResponse.json({ success: false, error: "School not found" }, { status: 404 })
     }
 
-    const defaultTemplate = await prisma.template.findFirst({
-      where: { schoolId: params.id },
-      orderBy: { createdAt: "asc" },
-      select: { printConfig: true },
-    })
-    const companyFixedOfficeNo =
-      ((defaultTemplate?.printConfig as { fixedOfficeNo?: string } | null)?.fixedOfficeNo || "").trim()
-
     const template = await prisma.template.create({
       data: {
         schoolId: params.id,
@@ -76,7 +68,6 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         backLayout: [],
         fieldConfig: [],
         fieldMappings: [],
-        printConfig: companyFixedOfficeNo ? { fixedOfficeNo: companyFixedOfficeNo } : undefined,
       },
     })
 

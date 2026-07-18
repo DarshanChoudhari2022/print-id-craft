@@ -46,7 +46,7 @@ function LoginForm() {
         // Role mismatch — force sign out immediately
         await signOut({ redirect: false })
         if (role === "TEACHER") {
-          toast.error("This is the Teacher Login portal. Manufacturer accounts cannot login here.")
+          toast.error("This is the ID Card Coordinator Login portal. Manufacturer accounts cannot login here.")
         } else {
           toast.error("This is the Manufacturer portal. Teacher accounts cannot login here.")
         }
@@ -139,9 +139,9 @@ function LoginForm() {
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #22c55e, #16a34a)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 </div>
-                <h1 className="login-heading" style={{ marginBottom: 0 }}>Teacher Login</h1>
+                <h1 className="login-heading" style={{ marginBottom: 0 }}>ID Card Coordinator Login</h1>
               </div>
-              <p className="login-subheading">Sign in to manage your school&apos;s ID cards</p>
+              <p className="login-subheading">Sign in to review, correct, and approve ID card data</p>
             </>
           )}
 
@@ -152,7 +152,7 @@ function LoginForm() {
                 id="email"
                 type="email"
                 required
-                placeholder={isAdminMode ? "admin@wisemelon.com" : "teacher@school.com"}
+                placeholder={isAdminMode ? "admin@wisemelon.com" : "coordinator@company.com"}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
@@ -220,7 +220,7 @@ function LoginForm() {
             {isAdminMode ? (
               <a href="/login" style={{ fontSize: 14, color: '#3b82f6', textDecoration: 'none', fontWeight: 600, transition: 'color 0.2s', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-                Switch to Teacher Login
+                Switch to ID Card Coordinator Login
               </a>
             ) : (
               <a href="/login?mode=admin" style={{ fontSize: 14, color: '#64748b', textDecoration: 'none', fontWeight: 600, transition: 'color 0.2s', display: 'inline-flex', alignItems: 'center', gap: 6 }}>

@@ -36,7 +36,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       school.workspaceKind,
     )
     const defaultPasswordText = companyMode ? "Company@123" : "Teacher@123"
-    const accountLabel = companyMode ? "Company representative" : "Main teacher"
+    const accountLabel = companyMode ? "ID card coordinator" : "Main ID card coordinator"
 
     if (reset && school.teachers.length > 0) {
       const teacher = school.teachers[0]
@@ -72,7 +72,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
             data: {
                 email,
                 password: defaultPassword,
-                name: companyMode ? `${school.name} Representative` : `${school.name} Admin`,
+                name: companyMode ? `${school.name} ID Card Coordinator` : `${school.name} ID Card Coordinator`,
                 role: "TEACHER",
                 schoolId: school.id,
                 isMainTeacher: true,

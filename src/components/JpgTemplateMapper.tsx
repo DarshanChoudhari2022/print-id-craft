@@ -8,7 +8,7 @@ import {
 } from "./IDMakerDialogs"
 import { resolveDisplayFieldValue, formatDateValue, isPrefixedAddressField } from "@/lib/field-resolver"
 import { isClassDivisionFieldKey } from "@/lib/section-class"
-import { fixedOfficeNumberForField } from "@/lib/fixed-template-values"
+import { getFixedTemplateValue } from "@/lib/fixed-template-values"
 
 const BG_COLOR_PRESETS = [
   // Neutrals
@@ -42,6 +42,8 @@ type FieldMapping = {
   label: string
   type: "text" | "photo" | "flag"
   required?: boolean
+  useFixedValue?: boolean
+  fixedValue?: string
   x: number // percentage from left
   y: number // percentage from top
   width: number // percentage of image width
@@ -68,6 +70,78 @@ type FieldMapping = {
   locked?: boolean
 }
 
+const LAST_TEXT_FIELD_STYLE_STORAGE_KEY = "wisemelon:last-jpg-text-field-style:v1"
+
+type LastTextFieldStyle = Pick<
+  FieldMapping,
+  | "width"
+  | "height"
+  | "fontSize"
+  | "fontColor"
+  | "fontWeight"
+  | "fontFamily"
+  | "textAlign"
+  | "fontStyle"
+  | "textDecoration"
+  | "textWrap"
+  | "letterSpacing"
+  | "lineHeight"
+  | "textTransform"
+>
+
+const buildLastTextFieldStyle = (mapping: FieldMapping): LastTextFieldStyle => ({
+  width: mapping.width,
+  height: mapping.height,
+  fontSize: mapping.fontSize,
+  fontColor: mapping.fontColor || "#000000",
+  fontWeight: mapping.fontWeight || "normal",
+  fontFamily: mapping.fontFamily || "Arial",
+  textAlign: mapping.textAlign || "left",
+  fontStyle: mapping.fontStyle || "normal",
+  textDecoration: mapping.textDecoration || "none",
+  textWrap: mapping.textWrap || "nowrap",
+  letterSpacing: mapping.letterSpacing || 0,
+  lineHeight: mapping.lineHeight || 1.2,
+  textTransform: mapping.textTransform || "none",
+})
+
+const parseLastTextFieldStyle = (raw: string | null): LastTextFieldStyle | null => {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as Partial<LastTextFieldStyle>
+    if (!parsed || typeof parsed !== "object") return null
+    if (typeof parsed.fontSize !== "number" || typeof parsed.fontFamily !== "string") return null
+    return {
+      width: typeof parsed.width === "number" ? parsed.width : 30,
+      height: typeof parsed.height === "number" ? parsed.height : 4.5,
+      fontSize: parsed.fontSize,
+      fontColor: typeof parsed.fontColor === "string" ? parsed.fontColor : "#000000",
+      fontWeight: parsed.fontWeight === "bold" ? "bold" : "normal",
+      fontFamily: parsed.fontFamily,
+      textAlign: parsed.textAlign === "center" || parsed.textAlign === "right" ? parsed.textAlign : "left",
+      fontStyle: parsed.fontStyle === "italic" ? "italic" : "normal",
+      textDecoration:
+        parsed.textDecoration === "underline" || parsed.textDecoration === "line-through"
+          ? parsed.textDecoration
+          : "none",
+      textWrap:
+        parsed.textWrap === "wrap" || parsed.textWrap === "multiline" || parsed.textWrap === "centeredWrap"
+          ? parsed.textWrap
+          : "nowrap",
+      letterSpacing: typeof parsed.letterSpacing === "number" ? parsed.letterSpacing : 0,
+      lineHeight: typeof parsed.lineHeight === "number" ? parsed.lineHeight : 1.2,
+      textTransform:
+        parsed.textTransform === "uppercase" ||
+        parsed.textTransform === "lowercase" ||
+        parsed.textTransform === "capitalize"
+          ? parsed.textTransform
+          : "none",
+    }
+  } catch {
+    return null
+  }
+}
+
 type CardSettings = {
   cardSizePreset: string
   cardWidth: number
@@ -80,7 +154,6 @@ type CardSettings = {
   backMappings?: FieldMapping[]
   cardSizeLocked?: boolean
   fixedBranch?: string
-  fixedOfficeNo?: string
 }
 
 type JpgTemplateMapperProps = {
@@ -221,6 +294,20 @@ export default function JpgTemplateMapper({
   const [backMappings, setBackMappings] = useState<FieldMapping[]>(initialCardSettings?.backMappings || [])
   const [activeCardSide, setActiveCardSide] = useState<"front" | "back">("front")
   const [photoBgColor, setPhotoBgColor] = useState(initialPhotoBgColor || "#FFFFFF")
+  const [lastTextFieldStyle, setLastTextFieldStyle] = useState<LastTextFieldStyle | null>(null)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    setLastTextFieldStyle(parseLastTextFieldStyle(window.localStorage.getItem(LAST_TEXT_FIELD_STYLE_STORAGE_KEY)))
+  }, [])
+
+  const rememberTextFieldStyle = useCallback((mapping: FieldMapping) => {
+    if (mapping.type !== "text") return
+    const nextStyle = buildLastTextFieldStyle(mapping)
+    setLastTextFieldStyle(nextStyle)
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(LAST_TEXT_FIELD_STYLE_STORAGE_KEY, JSON.stringify(nextStyle))
+  }, [])
 
   // Keep the persisted front side separate from the side currently being edited.
   useEffect(() => {
@@ -439,7 +526,6 @@ export default function JpgTemplateMapper({
   const [bleedMargin, setBleedMargin] = useState(initialCardSettings?.bleedMargin ?? 1) // mm
   const [cardSizeLocked, setCardSizeLocked] = useState(initialCardSettings?.cardSizeLocked || false)
   const [fixedBranch, setFixedBranch] = useState(initialCardSettings?.fixedBranch || "")
-  const [fixedOfficeNo, setFixedOfficeNo] = useState(initialCardSettings?.fixedOfficeNo || "")
 
   // String-based intermediates for width/height inputs so user can type freely
   const [cardWidthStr, setCardWidthStr] = useState(String(initialCardSettings?.cardWidth || 100))
@@ -588,6 +674,7 @@ export default function JpgTemplateMapper({
     const isDateField = fieldKey === "dateOfBirth" || fieldKey.toLowerCase().includes("date")
     const isPrefixedAddress = isPrefixedAddressField(fieldKey)
     const isCircularPhoto = type === "photo" && initialRadius === 999
+    const savedTextStyle = type === "text" ? lastTextFieldStyle : null
     const newMapping: FieldMapping = {
       id: `field-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       fieldKey,
@@ -596,19 +683,19 @@ export default function JpgTemplateMapper({
       required,
       x: type === "photo" ? 5 : type === "flag" ? 75 : 40,
       y: type === "photo" ? 25 : type === "flag" ? 5 : 30 + mappings.filter((m) => m.type === "text").length * 6,
-      width: type === "photo" ? (isCircularPhoto ? 20 : 18) : type === "flag" ? 12 : isPrefixedAddress ? 55 : 30,
-      height: type === "photo" ? (isCircularPhoto ? 20 : 32) : type === "flag" ? 18 : isPrefixedAddress ? 8 : 4.5,
-      fontSize: 14,
-      fontColor: "#000000",
-      fontWeight: fieldKey === "name" || fieldKey === "fullName" ? "bold" : "normal",
-      fontFamily: "Arial",
-      textAlign: "left",
-      fontStyle: "normal",
-      textDecoration: "none",
-      textWrap: isPrefixedAddress ? "multiline" : "nowrap",
-      letterSpacing: 0,
-      lineHeight: isPrefixedAddress ? 1 : 1.2,
-      textTransform: "none",
+      width: type === "photo" ? (isCircularPhoto ? 20 : 18) : type === "flag" ? 12 : savedTextStyle?.width ?? (isPrefixedAddress ? 55 : 30),
+      height: type === "photo" ? (isCircularPhoto ? 20 : 32) : type === "flag" ? 18 : savedTextStyle?.height ?? (isPrefixedAddress ? 8 : 4.5),
+      fontSize: savedTextStyle?.fontSize ?? 14,
+      fontColor: savedTextStyle?.fontColor ?? "#000000",
+      fontWeight: savedTextStyle?.fontWeight ?? (fieldKey === "name" || fieldKey === "fullName" ? "bold" : "normal"),
+      fontFamily: savedTextStyle?.fontFamily ?? "Arial",
+      textAlign: savedTextStyle?.textAlign ?? "left",
+      fontStyle: savedTextStyle?.fontStyle ?? "normal",
+      textDecoration: savedTextStyle?.textDecoration ?? "none",
+      textWrap: savedTextStyle?.textWrap ?? (isPrefixedAddress ? "multiline" : "nowrap"),
+      letterSpacing: savedTextStyle?.letterSpacing ?? 0,
+      lineHeight: savedTextStyle?.lineHeight ?? (isPrefixedAddress ? 1 : 1.2),
+      textTransform: savedTextStyle?.textTransform ?? "none",
       dateFormat: isDateField ? "DD/MM/YYYY" : undefined,
       photoBorderWidth: type === "photo" ? 0 : undefined,
       photoBorderColor: type === "photo" ? "#000000" : undefined,
@@ -640,11 +727,21 @@ export default function JpgTemplateMapper({
     if (selectedId === id) setSelectedId(null)
   }
 
-  const updateMapping = (id: string, updates: Partial<FieldMapping>) => {
+  const updateMapping = (id: string, updates: Partial<FieldMapping>, rememberStyle = true) => {
     setMappings((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, ...updates } : m))
+      prev.map((m) => {
+        if (m.id !== id) return m
+        const updatedMapping = { ...m, ...updates }
+        if (rememberStyle) rememberTextFieldStyle(updatedMapping)
+        return updatedMapping
+      })
     )
   }
+
+  const rememberSelectedTextFieldStyle = useCallback(() => {
+    const mapping = mappings.find((m) => m.id === selectedId)
+    if (mapping) rememberTextFieldStyle(mapping)
+  }, [mappings, rememberTextFieldStyle, selectedId])
 
   // ── Snapshot helpers for dialogs that support live-preview ──
   // Call openDialogWithSnapshot before opening a dialog; if user clicks Cancel, call revertDialogSnapshot()
@@ -926,19 +1023,8 @@ export default function JpgTemplateMapper({
         backMappings: savedBackMappings,
         cardSizeLocked,
         fixedBranch,
-        fixedOfficeNo,
       }
       await onSave(savedFrontImageUrl, savedFrontMappings, photoBgColor, settings)
-      if (companyMode) {
-        const fixedValueResponse = await fetch(`/api/schools/${schoolId}/fixed-office-number`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fixedOfficeNo: fixedOfficeNo.trim() }),
-        })
-        if (!fixedValueResponse.ok) {
-          throw new Error("Template saved, but the company-wide Office Number could not be synchronized.")
-        }
-      }
       setFrontImageUrl(savedFrontImageUrl)
       setFrontMappings(savedFrontMappings)
       setBackImageUrl(savedBackImageUrl)
@@ -1685,11 +1771,13 @@ export default function JpgTemplateMapper({
               //   3. Field label as a last-resort placeholder.
               let sampleValue = ""
               if (m.type !== "photo" && m.type !== "flag") {
-                const fixedValue = fixedOfficeNumberForField(fixedOfficeNo, m.fieldKey, m.label)
+                const fixedValue = getFixedTemplateValue(m)
                 const realValue = previewStudent?.formData
                   ? resolveDisplayFieldValue(previewStudent.formData, m.fieldKey)
                   : ""
-                sampleValue = fixedValue || realValue || SAMPLE_DATA[m.fieldKey] || m.label
+                sampleValue = fixedValue !== undefined
+                  ? fixedValue
+                  : realValue || SAMPLE_DATA[m.fieldKey] || m.label
               }
 
               return (
@@ -2460,6 +2548,92 @@ export default function JpgTemplateMapper({
                       }}
                       placeholder="e.g. Father's Mobile Number"
                     />
+                  </div>
+
+                  <div
+                    style={{
+                      padding: 10,
+                      border: "1px solid #cbd5e1",
+                      borderRadius: 9,
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "#334155",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedMapping.required !== false && !selectedMapping.useFixedValue}
+                        disabled={selectedMapping.useFixedValue}
+                        onChange={(e) =>
+                          updateMapping(selectedMapping.id, {
+                            required: e.target.checked,
+                          })
+                        }
+                      />
+                      Compulsory field in employee/student form
+                    </label>
+
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        marginTop: 10,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "#1d4ed8",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedMapping.useFixedValue === true}
+                        onChange={(e) =>
+                          updateMapping(selectedMapping.id, {
+                            useFixedValue: e.target.checked,
+                            ...(e.target.checked ? { required: false } : {}),
+                          })
+                        }
+                      />
+                      Use a fixed / hardcoded value on every ID card
+                    </label>
+
+                    {selectedMapping.useFixedValue && (
+                      <>
+                        <input
+                          type="text"
+                          value={selectedMapping.fixedValue || ""}
+                          onChange={(e) =>
+                            updateMapping(selectedMapping.id, {
+                              fixedValue: e.target.value,
+                            })
+                          }
+                          placeholder={`Enter fixed ${selectedMapping.label || "field"} value`}
+                          style={{
+                            width: "100%",
+                            marginTop: 8,
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            border: "1.5px solid #93c5fd",
+                            background: "white",
+                            fontSize: 13,
+                            outline: "none",
+                          }}
+                        />
+                        <div style={{ fontSize: 10, color: "#64748b", marginTop: 5, lineHeight: 1.4 }}>
+                          Optional. This value is stored only in this template field, appears on every generated card, and is not requested in the registration form.
+                        </div>
+                      </>
+                    )}
                   </div>
                   
                   {/* Font Size */}
@@ -3834,31 +4008,6 @@ export default function JpgTemplateMapper({
                 ))}
               </div>
 
-              {companyMode && (
-                <div style={{ marginTop: 12 }}>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: "#3b82f6", marginBottom: 4, display: "block" }}>
-                    Fixed Office Number (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={fixedOfficeNo}
-                    onChange={(e) => setFixedOfficeNo(e.target.value)}
-                    placeholder="e.g. 020-12345678"
-                    style={{
-                      width: "100%",
-                      height: 34,
-                      padding: "0 8px",
-                      border: "1.5px solid #bfdbfe",
-                      borderRadius: 8,
-                      fontSize: 12,
-                      background: "white",
-                    }}
-                  />
-                  <div style={{ fontSize: 9, color: "#6b7280", marginTop: 3, lineHeight: 1.35 }}>
-                    Save once to use this Office No on every employee ID card across all templates for this company. Employee records are not changed.
-                  </div>
-                </div>
-              )}
               <div
                 style={{
                   marginTop: 12,
@@ -4089,9 +4238,9 @@ export default function JpgTemplateMapper({
               fontStyle: cfg.fontStyle.toLowerCase().includes("italic") ? "italic" : "normal",
               fontSize: cfg.fontSize,
               textDecoration: cfg.strikeout ? "line-through" : cfg.underline ? "underline" : "none",
-            })
+            }, false)
           }}
-          onOk={() => { clearDialogSnapshot(); setShowFontDialog(false) }}
+          onOk={() => { rememberSelectedTextFieldStyle(); clearDialogSnapshot(); setShowFontDialog(false) }}
           onCancel={() => { revertDialogSnapshot(); setShowFontDialog(false) }}
         />
       )}
@@ -4100,8 +4249,8 @@ export default function JpgTemplateMapper({
       {showColorDialog && selectedMapping && selectedMapping.type === "text" && (
         <ColorPickerDialog
           initialColor={selectedMapping.fontColor || "#000000"}
-          onChange={(color: string) => updateMapping(selectedMapping.id, { fontColor: color })}
-          onOk={() => { clearDialogSnapshot(); setShowColorDialog(false) }}
+          onChange={(color: string) => updateMapping(selectedMapping.id, { fontColor: color }, false)}
+          onOk={() => { rememberSelectedTextFieldStyle(); clearDialogSnapshot(); setShowColorDialog(false) }}
           onCancel={() => { revertDialogSnapshot(); setShowColorDialog(false) }}
         />
       )}

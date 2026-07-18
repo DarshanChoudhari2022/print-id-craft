@@ -4,50 +4,37 @@ type TemplateField = {
   key?: string
   fieldKey?: string
   label?: string
+  useFixedValue?: boolean
+  fixedValue?: string
 }
 
-const OFFICE_NUMBER_MARKERS = new Set([
-  "officeno",
-  "officenumber",
-  "officecontact",
-  "officecontactno",
-  "officecontactnumber",
-  "officephone",
-  "officephoneno",
-  "officephonenumber",
-  "companyofficeno",
-  "companyofficenumber",
-])
-
-export function isOfficeNumberField(
-  fieldKey: string | null | undefined,
-  label?: string | null,
-): boolean {
-  return [fieldKey, label].some(value => OFFICE_NUMBER_MARKERS.has(normalizeKey(String(value || ""))))
+export function getFixedTemplateValue(
+  field: TemplateField | null | undefined,
+): string | undefined {
+  if (!field?.useFixedValue) return undefined
+  return String(field.fixedValue ?? "").trim()
 }
 
-export function fixedOfficeNumberForField(
-  fixedOfficeNo: string | null | undefined,
-  fieldKey: string | null | undefined,
-  label?: string | null,
-): string {
-  const value = String(fixedOfficeNo || "").trim()
-  return value && isOfficeNumberField(fieldKey, label) ? value : ""
-}
-
-export function applyFixedOfficeNumberToFormData(
+export function applyFixedTemplateValuesToFormData(
   formData: Record<string, unknown>,
-  fixedOfficeNo: string | null | undefined,
   fields: TemplateField[] = [],
 ): Record<string, unknown> {
-  const value = String(fixedOfficeNo || "").trim()
-  if (!value) return { ...formData }
-
   const next = { ...formData }
-  next.officeNo = value
   for (const field of fields) {
     const key = String(field.fieldKey || field.key || "").trim()
-    if (key && isOfficeNumberField(key, field.label)) next[key] = value
+    const value = getFixedTemplateValue(field)
+    if (key && value !== undefined) next[key] = value
   }
   return next
+}
+
+export function getFixedTemplateFieldKeys(
+  fields: TemplateField[] = [],
+): Set<string> {
+  return new Set(
+    fields
+      .filter(field => field.useFixedValue)
+      .map(field => normalizeKey(String(field.fieldKey || field.key || "")))
+      .filter(Boolean),
+  )
 }

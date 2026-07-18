@@ -72,6 +72,7 @@ export default function TeacherDashboard() {
   const [fetchError, setFetchError] = useState(false)
   const [classFilter, setClassFilter] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
+  const [searchFilter, setSearchFilter] = useState("")
   const [selectedStudent, setSelectedStudent] = useState<StudentData | null>(null)
   const [templateData, setTemplateData] = useState<any>(null)
 
@@ -514,8 +515,9 @@ export default function TeacherDashboard() {
       grade: gradeClassFilter,
       division: divisionFilter,
       status: statusFilter,
+      search: searchFilter,
     })
-  }, [data?.students, classFilter, statusFilter, gradeClassFilter, divisionFilter])
+  }, [data?.students, classFilter, statusFilter, gradeClassFilter, divisionFilter, searchFilter])
 
   // Unique grade/class values for the grade dropdown filter
   const uniqueGrades = useMemo(() => {
@@ -595,12 +597,12 @@ export default function TeacherDashboard() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
-              {data?.school?.name || (companyMode ? "Company Representative Dashboard" : "Teacher Dashboard")}
+              {data?.school?.name || "ID Card Coordinator Dashboard"}
             </h1>
             <p style={{ fontSize: 14, color: '#64748b' }}>
               Welcome, {session?.user?.name || session?.user?.email}
-              {isMain && <span style={{ marginLeft: 8, padding: '2px 8px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: 'white', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>{companyMode ? "Company Representative" : "Main Teacher"}</span>}
-              {!isMain && <span style={{ marginLeft: 8, padding: '2px 8px', background: '#f1f5f9', color: '#64748b', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>{companyMode ? "Department Manager" : "Class Teacher"}</span>}
+              {isMain && <span style={{ marginLeft: 8, padding: '2px 8px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: 'white', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>{companyMode ? "ID Card Coordinator" : "Main ID Card Coordinator"}</span>}
+              {!isMain && <span style={{ marginLeft: 8, padding: '2px 8px', background: '#f1f5f9', color: '#64748b', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>{companyMode ? "Department Coordinator" : "Class Coordinator"}</span>}
             </p>
           </div>
           <button className="btn btn-outline" onClick={() => signOut({ callbackUrl: "/login" })}>Sign Out</button>
@@ -801,6 +803,16 @@ export default function TeacherDashboard() {
           <div className="fade-in">
             {/* Filters */}
             <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 280px', minWidth: 240 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Search</label>
+                <input
+                  type="search"
+                  value={searchFilter}
+                  onChange={e => setSearchFilter(e.target.value)}
+                  placeholder={companyMode ? "Search employee name, ID code, mobile, department..." : "Search student name, serial, class, mobile..."}
+                  style={{ height: 38, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13, width: '100%' }}
+                />
+              </div>
               {isMain && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>{companyMode ? "Department" : "Section"}</label>
@@ -1088,7 +1100,7 @@ export default function TeacherDashboard() {
         {commentStudentId && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }} onClick={() => setCommentStudentId(null)}>
             <div style={{ background: 'white', borderRadius: 16, padding: 24, maxWidth: 440, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>💬 {companyMode ? "Representative" : "Teacher"} Comment</h3>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>💬 {companyMode ? "Coordinator" : "Teacher"} Comment</h3>
               <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>This comment will be visible to the manufacturer.</p>
               <textarea
                 value={commentText}
@@ -1214,7 +1226,7 @@ export default function TeacherDashboard() {
                   {/* Teacher Comment Display */}
                   {selectedStudent.teacherComment && (
                     <div style={{ padding: '12px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, color: '#1d4ed8', fontSize: 13, marginBottom: 16 }}>
-                      💬 <strong>{companyMode ? "Representative" : "Teacher"} Comment:</strong> {selectedStudent.teacherComment}
+                      💬 <strong>{companyMode ? "Coordinator" : "Teacher"} Comment:</strong> {selectedStudent.teacherComment}
                     </div>
                   )}
 
@@ -1239,7 +1251,6 @@ export default function TeacherDashboard() {
                                 studentPhoto={selectedStudent.photoUrl}
                                 scale={0.5}
                                 watermark="PREVIEW ONLY"
-                                fixedOfficeNo={(studentTemplate.printConfig as any)?.fixedOfficeNo || ""}
                                 cardWidthMm={(studentTemplate as any).cardWidthMm}
                                 cardHeightMm={(studentTemplate as any).cardHeightMm}
                               />
@@ -1254,7 +1265,6 @@ export default function TeacherDashboard() {
                                   studentPhoto={selectedStudent.photoUrl}
                                   scale={0.5}
                                   watermark="PREVIEW ONLY"
-                                  fixedOfficeNo={(studentTemplate.printConfig as any)?.fixedOfficeNo || ""}
                                   cardWidthMm={(studentTemplate as any).cardWidthMm}
                                   cardHeightMm={(studentTemplate as any).cardHeightMm}
                                 />
@@ -1343,7 +1353,6 @@ export default function TeacherDashboard() {
                   backMappings: (templateData as any).backFieldMappings || [],
                   cardSizeLocked: (templateData as any).cardSizeLocked || false,
                   fixedBranch: (templateData.printConfig as any)?.fixedBranch || "",
-                  fixedOfficeNo: (templateData.printConfig as any)?.fixedOfficeNo || "",
                 } : undefined}
                 onSave={async (templateImageUrl, fieldMappings, photoBgColor, cardSettings) => {
                   try {
@@ -1365,7 +1374,6 @@ export default function TeacherDashboard() {
                           cardSizeLocked: cardSettings.cardSizeLocked,
                           printConfig: {
                             fixedBranch: cardSettings.fixedBranch || "",
-                            fixedOfficeNo: cardSettings.fixedOfficeNo || "",
                           },
                         } : {}),
                       }),

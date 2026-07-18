@@ -13,6 +13,7 @@ import { buildStudentIndexData } from "@/lib/student-index"
 import { getDefaultTemplate } from "@/lib/template-resolver"
 import { buildImportIdentityKeys } from "@/lib/import-identity"
 import { normalizeStudentStringFormData } from "@/lib/student-text-normalization"
+import { uploadPhotoFromRowLink } from "@/lib/row-photo-import"
 
 export const maxDuration = 300; // Vercel Pro function timeout config
 
@@ -264,7 +265,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     }
 
     // Validate each row & build student data
-    const validRows: Array<{ formData: Record<string, string>; photoId: string; className: string; classId: string; rowNum: number }> = []
+    const validRows: Array<{ formData: Record<string, string>; photoId: string; photoUrl: string; className: string; classId: string; rowNum: number }> = []
     const errors: Array<{ row: number; field: string; message: string }> = []
 
     // Required fields check — but relaxed: only fullName is truly hard-required
@@ -275,16 +276,21 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       const rowNum = i + 2 // Excel row (1-indexed header + data)
       const studentFormData: Record<string, string> = {}
       let photoId = ""
+      let photoUrl = ""
       let rowClassName = ""
 
       // Map columns
       for (const [excelHeader, fieldKey] of Object.entries(columnMap)) {
         const val = String(raw[excelHeader] ?? "").trim()
         if (fieldKey === "photoUrl") {
-          // Skip — we handle photos separately
+          photoUrl = val
         } else if (fieldKey === "photoId") {
-          photoId = val
-          studentFormData["photoId"] = val // also store in form data for later matching
+          if (/^https?:\/\//i.test(val)) {
+            photoUrl = val
+          } else {
+            photoId = val
+            studentFormData["photoId"] = val // also store in form data for later matching
+          }
         } else if (fieldKey === "classSection") {
           rowClassName = val
           studentFormData["class"] = val
@@ -348,6 +354,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       validRows.push({
         formData: normalizeStudentStringFormData(studentFormData, fieldConfig),
         photoId,
+        photoUrl,
         className: rowClassName || "Default",
         classId: rowClassId,
         rowNum,
@@ -436,7 +443,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       }, { status: 400 })
     }
 
-    const createdStudents: Array<{ id: string; serialNumber: string; name: string; className: string; photoId: string }> = []
+    const createdStudents: Array<{ id: string; serialNumber: string; name: string; className: string; photoId: string; photoUrl: string; rowNum: number }> = []
     const importErrors: Array<{ row: number; error: string }> = []
 
     try {
@@ -487,6 +494,8 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
               name: s._row.formData.fullName || s._row.formData["Full Name"] || "Unknown",
               className: s._row.className,
               photoId: s._row.photoId,
+              photoUrl: s._row.photoUrl,
+              rowNum: s._row.rowNum,
             })
           })
         }
@@ -502,6 +511,36 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         { error: "Internal server error", errors: importErrors.slice(0, 20) },
         { status: 500 }
       )
+    }
+
+    let rowPhotosImported = 0
+    let rowPhotoErrors = 0
+    for (const student of createdStudents) {
+      if (!student.photoUrl) continue
+      try {
+        const uploaded = await uploadPhotoFromRowLink({
+          schoolId,
+          studentId: student.id,
+          photoUrl: student.photoUrl,
+        })
+        await prisma.student.update({
+          where: { id: student.id },
+          data: {
+            photoUrl: uploaded.photoUrl,
+            photoPath: uploaded.photoPath,
+            originalPhotoUrl: uploaded.photoUrl,
+            originalPhotoPath: uploaded.photoPath,
+            photoBgStatus: "PLAIN",
+          },
+        })
+        rowPhotosImported += 1
+      } catch (err: any) {
+        rowPhotoErrors += 1
+        importErrors.push({
+          row: student.rowNum,
+          error: `Photo import failed for ${student.name}: ${err?.message || "unknown error"}`,
+        })
+      }
     }
 
     // AUTO-SYNC: Update template fieldConfig to match Excel columns
@@ -588,6 +627,8 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         skippedDuplicates: duplicateRows.length,
         students: createdStudents.slice(0, 50),
         errors: importErrors.slice(0, 20),
+        rowPhotosImported,
+        rowPhotoErrors,
         classesCreated: classColumnHeader ? Array.from(new Set(validRows.map(r => r.className))).length : 0,
         qrJobId,
         qrJobIds,

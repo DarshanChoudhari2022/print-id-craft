@@ -3,10 +3,29 @@ import { MAX_IMPORT_ROWS, normalizeImportedRows, sanitizeWorksheetData } from ".
 
 function cellText(value: ExcelJS.CellValue): string {
   if (value == null) return ""
-  if (typeof value === "object" && "text" in (value as object)) {
-    return String((value as { text?: string }).text ?? "")
-  }
   if (value instanceof Date) return value.toISOString().slice(0, 10)
+  if (typeof value === "object" && "text" in (value as object)) {
+    const cellValue = value as { hyperlink?: string; text?: unknown; result?: unknown }
+    if (cellValue.hyperlink) return String(cellValue.hyperlink)
+    if (cellValue.result != null) return String(cellValue.result)
+    if (
+      cellValue.text &&
+      typeof cellValue.text === "object" &&
+      "richText" in cellValue.text &&
+      Array.isArray((cellValue.text as { richText?: Array<{ text?: string }> }).richText)
+    ) {
+      return (cellValue.text as { richText: Array<{ text?: string }> }).richText
+        .map(part => part.text || "")
+        .join("")
+    }
+    return String(cellValue.text ?? "")
+  }
+  if (typeof value === "object" && "hyperlink" in (value as object)) {
+    return String((value as { hyperlink?: string }).hyperlink ?? "")
+  }
+  if (typeof value === "object" && "result" in (value as object)) {
+    return String((value as { result?: unknown }).result ?? "")
+  }
   return String(value)
 }
 

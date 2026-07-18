@@ -48,14 +48,14 @@ describe("manufacturer company navigation", () => {
     expect(detailSource).toContain("companyMode={companyMode}")
   })
 
-  it("creates company defaults and a company representative account", () => {
+  it("creates company defaults and an ID card coordinator account", () => {
     expect(schoolsApiSource).toContain("COMPANY_DEFAULT_FIELDS")
-    expect(schoolsApiSource).toContain('"Company Representative"')
+    expect(schoolsApiSource).toContain('"ID Card Coordinator"')
     expect(schoolsApiSource).toContain('"Company@123"')
     expect(representativeApiSource).toContain('"Company@123"')
-    expect(detailSource).toContain('"Company Representative Login"')
+    expect(detailSource).toContain('"ID Card Coordinator Login"')
     expect(detailSource).toContain('"Total Departments"')
-    expect(representativeDashboardSource).toContain('"Company Representative"')
+    expect(representativeDashboardSource).toContain('"ID Card Coordinator"')
     expect(representativeDashboardSource).toContain('"Department Managers"')
     expect(representativeDashboardSource).toContain('"Department Registration Links — Share with Employees"')
   })

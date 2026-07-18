@@ -90,7 +90,7 @@ export default function CompaniesPage() {
         throw new Error(data.error?.message || data.error || "Failed to create company")
       }
 
-      toast.success("Company created with a representative login and General department.")
+      toast.success("Company created with an ID card coordinator login and General department.")
       setShowAdd(false)
       setNewName("")
       setNewEmail("")
@@ -130,7 +130,7 @@ export default function CompaniesPage() {
       <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1>Companies</h1>
-          <p>Manage each company, its employees, representative login, templates, and print batches separately.</p>
+          <p>Manage each company, its employees, ID card coordinator login, templates, and print batches separately.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setShowAdd(true)}>
           <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Add Company
@@ -204,7 +204,7 @@ export default function CompaniesPage() {
           <div style={{ width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto", padding: 32, borderRadius: 16, background: "white" }} onClick={event => event.stopPropagation()}>
             <h2 style={{ fontSize: 20, marginBottom: 4 }}>Add New Company</h2>
             <p style={{ color: "#64748b", fontSize: 13, marginBottom: 24 }}>
-              A separate employee workspace and Company Representative login will be created automatically.
+              A separate employee workspace and ID Card Coordinator login will be created automatically.
             </p>
             <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div className="form-group">
@@ -212,8 +212,8 @@ export default function CompaniesPage() {
                 <input required value={newName} onChange={event => setNewName(event.target.value)} placeholder="e.g. Precision CAD/CAM" />
               </div>
               <div className="form-group">
-                <label>Representative Email *</label>
-                <input required type="email" value={newEmail} onChange={event => setNewEmail(event.target.value)} placeholder="representative@company.com" />
+                <label>Coordinator Email *</label>
+                <input required type="email" value={newEmail} onChange={event => setNewEmail(event.target.value)} placeholder="coordinator@company.com" />
               </div>
               <div className="form-group">
                 <label>Company Address</label>
@@ -224,7 +224,7 @@ export default function CompaniesPage() {
                 <input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => setNewLogo(event.target.files?.[0] || null)} />
               </div>
               <div style={{ padding: 12, borderRadius: 10, background: "#eff6ff", color: "#1d4ed8", fontSize: 12 }}>
-                Default representative password: <strong>Company@123</strong>. It can be reset from the company Overview.
+                Default coordinator password: <strong>Company@123</strong>. It can be reset from the company Overview.
               </div>
               <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
                 <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => setShowAdd(false)}>Cancel</button>
