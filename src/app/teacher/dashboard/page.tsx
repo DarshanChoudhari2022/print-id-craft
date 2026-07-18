@@ -15,6 +15,7 @@ import {
   statusStatsAfterChange,
 } from "@/lib/teacher-student-view"
 import { normalizeStudentFieldValue } from "@/lib/student-text-normalization"
+import { isCompanyWorkspace } from "@/lib/workspace-kind"
 
 const IDCardPreview = dynamic(() => import("@/components/IDCardPreview"), { ssr: false })
 const JpgCardPreview = dynamic(() => import("@/components/JpgCardPreview"), { ssr: false })
@@ -233,7 +234,7 @@ export default function TeacherDashboard() {
         body: JSON.stringify({ status }),
       })
       if (!res.ok) throw new Error("Status update failed")
-      toast.success(status === "APPROVED" ? "Student approved" : "Student marked for correction")
+      toast.success(status === "APPROVED" ? `${companyMode ? "Employee" : "Student"} approved` : `${companyMode ? "Employee" : "Student"} marked for correction`)
       fetchData(1)
     } catch (err) {
       console.error(err)
@@ -320,7 +321,7 @@ export default function TeacherDashboard() {
         setNewTeacherClassId("")
         setShowAddTeacher(false)
         fetchSubTeachers()
-        toast.success(`Sub-teacher "${newTeacherName}" created successfully!`)
+        toast.success(`${companyMode ? "Department manager" : "Sub-teacher"} "${newTeacherName}" created successfully!`)
       } else {
         toast.error(json.error || "Failed to add teacher")
       }
@@ -329,7 +330,7 @@ export default function TeacherDashboard() {
   }
 
   const handleDeleteSubTeacher = async (id: string, name: string) => {
-    if (!confirm(`Remove sub-teacher "${name}"? This cannot be undone.`)) return
+    if (!confirm(`Remove ${companyMode ? "department manager" : "sub-teacher"} "${name}"? This cannot be undone.`)) return
     try {
       await fetch(`/api/teacher/sub-teachers?id=${id}`, { method: "DELETE" })
       fetchSubTeachers()
@@ -367,7 +368,7 @@ export default function TeacherDashboard() {
       })
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.error || "Failed to save changes")
-      toast.success(editPhotoDataUrl ? "Student data and photo updated" : "Student data updated")
+      toast.success(editPhotoDataUrl ? `${companyMode ? "Employee" : "Student"} data and photo updated` : `${companyMode ? "Employee" : "Student"} data updated`)
       setEditingStudent(null)
       setEditFormData({})
       setEditPhotoDataUrl("")
@@ -378,7 +379,7 @@ export default function TeacherDashboard() {
       fetchData()
     } catch (err: any) {
       console.error(err)
-      toast.error(err?.message || "Failed to save student")
+      toast.error(err?.message || `Failed to save ${companyMode ? "employee" : "student"}`)
     }
     setSavingEdit(false)
   }
@@ -394,16 +395,16 @@ export default function TeacherDashboard() {
   }
 
   const handleDeleteStudent = async (sid: string) => {
-    if (!confirm("Are you sure you want to delete this student? This action cannot be undone.")) return
+    if (!confirm(`Are you sure you want to delete this ${companyMode ? "employee" : "student"}? This action cannot be undone.`)) return
     try {
       const res = await fetch(`/api/schools/${getSchoolId()}/students/${sid}`, {
         method: "DELETE",
       })
       if (res.ok) {
-        toast.success("Student deleted successfully")
+        toast.success(`${companyMode ? "Employee" : "Student"} deleted successfully`)
         fetchData()
       } else {
-        toast.error("Failed to delete student")
+        toast.error(`Failed to delete ${companyMode ? "employee" : "student"}`)
       }
     } catch (err) {
       toast.error("An error occurred")
@@ -422,10 +423,10 @@ export default function TeacherDashboard() {
       })
       if (res.ok) {
         setNewClassName("")
-        toast.success("Class added successfully")
+        toast.success(`${companyMode ? "Department" : "Class"} added successfully`)
         fetchData()
       } else {
-        toast.error("Failed to add class")
+        toast.error(`Failed to add ${companyMode ? "department" : "class"}`)
       }
     } catch (err) {
       toast.error("An error occurred")
@@ -581,6 +582,10 @@ export default function TeacherDashboard() {
   )
 
   const isMain = data?.isMainTeacher ?? false
+  const companyMode = isCompanyWorkspace(
+    data?.school?.name,
+    (templateData?.fieldConfig || []) as Array<{ key?: string; label?: string }>
+  )
 
   return (
     <div className="teacher-page">
@@ -589,12 +594,12 @@ export default function TeacherDashboard() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
-              {data?.school?.name || "Teacher Dashboard"}
+              {data?.school?.name || (companyMode ? "Company Representative Dashboard" : "Teacher Dashboard")}
             </h1>
             <p style={{ fontSize: 14, color: '#64748b' }}>
               Welcome, {session?.user?.name || session?.user?.email}
-              {isMain && <span style={{ marginLeft: 8, padding: '2px 8px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: 'white', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>Main Teacher</span>}
-              {!isMain && <span style={{ marginLeft: 8, padding: '2px 8px', background: '#f1f5f9', color: '#64748b', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>Class Teacher</span>}
+              {isMain && <span style={{ marginLeft: 8, padding: '2px 8px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: 'white', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>{companyMode ? "Company Representative" : "Main Teacher"}</span>}
+              {!isMain && <span style={{ marginLeft: 8, padding: '2px 8px', background: '#f1f5f9', color: '#64748b', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>{companyMode ? "Department Manager" : "Class Teacher"}</span>}
             </p>
           </div>
           <button className="btn btn-outline" onClick={() => signOut({ callbackUrl: "/login" })}>Sign Out</button>
@@ -618,7 +623,13 @@ export default function TeacherDashboard() {
                 textTransform: 'capitalize',
               }}
             >
-              {t === 'sub-teachers' ? '👩‍🏫 Sub-Teachers' : t === 'template' ? '🎨 ID Template' : t === 'overview' ? '📊 Overview' : '🎓 Students'}
+              {t === 'sub-teachers'
+                ? (companyMode ? 'Department Managers' : '👩‍🏫 Sub-Teachers')
+                : t === 'template'
+                  ? '🎨 ID Template'
+                  : t === 'overview'
+                    ? '📊 Overview'
+                    : (companyMode ? 'Employees' : '🎓 Students')}
             </button>
           ))}
         </div>
@@ -662,19 +673,19 @@ export default function TeacherDashboard() {
             {/* Class Form Links */}
             <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 24, border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', margin: 0 }}>📋 Class Form Links — Share with Students</h3>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', margin: 0 }}>{companyMode ? "Department Registration Links — Share with Employees" : "📋 Class Form Links — Share with Students"}</h3>
                 {isMain && (
                   <form onSubmit={handleAddClass} style={{ display: 'flex', gap: 8 }}>
                     <input
                       type="text"
                       value={newClassName}
                       onChange={e => setNewClassName(e.target.value)}
-                      placeholder="New Class Name"
+                      placeholder={companyMode ? "New Department Name" : "New Class Name"}
                       style={{ padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
                       required
                     />
                     <button type="submit" disabled={addingClass} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: 13 }}>
-                      {addingClass ? "..." : "+ Add Class"}
+                      {addingClass ? "..." : `+ Add ${companyMode ? "Department" : "Class"}`}
                     </button>
                   </form>
                 )}
@@ -682,7 +693,7 @@ export default function TeacherDashboard() {
 
               {(!data?.classes || data.classes.length === 0) ? (
                 <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>
-                  No classes added yet. {isMain && "Add a class to get started!"}
+                  No {companyMode ? "departments" : "classes"} added yet. {isMain && `Add a ${companyMode ? "department" : "class"} to get started!`}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -695,7 +706,7 @@ export default function TeacherDashboard() {
                       <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, flexWrap: 'wrap', border: '1px solid #f1f5f9' }}>
                         <div style={{ flex: 1, minWidth: 120 }}>
                           <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{c.name}</span>
-                          <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 8 }}>({c._count?.students || 0} students)</span>
+                          <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 8 }}>({c._count?.students || 0} {companyMode ? "employees" : "students"})</span>
                           {assignedTeacher && (
                             <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
                               👩‍🏫 {assignedTeacher.name}
@@ -705,7 +716,7 @@ export default function TeacherDashboard() {
                         <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', flex: 2, minWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url}</span>
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { navigator.clipboard.writeText(url); alert('Link copied!') }}>📋 Copy</button>
-                          <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 10px', color: '#22c55e', borderColor: '#22c55e' }} onClick={() => { const msg = encodeURIComponent(`📋 ID Card Registration Form\n\nSchool: ${data?.school?.name}\nClass: ${c.name}\n\nPlease fill your details:\n${url}`); window.open(`https://wa.me/?text=${msg}`, '_blank') }}>💬 WhatsApp</button>
+                          <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 10px', color: '#22c55e', borderColor: '#22c55e' }} onClick={() => { const msg = encodeURIComponent(companyMode ? `Employee ID Card Registration Form\n\nCompany: ${data?.school?.name}\nDepartment: ${c.name}\n\nPlease fill your details:\n${url}` : `📋 ID Card Registration Form\n\nSchool: ${data?.school?.name}\nClass: ${c.name}\n\nPlease fill your details:\n${url}`); window.open(`https://wa.me/?text=${msg}`, '_blank') }}>💬 WhatsApp</button>
                         </div>
                       </div>
                     )
@@ -718,7 +729,7 @@ export default function TeacherDashboard() {
             {data?.classes && data.classes.length > 0 && (
               <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 24, border: '1px solid #e2e8f0' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>📊 Class Breakdown</h3>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{companyMode ? "Department Breakdown" : "📊 Class Breakdown"}</h3>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     <button className="btn btn-outline" style={{ fontSize: 12, padding: '6px 14px' }} onClick={() => {
                       const params = new URLSearchParams()
@@ -747,7 +758,7 @@ export default function TeacherDashboard() {
                       style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 14px', borderColor: '#0ea5e9', color: '#0369a1', opacity: exportingFormat !== null || (data?.stats.total || 0) === 0 ? 0.6 : 1, cursor: exportingFormat !== null || (data?.stats.total || 0) === 0 ? 'not-allowed' : 'pointer' }}
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M3 8l9 6 9-6"/><path d="M21 8l-9-5-9 5"/><path d="M12 14v7"/></svg>
-                      {exportingFormat === "excel" ? 'Preparing Backup...' : classFilter ? 'Download Class Backup' : 'Download Data + Photos'}
+                      {exportingFormat === "excel" ? 'Preparing Backup...' : classFilter ? `Download ${companyMode ? "Department" : "Class"} Backup` : 'Download Data + Photos'}
                     </button>
                   </div>
                 </div>
@@ -755,9 +766,9 @@ export default function TeacherDashboard() {
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th>Class</th>
-                        <th>Teacher</th>
-                        <th>Students</th>
+                        <th>{companyMode ? "Department" : "Class"}</th>
+                        <th>{companyMode ? "Manager" : "Teacher"}</th>
+                        <th>{companyMode ? "Employees" : "Students"}</th>
                         <th>Approved</th>
                         <th>Flagged</th>
                       </tr>
@@ -791,14 +802,14 @@ export default function TeacherDashboard() {
             <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
               {isMain && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Section</label>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>{companyMode ? "Department" : "Section"}</label>
                   <select value={classFilter} onChange={e => { setClassFilter(e.target.value); setGradeClassFilter(""); setDivisionFilter("") }} style={{ height: 38, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13, minWidth: 160 }}>
-                    <option value="">All Sections</option>
+                    <option value="">All {companyMode ? "Departments" : "Sections"}</option>
                     {data?.classes.map(c => <option key={c.id} value={c.name}>{c.name} ({c._count.students})</option>)}
                   </select>
                 </div>
               )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {!companyMode && <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Class</label>
                 <select
                   value={gradeClassFilter}
@@ -808,8 +819,8 @@ export default function TeacherDashboard() {
                   <option value="">All Classes</option>
                   {uniqueGrades.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
-              </div>
-              {uniqueDivisions.length > 0 && (
+              </div>}
+              {!companyMode && uniqueDivisions.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Division</label>
                   <select
@@ -838,14 +849,14 @@ export default function TeacherDashboard() {
                   className="btn btn-outline"
                   onClick={() => handleTeacherExport("excel")}
                   disabled={exportingFormat !== null || filtered.length === 0}
-                  title={classFilter ? "Download this class data with photos" : "Download all student data with photos"}
+                  title={classFilter ? `Download this ${companyMode ? "department" : "class"} data with photos` : `Download all ${companyMode ? "employee" : "student"} data with photos`}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, height: 38, padding: '0 16px', borderColor: '#0ea5e9', color: '#0369a1', fontSize: 13, opacity: exportingFormat !== null || filtered.length === 0 ? 0.6 : 1, cursor: exportingFormat !== null || filtered.length === 0 ? 'not-allowed' : 'pointer' }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M3 8l9 6 9-6"/><path d="M21 8l-9-5-9 5"/><path d="M12 14v7"/></svg>
-                  {exportingFormat === "excel" ? 'Preparing Backup...' : classFilter ? 'Download Class Backup' : 'Download Data + Photos'}
+                  {exportingFormat === "excel" ? 'Preparing Backup...' : classFilter ? `Download ${companyMode ? "Department" : "Class"} Backup` : 'Download Data + Photos'}
                 </button>
               </div>
-              <span style={{ fontSize: 13, color: '#64748b', padding: '10px 0', marginLeft: 'auto' }}>{filtered.length} students</span>
+              <span style={{ fontSize: 13, color: '#64748b', padding: '10px 0', marginLeft: 'auto' }}>{filtered.length} {companyMode ? "employees" : "students"}</span>
             </div>
 
             {/* Student Table */}
@@ -856,8 +867,8 @@ export default function TeacherDashboard() {
                     <th>Photo</th>
                     <th>Serial</th>
                     <th>Name</th>
-                    <th>Section</th>
-                    <th>Class</th>
+                    <th>{companyMode ? "Department" : "Section"}</th>
+                    {!companyMode && <th>Class</th>}
                     <th>Status</th>
                     <th>Comment</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
@@ -880,7 +891,7 @@ export default function TeacherDashboard() {
                         <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{s.serialNumber}</td>
                         <td style={{ fontWeight: 500 }}>{studentName}</td>
                         <td>{s.class?.name || "—"}</td>
-                        <td>{getStudentGrade(s) || "—"}</td>
+                        {!companyMode && <td>{getStudentGrade(s) || "—"}</td>}
                         <td>
                           <span className={`status-badge ${
                             s.status === 'APPROVED' ? 'status-approved' :
@@ -931,7 +942,7 @@ export default function TeacherDashboard() {
                     )
                   })}
                   {filtered.length === 0 && (
-                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No students found</td></tr>
+                    <tr><td colSpan={companyMode ? 7 : 8} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No {companyMode ? "employees" : "students"} found</td></tr>
                   )}
                 </tbody>
               </table>
@@ -944,11 +955,13 @@ export default function TeacherDashboard() {
           <div className="fade-in">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div>
-                <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Class Teachers</h2>
-                <p style={{ fontSize: 13, color: '#64748b' }}>Assign teachers to classes. Each class teacher can only see & manage their class.</p>
+                <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>{companyMode ? "Department Managers" : "Class Teachers"}</h2>
+                <p style={{ fontSize: 13, color: '#64748b' }}>
+                  {companyMode ? "Assign managers to departments. Each manager can only see and manage their department." : "Assign teachers to classes. Each class teacher can only see & manage their class."}
+                </p>
               </div>
               <button className="btn btn-primary" onClick={() => setShowAddTeacher(!showAddTeacher)}>
-                {showAddTeacher ? 'Cancel' : '+ Add Teacher'}
+                {showAddTeacher ? 'Cancel' : `+ Add ${companyMode ? "Manager" : "Teacher"}`}
               </button>
             </div>
 
@@ -956,8 +969,8 @@ export default function TeacherDashboard() {
             {lastCreatedTeacher && (
               <div style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', borderRadius: 12, padding: 20, marginBottom: 20, border: '1px solid #86efac', position: 'relative' }}>
                 <button onClick={() => setLastCreatedTeacher(null)} style={{ position: 'absolute', top: 8, right: 12, background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#64748b' }}>✕</button>
-                <h4 style={{ fontSize: 14, fontWeight: 700, color: '#15803d', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>✅ Sub-Teacher Created Successfully!</h4>
-                <p style={{ fontSize: 12, color: '#16a34a', marginBottom: 12 }}>Share these credentials with the teacher. The password will not be shown again.</p>
+                <h4 style={{ fontSize: 14, fontWeight: 700, color: '#15803d', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>✅ {companyMode ? "Department Manager" : "Sub-Teacher"} Created Successfully!</h4>
+                <p style={{ fontSize: 12, color: '#16a34a', marginBottom: 12 }}>Share these credentials with the {companyMode ? "manager" : "teacher"}. The password will not be shown again.</p>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div style={{ background: 'white', borderRadius: 8, padding: 12, border: '1px solid #bbf7d0' }}>
                     <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Name</div>
@@ -977,7 +990,7 @@ export default function TeacherDashboard() {
                   </div>
                 </div>
                 <button className="btn btn-outline" style={{ marginTop: 12, fontSize: 12, padding: '6px 16px', color: '#16a34a', borderColor: '#16a34a' }} onClick={() => {
-                  const text = `Sub-Teacher Login Credentials\n\nName: ${lastCreatedTeacher.name}\nEmail: ${lastCreatedTeacher.email}\nPassword: ${lastCreatedTeacher.password}\nLogin URL: ${window.location.origin}/login`
+                  const text = `${companyMode ? "Department Manager" : "Sub-Teacher"} Login Credentials\n\nName: ${lastCreatedTeacher.name}\nEmail: ${lastCreatedTeacher.email}\nPassword: ${lastCreatedTeacher.password}\nLogin URL: ${window.location.origin}/login`
                   navigator.clipboard.writeText(text)
                   toast.success('Credentials copied to clipboard!')
                 }}>📋 Copy All Credentials</button>
@@ -987,30 +1000,30 @@ export default function TeacherDashboard() {
             {/* Add Teacher Form */}
             {showAddTeacher && (
               <form onSubmit={handleAddSubTeacher} style={{ background: '#f8fafc', borderRadius: 12, padding: 20, marginBottom: 24, border: '1px solid #e2e8f0' }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#334155', marginBottom: 16 }}>Add New Class Teacher</h3>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#334155', marginBottom: 16 }}>Add New {companyMode ? "Department Manager" : "Class Teacher"}</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
                   <div className="form-group">
                     <label>Name</label>
-                    <input value={newTeacherName} onChange={e => setNewTeacherName(e.target.value)} placeholder="Teacher name" required />
+                    <input value={newTeacherName} onChange={e => setNewTeacherName(e.target.value)} placeholder={companyMode ? "Manager name" : "Teacher name"} required />
                   </div>
                   <div className="form-group">
                     <label>Email</label>
-                    <input type="email" value={newTeacherEmail} onChange={e => setNewTeacherEmail(e.target.value)} placeholder="teacher@school.com" required />
+                    <input type="email" value={newTeacherEmail} onChange={e => setNewTeacherEmail(e.target.value)} placeholder={companyMode ? "manager@company.com" : "teacher@school.com"} required />
                   </div>
                   <div className="form-group">
                     <label>Password</label>
                     <input type="password" value={newTeacherPassword} onChange={e => setNewTeacherPassword(e.target.value)} placeholder="Min 6 characters" required minLength={6} />
                   </div>
                   <div className="form-group">
-                    <label>Assign to Class</label>
+                    <label>Assign to {companyMode ? "Department" : "Class"}</label>
                     <select value={newTeacherClassId} onChange={e => setNewTeacherClassId(e.target.value)} required>
-                      <option value="">Select class...</option>
+                      <option value="">Select {companyMode ? "department" : "class"}...</option>
                       {data?.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                 </div>
                 <button type="submit" className="btn btn-primary" style={{ marginTop: 12 }} disabled={addingTeacher}>
-                  {addingTeacher ? 'Adding...' : 'Add Class Teacher'}
+                  {addingTeacher ? 'Adding...' : `Add ${companyMode ? "Department Manager" : "Class Teacher"}`}
                 </button>
               </form>
             )}
@@ -1023,7 +1036,7 @@ export default function TeacherDashboard() {
                     <tr>
                       <th>Name</th>
                       <th>Email</th>
-                      <th>Assigned Class</th>
+                      <th>Assigned {companyMode ? "Department" : "Class"}</th>
                       <th>Added</th>
                       <th style={{ textAlign: 'right' }}>Actions</th>
                     </tr>
@@ -1063,8 +1076,8 @@ export default function TeacherDashboard() {
             ) : (
               <div style={{ textAlign: 'center', padding: 48, color: '#94a3b8', background: 'white', borderRadius: 12, border: '2px dashed #e2e8f0' }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>👩‍🏫</div>
-                <h3 style={{ fontSize: 16, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>No Sub-Teachers Yet</h3>
-                <p style={{ fontSize: 13 }}>Add class teachers so each one can manage their own class.</p>
+                <h3 style={{ fontSize: 16, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>No {companyMode ? "Department Managers" : "Sub-Teachers"} Yet</h3>
+                <p style={{ fontSize: 13 }}>Add {companyMode ? "department managers so each one can manage their own department" : "class teachers so each one can manage their own class"}.</p>
               </div>
             )}
           </div>
@@ -1074,7 +1087,7 @@ export default function TeacherDashboard() {
         {commentStudentId && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }} onClick={() => setCommentStudentId(null)}>
             <div style={{ background: 'white', borderRadius: 16, padding: 24, maxWidth: 440, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>💬 Teacher Comment</h3>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>💬 {companyMode ? "Representative" : "Teacher"} Comment</h3>
               <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>This comment will be visible to the manufacturer.</p>
               <textarea
                 value={commentText}
@@ -1096,7 +1109,7 @@ export default function TeacherDashboard() {
         {editingStudent && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }} onClick={() => setEditingStudent(null)}>
             <div style={{ background: 'white', borderRadius: 16, padding: 24, maxWidth: 520, width: '100%', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>✏️ Edit Student Data</h3>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>✏️ Edit {companyMode ? "Employee" : "Student"} Data</h3>
               <div style={{ display: 'flex', gap: 14, alignItems: 'center', padding: 12, border: '1px solid #e2e8f0', borderRadius: 12, background: '#f8fafc', marginBottom: 14 }}>
                 <div style={{ width: 56, height: 72, borderRadius: 8, overflow: 'hidden', border: '1px solid #cbd5e1', background: 'white', flexShrink: 0 }}>
                   {editPhotoPreview ? (
@@ -1171,7 +1184,7 @@ export default function TeacherDashboard() {
               <div style={{ background: 'white', borderRadius: 20, maxWidth: 800, width: '100%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>Student Detail</h2>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>{companyMode ? "Employee" : "Student"} Detail</h2>
                     <p style={{ fontSize: 13, color: '#64748b' }}>{selectedStudent.serialNumber} · {selectedStudent.class?.name}</p>
                   </div>
                   <button onClick={() => setSelectedStudent(null)} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#f1f5f9', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -1200,7 +1213,7 @@ export default function TeacherDashboard() {
                   {/* Teacher Comment Display */}
                   {selectedStudent.teacherComment && (
                     <div style={{ padding: '12px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, color: '#1d4ed8', fontSize: 13, marginBottom: 16 }}>
-                      💬 <strong>Teacher Comment:</strong> {selectedStudent.teacherComment}
+                      💬 <strong>{companyMode ? "Representative" : "Teacher"} Comment:</strong> {selectedStudent.teacherComment}
                     </div>
                   )}
 
@@ -1225,6 +1238,7 @@ export default function TeacherDashboard() {
                                 studentPhoto={selectedStudent.photoUrl}
                                 scale={0.5}
                                 watermark="PREVIEW ONLY"
+                                fixedOfficeNo={(studentTemplate.printConfig as any)?.fixedOfficeNo || ""}
                                 cardWidthMm={(studentTemplate as any).cardWidthMm}
                                 cardHeightMm={(studentTemplate as any).cardHeightMm}
                               />
@@ -1239,6 +1253,7 @@ export default function TeacherDashboard() {
                                   studentPhoto={selectedStudent.photoUrl}
                                   scale={0.5}
                                   watermark="PREVIEW ONLY"
+                                  fixedOfficeNo={(studentTemplate.printConfig as any)?.fixedOfficeNo || ""}
                                   cardWidthMm={(studentTemplate as any).cardWidthMm}
                                   cardHeightMm={(studentTemplate as any).cardHeightMm}
                                 />
@@ -1310,6 +1325,7 @@ export default function TeacherDashboard() {
               </div>
               <JpgTemplateMapper
                 schoolId={getSchoolId()}
+                companyMode={companyMode}
                 templateImageUrl={templateData?.templateImageUrl || null}
                 fieldMappings={templateData?.fieldMappings || []}
                 fieldConfig={templateData?.fieldConfig || []}
@@ -1326,6 +1342,7 @@ export default function TeacherDashboard() {
                   backMappings: (templateData as any).backFieldMappings || [],
                   cardSizeLocked: (templateData as any).cardSizeLocked || false,
                   fixedBranch: (templateData.printConfig as any)?.fixedBranch || "",
+                  fixedOfficeNo: (templateData.printConfig as any)?.fixedOfficeNo || "",
                 } : undefined}
                 onSave={async (templateImageUrl, fieldMappings, photoBgColor, cardSettings) => {
                   try {
@@ -1347,6 +1364,7 @@ export default function TeacherDashboard() {
                           cardSizeLocked: cardSettings.cardSizeLocked,
                           printConfig: {
                             fixedBranch: cardSettings.fixedBranch || "",
+                            fixedOfficeNo: cardSettings.fixedOfficeNo || "",
                           },
                         } : {}),
                       }),

@@ -10,6 +10,7 @@ import {
   filterStudentsByGenerationScope,
   sortStudentsForGeneration,
 } from "@/lib/generation-scope"
+import { applyFixedOfficeNumberToFormData } from "@/lib/fixed-template-values"
 
 export const maxDuration = 60; // Vercel function timeout config
 
@@ -99,6 +100,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
                 hasBackSide: true,
                 cardWidthMm: true,
                 cardHeightMm: true,
+                printConfig: true,
               },
             },
           },
@@ -123,14 +125,24 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
       const formData = s.formData as Record<string, any>
       // Classes without an assignment inherit the default school template.
       const assignedTemplate = s.class.template || template
+      const assignedPrintConfig = assignedTemplate.printConfig as { fixedOfficeNo?: string } | null
+      const assignedFields = [
+        ...((assignedTemplate.fieldMappings as any[]) || []),
+        ...((assignedTemplate.backFieldMappings as any[]) || []),
+      ]
+      const formDataWithFixedValues = applyFixedOfficeNumberToFormData(
+        formData,
+        assignedPrintConfig?.fixedOfficeNo,
+        assignedFields,
+      )
       return {
         id: s.id,
         serialNumber: s.serialNumber,
         photoUrl: studentPhotoUrl(s),
         className: s.class.name,
         formData: {
-          ...formData,
-          class: formData.class || s.class.name,
+          ...formDataWithFixedValues,
+          class: formDataWithFixedValues.class || s.class.name,
         },
         template: {
           templateImageUrl: assignedTemplate.templateImageUrl,

@@ -115,6 +115,7 @@ type FormConfig = {
   flagColors?: string[]
   flagImages?: Record<string, string>
   fixedBranch?: string
+  fixedOfficeNo?: string
   appBuildId?: string
   formRevision?: string
 }
@@ -643,6 +644,7 @@ export default function SubmitPage() {
           const nextConfig: FormConfig = {
             ...data.data,
             fixedBranch: (data.data.fixedBranch || "").trim(),
+            fixedOfficeNo: (data.data.fixedOfficeNo || "").trim(),
           }
           setConfig(nextConfig)
           // Legacy fixed-class links auto-fill class; section links use dropdowns.
@@ -1087,6 +1089,7 @@ export default function SubmitPage() {
                       flagImageUrl={selectedFlagImageUrl}
                       scale={1}
                       watermark="Wise Melon"
+                      fixedOfficeNo={config.fixedOfficeNo}
                       cardWidthMm={(config as any).cardWidthMm}
                       cardHeightMm={(config as any).cardHeightMm}
                     />
@@ -1102,6 +1105,7 @@ export default function SubmitPage() {
                         flagImageUrl={selectedFlagImageUrl}
                         scale={1}
                         watermark="Wise Melon"
+                        fixedOfficeNo={config.fixedOfficeNo}
                         cardWidthMm={(config as any).cardWidthMm}
                         cardHeightMm={(config as any).cardHeightMm}
                       />
@@ -1346,6 +1350,7 @@ export default function SubmitPage() {
                         flagImageUrl={selectedFlagImageUrl}
                         scale={1}
                         watermark="Wise Melon"
+                        fixedOfficeNo={config.fixedOfficeNo}
                         cardWidthMm={(config as any).cardWidthMm}
                         cardHeightMm={(config as any).cardHeightMm}
                       />
@@ -1361,6 +1366,7 @@ export default function SubmitPage() {
                           flagImageUrl={selectedFlagImageUrl}
                           scale={1}
                           watermark="Wise Melon"
+                          fixedOfficeNo={config.fixedOfficeNo}
                           cardWidthMm={(config as any).cardWidthMm}
                           cardHeightMm={(config as any).cardHeightMm}
                         />

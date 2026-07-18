@@ -15,7 +15,7 @@ import {
 } from "@/lib/section-class"
 import { photoCacheVersion, studentPhotoUrl as buildStudentPhotoUrl } from "@/lib/student-photo-url"
 import { prepareSectionRename } from "@/lib/section-name"
-import { getFieldRole, resolveEditFieldValue } from "@/lib/field-resolver"
+import { getFieldRole, normalizeKey, resolveEditFieldValue } from "@/lib/field-resolver"
 import {
   cardDimensionsForOrientation,
   DEFAULT_CARD_HEIGHT_MM,
@@ -632,17 +632,17 @@ export default function SchoolDetailPage() {
       })
       const data = await res.json()
       if (data.success) {
-        toast.success("Section created!")
+        toast.success(`${companyMode ? "Department" : "Section"} created!`)
         setNewClassName("")
         setNewSectionType("")
         setNewExpiry("")
         fetchClasses()
         fetchSchool()
       } else {
-        toast.error(data.error || "Failed to create section")
+        toast.error(data.error || `Failed to create ${companyMode ? "department" : "section"}`)
       }
     } catch (err) {
-      toast.error("Failed to create section")
+      toast.error(`Failed to create ${companyMode ? "department" : "section"}`)
     } finally {
       setAddingClass(false)
     }
@@ -660,16 +660,16 @@ export default function SchoolDetailPage() {
       })
       const data = await res.json()
       if (data.success) {
-        toast.success("Section created!")
+        toast.success(`${companyMode ? "Department" : "Section"} created!`)
         setStudentTabNewSectionName("")
         setShowStudentAddSection(false)
         await fetchClasses(false)
         if (data.data?.id) setClassFilter(data.data.id)
       } else {
-        toast.error(data.error || "Failed to create section")
+        toast.error(data.error || `Failed to create ${companyMode ? "department" : "section"}`)
       }
     } catch {
-      toast.error("Failed to create section")
+      toast.error(`Failed to create ${companyMode ? "department" : "section"}`)
     } finally {
       setAddingClass(false)
     }
@@ -1057,22 +1057,26 @@ export default function SchoolDetailPage() {
   const copySchoolLink = () => {
     if (!schoolFormUrl) return
     navigator.clipboard.writeText(schoolFormUrl)
-    toast.success("School link copied to clipboard!")
+    toast.success(companyMode ? "Company link copied to clipboard!" : "School link copied to clipboard!")
   }
 
   const shareSchoolWhatsApp = () => {
     if (!schoolFormUrl || !school) return
     const msg = encodeURIComponent(
-      `📋 ID Card Registration\n\nSchool: ${school.name}\n\nPlease open the link below, select your child's class, and fill the registration form:\n${schoolFormUrl}`
+      companyMode
+        ? `Employee ID Card Registration\n\nCompany: ${school.name}\n\nPlease open the link below, select your department, and fill the employee registration form:\n${schoolFormUrl}`
+        : `📋 ID Card Registration\n\nSchool: ${school.name}\n\nPlease open the link below, select your child's class, and fill the registration form:\n${schoolFormUrl}`
     )
     window.open(`https://wa.me/?text=${msg}`, "_blank")
   }
 
   const shareSchoolEmail = () => {
     if (!schoolFormUrl || !school) return
-    const subject = encodeURIComponent(`ID Card Registration — ${school.name}`)
+    const subject = encodeURIComponent(`${companyMode ? "Employee " : ""}ID Card Registration - ${school.name}`)
     const body = encodeURIComponent(
-      `Dear Parent/Student,\n\nPlease open the link below, select your child's class, and fill the ID card registration form:\n\n${schoolFormUrl}\n\nRegards,\n${school.name}`
+      companyMode
+        ? `Dear Employee,\n\nPlease open the link below, select your department, and fill the employee ID card registration form:\n\n${schoolFormUrl}\n\nRegards,\n${school.name}`
+        : `Dear Parent/Student,\n\nPlease open the link below, select your child's class, and fill the ID card registration form:\n\n${schoolFormUrl}\n\nRegards,\n${school.name}`
     )
     window.open(`mailto:?subject=${subject}&body=${body}`)
   }
@@ -1088,7 +1092,9 @@ export default function SchoolDetailPage() {
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.error || "Failed")
       setSchool({ ...school, linkActive: json.data.linkActive })
-      toast.success(json.data.linkActive ? "School link is now active." : "School link closed.")
+      toast.success(json.data.linkActive
+        ? `${companyMode ? "Company" : "School"} link is now active.`
+        : `${companyMode ? "Company" : "School"} link closed.`)
     } catch (e: any) {
       toast.error(e?.message || "Could not update link.")
     }
@@ -1119,14 +1125,18 @@ export default function SchoolDetailPage() {
 
   const shareWhatsApp = (token: string, className: string) => {
     const url = `${window.location.origin}/submit/${token}`
-    const msg = encodeURIComponent(`📋 ID Card Registration Form\n\nSchool: ${school?.name}\nSection: ${className}\n\nOpen the link, select your child's class and division, then fill the form:\n${url}`)
+    const msg = encodeURIComponent(companyMode
+      ? `Employee ID Card Registration Form\n\nCompany: ${school?.name}\nDepartment: ${className}\n\nOpen the link and fill the employee registration form:\n${url}`
+      : `📋 ID Card Registration Form\n\nSchool: ${school?.name}\nSection: ${className}\n\nOpen the link, select your child's class and division, then fill the form:\n${url}`)
     window.open(`https://wa.me/?text=${msg}`, "_blank")
   }
 
   const shareEmail = (token: string, className: string) => {
     const url = `${window.location.origin}/submit/${token}`
     const subject = encodeURIComponent(`ID Card Registration - ${school?.name} - ${className}`)
-    const body = encodeURIComponent(`Dear Parent/Student,\n\nPlease open the link below, select your child's class and division, and fill the ID card registration form for ${className}:\n\n${url}\n\nRegards,\n${school?.name}`)
+    const body = encodeURIComponent(companyMode
+      ? `Dear Employee,\n\nPlease open the link below and fill the employee ID card registration form for ${className}:\n\n${url}\n\nRegards,\n${school?.name}`
+      : `Dear Parent/Student,\n\nPlease open the link below, select your child's class and division, and fill the ID card registration form for ${className}:\n\n${url}\n\nRegards,\n${school?.name}`)
     window.open(`mailto:?subject=${subject}&body=${body}`)
   }
 
@@ -1413,7 +1423,7 @@ export default function SchoolDetailPage() {
         })
         const data = await res.json()
         if (data.success) {
-          toast.success("Student updated!")
+          toast.success(`${companyMode ? "Employee" : "Student"} updated!`)
           setStudents(prev => prev.map(s => s.id === editStudentTarget.id ? { ...s, ...data.data } : s))
           setEditStudentOpen(false)
         } else toast.error(data.error || "Update failed")
@@ -1425,7 +1435,7 @@ export default function SchoolDetailPage() {
         })
         const data = await res.json()
         if (data.success) {
-          toast.success("Student added!")
+          toast.success(`${companyMode ? "Employee" : "Student"} added!`)
           fetchStudents(studentPage)
           fetchSchool()
           setEditStudentOpen(false)
@@ -1436,11 +1446,11 @@ export default function SchoolDetailPage() {
   }
 
   const handleDeleteStudent = async (sid: string, name: string) => {
-    if (!window.confirm(`Delete student "${name}"? This cannot be undone.`)) return
+    if (!window.confirm(`Delete ${companyMode ? "employee" : "student"} "${name}"? This cannot be undone.`)) return
     try {
       const res = await fetch(`/api/schools/${schoolId}/students/${sid}`, { method: "DELETE" })
       if (res.ok) {
-        toast.success("Student deleted")
+        toast.success(`${companyMode ? "Employee" : "Student"} deleted`)
         setStudents(prev => prev.filter(s => s.id !== sid))
         setStudentTotal(prev => prev - 1)
       } else {
@@ -1452,7 +1462,7 @@ export default function SchoolDetailPage() {
 
   const handleDeleteAllStudents = async () => {
     if (studentTotal === 0) {
-      toast.info("No students to delete.")
+      toast.info(`No ${companyMode ? "employees" : "students"} to delete.`)
       return
     }
     const confirm1 = window.prompt(
@@ -1473,7 +1483,7 @@ export default function SchoolDetailPage() {
       })
       const data = await res.json()
       if (res.ok && data.success) {
-        toast.success(`Deleted ${data.deleted} students. You can now re-upload your Excel.`)
+        toast.success(`Deleted ${data.deleted} ${companyMode ? "employees" : "students"}. You can now re-upload your Excel.`)
         // Refresh local state
         setStudents([])
         setStudentTotal(0)
@@ -2237,12 +2247,13 @@ export default function SchoolDetailPage() {
       <div className="login-spinner" style={{ width: 32, height: 32, borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6' }} />
     </div>
   )
-  if (!school) return <div style={{ padding: 32 }}>School not found.</div>
+  if (!school) return <div style={{ padding: 32 }}>{pathname.startsWith("/companies/") ? "Company" : "School"} not found.</div>
   const companyMode = isCompanyWorkspace(
     school.name,
     (templateData?.fieldConfig || []) as Array<{ key?: string; label?: string }>
   )
   const companyRoute = companyMode || pathname.startsWith("/companies/")
+  const legacyCompanyPortfolio = companyMode && normalizeKey(school.name).includes("companyidcard")
   const directoryHref = companyRoute ? "/companies" : "/schools"
   const directoryLabel = companyRoute ? "Company" : "Schools"
 
@@ -2348,7 +2359,7 @@ export default function SchoolDetailPage() {
               }}
             >
               {companyMode && t === "classes"
-                ? "Companies"
+                ? (legacyCompanyPortfolio ? "Companies" : "Departments")
                 : companyMode && t === "students"
                   ? "Employees"
                   : SCHOOL_TAB_LABELS[t]}
@@ -2363,7 +2374,7 @@ export default function SchoolDetailPage() {
           <div className="fade-in">
             <div className="school-stats-mobile stat-grid">
               <div className="stat-card glass-card premium-shadow">
-                <div className="stat-card-label">{companyMode ? "Total Companies" : "Total Classes"}</div>
+                <div className="stat-card-label">{companyMode ? (legacyCompanyPortfolio ? "Total Companies" : "Total Departments") : "Total Classes"}</div>
                 <div className="stat-card-value text-blue-600">{school._count.classes}</div>
               </div>
               <div className="stat-card glass-card premium-shadow">
@@ -2382,13 +2393,17 @@ export default function SchoolDetailPage() {
               </div>
             </div>
 
-            {/* Main Teacher Login Credentials */}
+            {/* Workspace administrator login credentials */}
             <div style={{ marginTop: 24, background: 'linear-gradient(135deg, #f8fafc, #eff6ff)', borderRadius: 16, border: '1px solid #bfdbfe', padding: 24 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e3a8a', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span>🔑</span> Main Teacher Login
+                <span>🔑</span> {companyMode ? "Company Representative Login" : "Main Teacher Login"}
               </h3>
               <p style={{ fontSize: 13, color: '#3b82f6', marginBottom: 16 }}>
-                These are the credentials for the school administrator. Hand these over to the school so they can log in, add classes, map templates, and assign sub-teachers. Note: default password is <b>Teacher@123</b>.
+                {companyMode ? (
+                  <>These are the credentials for the company representative. They can log in, manage departments and employees, and map ID-card templates. Default password: <b>Company@123</b>.</>
+                ) : (
+                  <>These are the credentials for the school administrator. Hand these over to the school so they can log in, add classes, map templates, and assign sub-teachers. Note: default password is <b>Teacher@123</b>.</>
+                )}
               </p>
               
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
@@ -2409,7 +2424,7 @@ export default function SchoolDetailPage() {
                         <div style={{ display: 'flex', gap: 4 }}>
                           <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 11, minHeight: 0 }} onClick={() => { navigator.clipboard.writeText(t.email); toast.success('Copied Email') }}>Copy</button>
                           <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 11, minHeight: 0, color: '#dc2626' }} onClick={async () => {
-                            if (confirm("Reset this teacher's password to Teacher@123?")) {
+                            if (confirm(companyMode ? "Reset the company representative password to Company@123?" : "Reset this teacher's password to Teacher@123?")) {
                               const res = await fetch(`/api/schools/${schoolId}/main-teacher`, { method: "POST", body: JSON.stringify({ reset: true }) })
                               if (res.ok) toast.success("Password Reset!"); else toast.error("Failed to reset.")
                             }
@@ -2424,12 +2439,12 @@ export default function SchoolDetailPage() {
                 {(!school.teachers || !school.teachers.some((t: any) => t.isMainTeacher)) && (
                   <div style={{ padding: 16, background: 'white', borderRadius: 12, border: '1px dashed #cbd5e1', display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <div style={{ textAlign: 'center' }}>
-                      <p style={{ color: '#64748b', fontSize: 13, marginBottom: 8 }}>Setup school administrator account</p>
+                      <p style={{ color: '#64748b', fontSize: 13, marginBottom: 8 }}>Set up {companyMode ? "company representative" : "school administrator"} account</p>
                       <button 
                         className="btn btn-primary" 
                         style={{ width: '100%' }}
                         onClick={async () => {
-                          if (!confirm("Auto-generate a Main Teacher login?")) return
+                          if (!confirm(companyMode ? "Auto-generate a Company Representative login?" : "Auto-generate a Main Teacher login?")) return
                           const res = await fetch(`/api/schools/${schoolId}/main-teacher`, { method: "POST" })
                           if (res.ok) { toast.success("Created!"); fetchSchool() } else toast.error("Error")
                         }}
@@ -2444,7 +2459,7 @@ export default function SchoolDetailPage() {
                         <input 
                           type="email" 
                           id="manual-teacher-email" 
-                          placeholder="principal@school.com" 
+                          placeholder={companyMode ? "representative@company.com" : "principal@school.com"}
                           style={{ flex: 1, padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13 }}
                         />
                         <button 
@@ -2464,17 +2479,17 @@ export default function SchoolDetailPage() {
               </div>
             </div>
 
-            {/* School Logo Upload Section */}
+            {/* Workspace logo upload section */}
             <div style={{ marginTop: 24, background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>School Logo</h3>
-              <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>Upload the school logo to appear on ID cards.</p>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>{companyMode ? "Company Logo" : "School Logo"}</h3>
+              <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>Upload the {companyMode ? "company" : "school"} logo to appear on ID cards.</p>
               
               <div className="school-logo-section" style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
                 {/* Current Logo Preview */}
                 {school.logoUrl && (
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ width: 120, height: 120, borderRadius: 12, overflow: 'hidden', border: '2px solid #e2e8f0', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <img src={school.logoUrl} alt="School Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                      <img src={school.logoUrl} alt={companyMode ? "Company Logo" : "School Logo"} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                     </div>
                     <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>Current Logo</div>
                   </div>
@@ -2521,7 +2536,7 @@ export default function SchoolDetailPage() {
                   ) : (
                     <>
                       <div style={{ fontSize: 32, marginBottom: 8 }}>🏫</div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#334155', marginBottom: 4 }}>{school.logoUrl ? 'Replace Logo' : 'Upload School Logo'}</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#334155', marginBottom: 4 }}>{school.logoUrl ? 'Replace Logo' : `Upload ${companyMode ? "Company" : "School"} Logo`}</div>
                       <div style={{ fontSize: 12, color: '#94a3b8' }}>Drag & drop or click to browse</div>
                       <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 4 }}>JPEG, PNG, WebP — Max 5MB</div>
                     </>
@@ -2556,10 +2571,12 @@ export default function SchoolDetailPage() {
                   }}>🔗</div>
                   <div style={{ flex: 1, minWidth: 200 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>
-                      Section Registration Links
+                      {companyMode ? "Employee Registration Links" : "Section Registration Links"}
                     </div>
                     <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.45 }}>
-                      Optional fallback: one URL for the whole school. Prefer sharing each section link below.
+                      {companyMode
+                        ? `One registration URL for the whole company. Prefer sharing each ${legacyCompanyPortfolio ? "company" : "department"} link below.`
+                        : "Optional fallback: one URL for the whole school. Prefer sharing each section link below."}
                     </div>
                   </div>
                   <span style={{
@@ -2630,10 +2647,17 @@ export default function SchoolDetailPage() {
 
             <form onSubmit={handleAddClass} style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div className="form-group" style={{ flex: 1, minWidth: 180 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4, display: 'block' }}>Section name</label>
-                <input placeholder="e.g. Secondary, Pre Primary" value={newClassName} onChange={e => setNewClassName(e.target.value)} required />
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4, display: 'block' }}>
+                  {companyMode ? (legacyCompanyPortfolio ? "Company name" : "Department name") : "Section name"}
+                </label>
+                <input
+                  placeholder={companyMode ? (legacyCompanyPortfolio ? "e.g. Acme Industries" : "e.g. Engineering, Operations") : "e.g. Secondary, Pre Primary"}
+                  value={newClassName}
+                  onChange={e => setNewClassName(e.target.value)}
+                  required
+                />
               </div>
-              <div className="form-group" style={{ width: 180 }}>
+              {!companyMode && <div className="form-group" style={{ width: 180 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4, display: 'block' }}>Section type</label>
                 <select
                   value={newSectionType}
@@ -2648,16 +2672,16 @@ export default function SchoolDetailPage() {
                     <option key={key} value={key}>{SECTION_TYPE_LABELS[key]}</option>
                   ))}
                 </select>
-              </div>
+              </div>}
               <div className="form-group" style={{ width: 200 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4, display: 'block' }}>Link expiry</label>
                 <input type="datetime-local" value={newExpiry} onChange={e => setNewExpiry(e.target.value)} placeholder="Expiry (optional)" />
               </div>
               <button type="submit" className="btn btn-primary" style={{ height: 44 }} disabled={addingClass}>
-                {addingClass ? "Adding..." : "Add Section"}
+                {addingClass ? "Adding..." : companyMode ? `Add ${legacyCompanyPortfolio ? "Company" : "Department"}` : "Add Section"}
               </button>
             </form>
-            {newSectionType && (
+            {!companyMode && newSectionType && (
               <div style={{ fontSize: 11, color: '#64748b', marginTop: -16, marginBottom: 20 }}>
                 Default classes: {DEFAULT_CLASS_OPTIONS[newSectionType].join(", ")} · Divisions A–M on the form
               </div>
@@ -2667,11 +2691,11 @@ export default function SchoolDetailPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Section</th>
-                    <th>Classes (Roman)</th>
+                    <th>{companyMode ? (legacyCompanyPortfolio ? "Company" : "Department") : "Section"}</th>
+                    {!companyMode && <th>Classes (Roman)</th>}
                     <th>Template</th>
-                    <th>Approval Teacher</th>
-                    <th>Students</th>
+                    <th>{companyMode ? `${legacyCompanyPortfolio ? "Company" : "Department"} Representative` : "Approval Teacher"}</th>
+                    <th>{companyMode ? "Employees" : "Students"}</th>
                     <th>Status</th>
                     <th>Link</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
@@ -2682,7 +2706,7 @@ export default function SchoolDetailPage() {
                     const classTeacher = cls.teachers?.find(t => !t.isMainTeacher)
                     const isExpanded = expandedSectionIds.has(cls.id)
                     const gradeRows = getSectionGradeRows(cls)
-                    const canExpand = gradeRows.length > 0
+                    const canExpand = !companyMode && gradeRows.length > 0
                     return (
                     <Fragment key={cls.id}>
                     <tr>
@@ -2711,7 +2735,7 @@ export default function SchoolDetailPage() {
                           {cls.name}
                         </button>
                       </td>
-                      <td style={{ minWidth: 160, fontSize: 12, color: '#475569' }}>
+                      {!companyMode && <td style={{ minWidth: 160, fontSize: 12, color: '#475569' }}>
                         {(cls.classOptions?.length ?? 0) > 0 ? (
                           <div>
                             <div style={{ lineHeight: 1.5 }}>{cls.classOptions.join(", ")}</div>
@@ -2720,7 +2744,7 @@ export default function SchoolDetailPage() {
                         ) : (
                           <span style={{ color: '#94a3b8' }}>Not configured</span>
                         )}
-                      </td>
+                      </td>}
                       <td style={{ minWidth: 220 }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           <select
@@ -2800,26 +2824,26 @@ export default function SchoolDetailPage() {
                             className="btn btn-outline"
                             onClick={() => startEditSectionName(cls)}
                             style={{ fontSize: 11, padding: '5px 10px' }}
-                            title="Change this section name"
+                            title={`Change this ${companyMode ? (legacyCompanyPortfolio ? "company" : "department") : "section"} name`}
                           >
-                            ✏️ Edit Name
+                            ✏️ Edit {companyMode ? (legacyCompanyPortfolio ? "Company" : "Department") : "Name"}
                           </button>
-                          <button
+                          {!companyMode && <button
                             className="btn btn-outline"
                             onClick={() => startEditClassOptions(cls)}
                             style={{ fontSize: 11, padding: '5px 10px' }}
                             title="Configure Roman class list for this section"
                           >
                             📚 Edit Classes
-                          </button>
-                          <button
+                          </button>}
+                          {!companyMode && <button
                             className="btn btn-outline"
                             onClick={() => startEditDivisionOptions(cls)}
                             style={{ fontSize: 11, padding: '5px 10px' }}
                             title="Configure custom division list (e.g. A, B, C or custom names) for this section"
                           >
                             🏷️ Edit Divisions
-                          </button>
+                          </button>}
                           <button className="btn btn-outline" onClick={() => copyLink(cls.linkToken)} style={{ fontSize: 11, padding: '5px 10px' }}>📋 Copy</button>
                           <button className="btn btn-outline" onClick={() => shareWhatsApp(cls.linkToken, cls.name)} style={{ fontSize: 11, padding: '5px 10px', color: '#22c55e', borderColor: '#22c55e' }}>💬 WhatsApp</button>
                           <button className="btn btn-outline" onClick={() => shareEmail(cls.linkToken, cls.name)} style={{ fontSize: 11, padding: '5px 10px' }}>📧 Email</button>
@@ -2850,7 +2874,7 @@ export default function SchoolDetailPage() {
                             }}
                           >
                             <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
-                              Rename section
+                              Rename {companyMode ? (legacyCompanyPortfolio ? "company" : "department") : "section"}
                             </div>
                             <input
                               value={editingSectionNameDraft}
@@ -2864,7 +2888,7 @@ export default function SchoolDetailPage() {
                               }}
                               autoFocus
                               maxLength={120}
-                              placeholder="Section name"
+                              placeholder={companyMode ? (legacyCompanyPortfolio ? "Company name" : "Department name") : "Section name"}
                               style={{ width: '100%', padding: '8px 10px', fontSize: 12, borderRadius: 6, border: '1px solid #cbd5e1', marginBottom: 8 }}
                             />
                             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
@@ -3015,7 +3039,7 @@ export default function SchoolDetailPage() {
                         )}
                       </td>
                     </tr>
-                    {isExpanded && gradeRows.map(({ grade, count }) => (
+                    {!companyMode && isExpanded && gradeRows.map(({ grade, count }) => (
                       <tr key={`${cls.id}-grade-${grade}`} style={{ background: "#f8fafc" }}>
                         <td style={{ paddingLeft: 28, fontSize: 13, color: "#475569", fontWeight: 500 }}>
                           ↳ Class {grade}
@@ -3036,16 +3060,18 @@ export default function SchoolDetailPage() {
                     </Fragment>
                   )})}
                   {classes.length === 0 && (
-                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>
+                    <tr><td colSpan={companyMode ? 7 : 8} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>
                       {classesLoadError ? (
                         <>
-                          Could not load classes (they may still exist in the database).{' '}
+                          Could not load {companyMode ? (legacyCompanyPortfolio ? "companies" : "departments") : "classes"} (they may still exist in the database).{' '}
                           <button type="button" className="btn btn-outline" style={{ fontSize: 12, padding: '4px 10px', marginLeft: 8 }} onClick={() => fetchClasses()}>
                             Retry
                           </button>
                         </>
                       ) : (
-                        'No classes created yet. Add one above.'
+                        companyMode
+                          ? `No ${legacyCompanyPortfolio ? "companies" : "departments"} created yet. Add one above.`
+                          : 'No classes created yet. Add one above.'
                       )}
                     </td></tr>
                   )}
@@ -3080,7 +3106,7 @@ export default function SchoolDetailPage() {
                         Template for {classTemplateEditor.className}
                       </h3>
                       <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
-                        Same JPG Template Mapper as the Template tab — upload and map fields for this class.
+                        Same JPG Template Mapper as the Template tab — upload and map fields for this {companyMode ? (legacyCompanyPortfolio ? "company" : "department") : "class"}.
                       </p>
                     </div>
                     <button
@@ -3095,6 +3121,7 @@ export default function SchoolDetailPage() {
 
                   <JpgTemplateMapper
                     schoolId={schoolId}
+                    companyMode={companyMode}
                     templateId={classTemplateEditor.templateId}
                     templateImageUrl={classTemplateEditor.templateData?.templateImageUrl || null}
                     fieldMappings={(classTemplateEditor.templateData?.fieldMappings as any) || []}
@@ -3112,6 +3139,7 @@ export default function SchoolDetailPage() {
                       backMappings: classTemplateEditor.templateData.backFieldMappings || [],
                       cardSizeLocked: classTemplateEditor.templateData.cardSizeLocked || false,
                       fixedBranch: (classTemplateEditor.templateData.printConfig as any)?.fixedBranch || "",
+                      fixedOfficeNo: (classTemplateEditor.templateData.printConfig as any)?.fixedOfficeNo || "",
                     } : undefined}
                     previewStudent={students.find(s => s.classId === classTemplateEditor.classId) ? {
                       formData: students.find(s => s.classId === classTemplateEditor.classId)!.formData as Record<string, string>,
@@ -3140,6 +3168,7 @@ export default function SchoolDetailPage() {
                               cardSizeLocked: cardSettings.cardSizeLocked,
                               printConfig: {
                                 fixedBranch: cardSettings.fixedBranch || "",
+                                fixedOfficeNo: cardSettings.fixedOfficeNo || "",
                               },
                             } : {}),
                           }),
@@ -3192,17 +3221,17 @@ export default function SchoolDetailPage() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
                 Bulk Upload Photos
               </button>
-              <button className="btn btn-outline" onClick={() => openBulkPhotoUpload("replace")} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#0ea5e9', color: '#0284c7' }} title="Upload an edited photo folder again. Filenames must match student names and existing photos will be replaced.">
+              <button className="btn btn-outline" onClick={() => openBulkPhotoUpload("replace")} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#0ea5e9', color: '#0284c7' }} title={`Upload an edited photo folder again. Filenames must match ${companyMode ? "employee" : "student"} names and existing photos will be replaced.`}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 1-15.3 6.4"/><path d="M3 12A9 9 0 0 1 18.3 5.6"/><path d="M3 19v-5h5"/><path d="M21 5v5h-5"/></svg>
                 Reupload All Photos
               </button>
-              <button className="btn btn-outline" onClick={() => setInfoUpdateOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#14b8a6', color: '#0f766e' }} title="Upload Excel to update existing student information by Serial Number. Existing photos are preserved.">
+              <button className="btn btn-outline" onClick={() => setInfoUpdateOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#14b8a6', color: '#0f766e' }} title={`Upload Excel to update existing ${companyMode ? "employee" : "student"} information by Serial Number. Existing photos are preserved.`}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/><path d="M8 9h2"/></svg>
                 Update Info Excel
               </button>
-              <button className="btn btn-outline" onClick={() => openReprocessModal()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#8b5cf6', color: '#7c3aed' }} title="Select a section/class, then run local AI background removal and auto-save every processed photo">
+              <button className="btn btn-outline" onClick={() => openReprocessModal()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#8b5cf6', color: '#7c3aed' }} title={companyMode ? "Select a department, then process and save every employee photo" : "Select a section/class, then run local AI background removal and auto-save every processed photo"}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-                Process {companyMode ? "Company" : "Class"} Photos (AI Background)
+                Process {companyMode ? "Department" : "Class"} Photos (AI Background)
               </button>
               <button className="btn btn-outline" onClick={openAddStudent} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#22c55e', color: '#16a34a' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
@@ -3229,18 +3258,18 @@ export default function SchoolDetailPage() {
                 className="btn btn-outline"
                 onClick={() => handleExport("excel")}
                 disabled={exportingFormat !== null || studentTotal === 0}
-                title={classFilter ? "Download this class data with photos named by student name" : "Download all filtered student data with photos named by student name"}
+                title={classFilter ? `Download this ${companyMode ? "department" : "class"} data with photos named by ${companyMode ? "employee" : "student"} name` : `Download all filtered ${companyMode ? "employee" : "student"} data with named photos`}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#0ea5e9', color: '#0369a1', fontSize: 13, opacity: exportingFormat !== null || studentTotal === 0 ? 0.6 : 1, cursor: exportingFormat !== null || studentTotal === 0 ? 'not-allowed' : 'pointer' }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M3 8l9 6 9-6"/><path d="M21 8l-9-5-9 5"/><path d="M12 14v7"/></svg>
-                {exportingFormat === "excel" ? 'Preparing Backup...' : classFilter ? `Download ${companyMode ? "Company" : "Class"} Backup` : 'Download Data + Photos'}
+                {exportingFormat === "excel" ? 'Preparing Backup...' : classFilter ? `Download ${companyMode ? "Department" : "Class"} Backup` : 'Download Data + Photos'}
               </button>
               {studentTotal > 0 && (
                 <button
                   className="btn btn-outline"
                   onClick={handleDeleteAllStudents}
                   disabled={deletingAll}
-                  title="Permanently delete every student in this school so you can re-upload a fresh Excel."
+                  title={`Permanently delete every ${companyMode ? "employee in this company" : "student in this school"} so you can re-upload a fresh Excel.`}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#ef4444', color: '#dc2626', marginLeft: 'auto', fontSize: 13 }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
@@ -3263,13 +3292,13 @@ export default function SchoolDetailPage() {
 
             <div style={{ display: 'flex', gap: 12, marginBottom: showStudentAddSection ? 8 : 20, flexWrap: 'wrap', alignItems: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 180 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>{companyMode ? "Company" : "1. Section"}</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>{companyMode ? (legacyCompanyPortfolio ? "Company" : "Department") : "1. Section"}</label>
                 <select
                   value={classFilter}
                   onChange={(e) => { setClassFilter(e.target.value); setStudentPage(1) }}
                   style={{ height: 40, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13, minWidth: 180 }}
                 >
-                  <option value="">{companyMode ? "All Companies" : "All Sections"}</option>
+                  <option value="">{companyMode ? `All ${legacyCompanyPortfolio ? "Companies" : "Departments"}` : "All Sections"}</option>
                   {classes.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -3308,7 +3337,7 @@ export default function SchoolDetailPage() {
                   onClick={() => setShowStudentAddSection((v) => !v)}
                   style={{ height: 40, padding: '0 14px', fontSize: 13, whiteSpace: 'nowrap' }}
                 >
-                  + Add {companyMode ? "Company" : "Section"}
+                  + Add {companyMode ? (legacyCompanyPortfolio ? "Company" : "Department") : "Section"}
                 </button>
               </div>
             </div>
@@ -3329,13 +3358,13 @@ export default function SchoolDetailPage() {
                 }}
               >
                 <input
-                  placeholder={companyMode ? "New company name" : "New section name (e.g. Pre Primary, Other)"}
+                  placeholder={companyMode ? `New ${legacyCompanyPortfolio ? "company" : "department"} name` : "New section name (e.g. Pre Primary, Other)"}
                   value={studentTabNewSectionName}
                   onChange={(e) => setStudentTabNewSectionName(e.target.value)}
                   style={{ height: 38, padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, flex: 1, minWidth: 200 }}
                 />
                 <button type="submit" className="btn btn-primary" disabled={addingClass || !studentTabNewSectionName.trim()} style={{ height: 38, padding: '0 16px', fontSize: 13 }}>
-                  {addingClass ? "Adding…" : `Create ${companyMode ? "Company" : "Section"}`}
+                  {addingClass ? "Adding…" : `Create ${companyMode ? (legacyCompanyPortfolio ? "Company" : "Department") : "Section"}`}
                 </button>
                 <button type="button" className="btn btn-outline" onClick={() => setShowStudentAddSection(false)} style={{ height: 38, padding: '0 12px', fontSize: 13 }}>
                   Cancel
@@ -3672,7 +3701,9 @@ export default function SchoolDetailPage() {
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: 'white', zIndex: 2 }}>
                   <div>
                     <h2 style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', marginBottom: 2 }}>
-                      {editStudentTarget ? '✏️ Edit Student' : '➕ Add New Student'}
+                      {editStudentTarget
+                        ? `✏️ Edit ${companyMode ? "Employee" : "Student"}`
+                        : `➕ Add New ${companyMode ? "Employee" : "Student"}`}
                     </h2>
                     <p style={{ fontSize: 12, color: '#64748b' }}>{school?.name}</p>
                   </div>
@@ -3683,9 +3714,9 @@ export default function SchoolDetailPage() {
 
                   {/* Class selector */}
                   <div className="form-group">
-                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>{companyMode ? "Company" : "Class"} <span style={{ color: '#ef4444' }}>*</span></label>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' }}>{companyMode ? (legacyCompanyPortfolio ? "Company" : "Department") : "Class"} <span style={{ color: '#ef4444' }}>*</span></label>
                     <select value={editClassId} onChange={e => setEditClassId(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14 }}>
-                      <option value="">— Select {companyMode ? "company" : "class"} —</option>
+                      <option value="">— Select {companyMode ? (legacyCompanyPortfolio ? "company" : "department") : "class"} —</option>
                       {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
@@ -3838,7 +3869,7 @@ export default function SchoolDetailPage() {
                 <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 10, justifyContent: 'flex-end', position: 'sticky', bottom: 0, background: 'white' }}>
                   <button className="btn btn-outline" onClick={() => setEditStudentOpen(false)} disabled={editSaving} style={{ padding: '10px 20px', fontSize: 14 }}>Cancel</button>
                   <button className="btn btn-primary" onClick={handleSaveStudent} disabled={editSaving || !editClassId} style={{ padding: '10px 24px', fontSize: 14, fontWeight: 700, minWidth: 120 }}>
-                    {editSaving ? (editStudentTarget ? 'Saving…' : 'Adding…') : (editStudentTarget ? '💾 Save Changes' : '➕ Add Student')}
+                    {editSaving ? (editStudentTarget ? 'Saving…' : 'Adding…') : (editStudentTarget ? '💾 Save Changes' : `➕ Add ${companyMode ? "Employee" : "Student"}`)}
                   </button>
                 </div>
               </div>
@@ -3853,7 +3884,7 @@ export default function SchoolDetailPage() {
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
-                      {importStep === 'upload' ? '📊 Bulk Import Students' : importStep === 'preview' ? '🔍 Preview & Validate' : '✅ Import Complete'}
+                      {importStep === 'upload' ? `📊 Bulk Import ${companyMode ? "Employees" : "Students"}` : importStep === 'preview' ? '🔍 Preview & Validate' : '✅ Import Complete'}
                     </h2>
                     <p style={{ fontSize: 13, color: '#64748b' }}>
                       {importStep === 'upload' ? 'Upload an Excel or CSV file with student data' : importStep === 'preview' ? 'Review the data before importing' : 'Import results'}
@@ -3903,14 +3934,14 @@ export default function SchoolDetailPage() {
 
                       {/* Fallback class selector (optional) */}
                       <div style={{ marginTop: 16, padding: 14, background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 6 }}>Fallback {companyMode ? "Company" : "Class"} (optional)</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 6 }}>Fallback {companyMode ? (legacyCompanyPortfolio ? "Company" : "Department") : "Class"} (optional)</label>
                         <select value={importClassId} onChange={e => setImportClassId(e.target.value)} style={{ width: '100%', height: 40, padding: '0 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}>
                           <option value="">Auto-detect from Excel column</option>
-                          {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c._count.students} students)</option>)}
+                          {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c._count.students} {companyMode ? "employees" : "students"})</option>)}
                         </select>
                         <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
                           {companyMode
-                            ? "Select the company these employees belong to. The Excel Company column remains employee data and is not displayed as Class."
+                            ? `Select the ${legacyCompanyPortfolio ? "company" : "department"} these employees belong to. Company information from Excel remains employee data.`
                             : 'If your Excel has a "Class-Section" column, classes are created automatically. Otherwise select a fallback class here.'}
                         </div>
                       </div>
@@ -3923,7 +3954,7 @@ export default function SchoolDetailPage() {
                             ? <><strong>Duplicate-safe:</strong> Employee/ID Code is used to skip records already imported</>
                             : <><strong>Mixed classes supported!</strong> Include a "Class-Section" column — classes are auto-created</>}</li>
                           <li><strong>Photo ID column</strong> — if present, used to match bulk photos later</li>
-                          <li>Column headers matched automatically: "Student Name", "Father", "Mother", "Photo ID", etc.</li>
+                          <li>{companyMode ? 'Employee columns such as "Employee Name", "Employee ID", contact numbers, designation, and office address are matched automatically.' : 'Column headers are matched automatically: "Student Name", "Father", "Mother", "Photo ID", etc.'}</li>
                           <li>Only <strong>{companyMode ? "Employee Name" : "Student Name"}</strong> is required — all other fields are optional</li>
                           <li>Max 2000 students per import</li>
                         </ul>
@@ -4056,7 +4087,7 @@ export default function SchoolDetailPage() {
                           {importResult.imported} {companyMode ? "Employees" : "Students"} Imported!
                         </h3>
                         {importResult.classesCreated > 0 && (
-                          <p style={{ fontSize: 14, color: '#3b82f6', marginBottom: 4 }}>📚 {importResult.classesCreated} classes auto-created</p>
+                          <p style={{ fontSize: 14, color: '#3b82f6', marginBottom: 4 }}>📚 {importResult.classesCreated} {companyMode ? "departments" : "classes"} auto-created</p>
                         )}
                         {importResult.failed > 0 && (
                           <p style={{ fontSize: 14, color: '#dc2626' }}>{importResult.failed} rows failed</p>
@@ -4564,7 +4595,7 @@ export default function SchoolDetailPage() {
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
-                      Process {companyMode ? "Company" : "Class"} Photos - AI Background
+                      Process {companyMode ? "Department" : "Class"} Photos - AI Background
                     </h2>
                     <p style={{ fontSize: 13, color: '#64748b' }}>
                       {selectedBatchClassLabel}: remove backgrounds, apply the selected plain colour, and automatically save each processed photo.
@@ -4771,7 +4802,7 @@ export default function SchoolDetailPage() {
                   <div style={{ marginTop: 20, padding: 14, background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe' }}>
                     <div style={{ fontSize: 12, color: '#1e40af', lineHeight: 1.8 }}>
                       <strong>How it works:</strong><br/>
-                      1. Students imported with a "House" column (e.g., Yellow, Blue, Red, Green) are auto-detected.<br/>
+                      1. {companyMode ? 'Employees' : 'Students'} imported with a "House" column (e.g., Yellow, Blue, Red, Green) are auto-detected.<br/>
                       2. Upload flag images named by color (e.g., <strong>Yellow.png</strong>, <strong>Blue.jpg</strong>).<br/>
                       3. The system matches each flag to the correct house and places it on the ID card at the flag placeholder position.
                     </div>
@@ -4796,13 +4827,13 @@ export default function SchoolDetailPage() {
                 <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 2 }}>
                   ID Card Templates ({schoolTemplates.length})
                 </h2>
-                <p style={{ fontSize: 13, color: '#94a3b8' }}>Each template can be assigned to specific classes (e.g. Primary, Secondary)</p>
+                <p style={{ fontSize: 13, color: '#94a3b8' }}>Each template can be assigned to specific {companyMode ? "departments" : "classes (e.g. Primary, Secondary)"}.</p>
               </div>
               <button
                 className="btn btn-primary"
                 disabled={creatingTemplate}
                 onClick={() => {
-                  const name = prompt('Enter template name (e.g. "Secondary School Template", "Kindergarten Template"):')
+                  const name = prompt(companyMode ? 'Enter template name (e.g. "Employee ID Template"):' : 'Enter template name (e.g. "Secondary School Template", "Kindergarten Template"):')
                   if (name && name.trim()) handleCreateTemplate(name.trim())
                 }}
                 style={{ fontSize: 13, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6 }}
@@ -4826,7 +4857,9 @@ export default function SchoolDetailPage() {
                       {template.name || `Template ${idx + 1}`}
                     </h3>
                     <p style={{ fontSize: 13, color: '#94a3b8' }}>
-                      {template._count?.classes ? `Assigned to ${template._count.classes} class${template._count.classes > 1 ? 'es' : ''}` : 'Not assigned to any class yet'}
+                      {template._count?.classes
+                        ? `Assigned to ${template._count.classes} ${companyMode ? `department${template._count.classes > 1 ? "s" : ""}` : `class${template._count.classes > 1 ? "es" : ""}`}`
+                        : `Not assigned to any ${companyMode ? "department" : "class"} yet`}
                       {template.templateImageUrl ? ' • Template image uploaded' : ''}
                     </p>
                   </div>
@@ -4841,6 +4874,7 @@ export default function SchoolDetailPage() {
 
                 <JpgTemplateMapper
                   schoolId={schoolId}
+                  companyMode={companyMode}
                   templateId={template.id}
                   templateImageUrl={template.templateImageUrl || null}
                   fieldMappings={(template.fieldMappings as any) || []}
@@ -4858,6 +4892,7 @@ export default function SchoolDetailPage() {
                     backMappings: (template.backFieldMappings as any) || [],
                     cardSizeLocked: template.cardSizeLocked || false,
                     fixedBranch: (template.printConfig as any)?.fixedBranch || "",
+                    fixedOfficeNo: (template.printConfig as any)?.fixedOfficeNo || "",
                   }}
                   previewStudent={students[0] ? {
                     formData: students[0].formData as Record<string, string>,
@@ -4884,6 +4919,7 @@ export default function SchoolDetailPage() {
                             cardSizeLocked: cardSettings.cardSizeLocked,
                             printConfig: {
                               fixedBranch: cardSettings.fixedBranch || "",
+                              fixedOfficeNo: cardSettings.fixedOfficeNo || "",
                             },
                           } : {}),
                         }),
@@ -4943,7 +4979,7 @@ export default function SchoolDetailPage() {
                 <thead>
                   <tr>
                     <th>Batch ID</th>
-                    <th>Students</th>
+                    <th>{companyMode ? "Employees" : "Students"}</th>
                     <th>Status</th>
                     <th>Created</th>
                     <th style={{ textAlign: 'right' }}>Downloads</th>
@@ -5005,14 +5041,14 @@ export default function SchoolDetailPage() {
         {/* EXPORT TAB */}
         {tab === "export" && (
           <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 32 }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Export Student Data</h3>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Export {companyMode ? "Employee" : "Student"} Data</h3>
             <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 24 }}>
-              Download readable student records with school name, class name, and photo locations — not raw database IDs.
+              Download readable {companyMode ? "employee records with company and department names" : "student records with school and class names"}, including photo locations — not raw database IDs.
             </p>
 
             <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
               <select value={classFilter} onChange={e => setClassFilter(e.target.value)} style={{ height: 40, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}>
-                <option value="">All Classes</option>
+                <option value="">All {companyMode ? "Departments" : "Classes"}</option>
                 {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ height: 40, padding: '0 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}>
@@ -5037,7 +5073,7 @@ export default function SchoolDetailPage() {
             </div>
             <p style={{ color: '#64748b', fontSize: 13, marginTop: 16, lineHeight: 1.6 }}>
               <strong>Excel + Photos</strong> handles up to <strong>15,000 students</strong> in one export — photos download in parallel and save by student name.
-              <code>students-complete.json</code> keeps a full backup so no data is lost. Large schools may take several minutes.
+              <code>students-complete.json</code> keeps a full backup so no data is lost. Large {companyMode ? "companies" : "schools"} may take several minutes.
               CSV is spreadsheet-only. Complete Archive also includes QR codes and print files.
             </p>
           </div>
@@ -5060,7 +5096,7 @@ export default function SchoolDetailPage() {
         // Determine critical missing fields
         const missingItems: string[] = []
         if (!studentHasPhoto(selectedStudent)) missingItems.push("Photo")
-        if (!studentName) missingItems.push("Student Name")
+        if (!studentName) missingItems.push(companyMode ? "Employee Name" : "Student Name")
 
         return (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }} onClick={() => setSelectedStudent(null)}>
@@ -5068,7 +5104,7 @@ export default function SchoolDetailPage() {
             {/* Header */}
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>Student Detail — Edit</h2>
+                <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>{companyMode ? "Employee" : "Student"} Detail — Edit</h2>
                 <p style={{ fontSize: 13, color: '#64748b' }}>{selectedStudent.serialNumber} · {selectedStudent.class?.name}</p>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -5101,7 +5137,7 @@ export default function SchoolDetailPage() {
                     }}
                   >
                     {detailPhotoUrl ? (
-                      <img key={detailPhotoCacheKey} src={detailPhotoUrl} alt={studentName || "Student photo"} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img key={detailPhotoCacheKey} src={detailPhotoUrl} alt={studentName || `${companyMode ? "Employee" : "Student"} photo`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
                       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 4, color: '#ef4444' }}>
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -5181,6 +5217,7 @@ export default function SchoolDetailPage() {
                         scale={1}
                         watermark="PREVIEW"
                         schoolName={school.name}
+                        fixedOfficeNo={(studentTemplate.printConfig as any)?.fixedOfficeNo || ""}
                         cardWidthMm={(studentTemplate as any).cardWidthMm}
                         cardHeightMm={(studentTemplate as any).cardHeightMm}
                       />
@@ -5198,6 +5235,7 @@ export default function SchoolDetailPage() {
                           scale={1}
                           watermark="PREVIEW"
                           schoolName={school.name}
+                          fixedOfficeNo={(studentTemplate.printConfig as any)?.fixedOfficeNo || ""}
                           cardWidthMm={(studentTemplate as any).cardWidthMm}
                           cardHeightMm={(studentTemplate as any).cardHeightMm}
                         />
@@ -5283,7 +5321,7 @@ export default function SchoolDetailPage() {
                         })
                         const data = await res.json()
                         if (data.success) {
-                          toast.success("Student data saved!")
+                          toast.success(`${companyMode ? "Employee" : "Student"} data saved!`)
                           fetchStudents(studentPage)
                         } else {
                           toast.error(data.error || "Save failed")

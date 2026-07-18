@@ -9,6 +9,7 @@ import { storageUpload } from "@/lib/storage"
 import { reportError } from "@/lib/observability"
 import type { GeneratePrintBatchPayload } from "../types"
 import { EXPORT_BUCKET } from "../types"
+import { applyFixedOfficeNumberToFormData } from "@/lib/fixed-template-values"
 
 function generateSimplePdf(
   students: any[],
@@ -182,6 +183,19 @@ export async function processGeneratePrintBatch(schoolId: string, payload: Gener
   })
 
   const template = await getDefaultTemplate(schoolId)
+  const fixedOfficeNo = ((template?.printConfig as { fixedOfficeNo?: string } | null)?.fixedOfficeNo || "").trim()
+  const templateFields = [
+    ...(((template?.fieldMappings as any[]) || [])),
+    ...(((template?.backFieldMappings as any[]) || [])),
+  ]
+  const studentsForPrint = students.map(student => ({
+    ...student,
+    formData: applyFixedOfficeNumberToFormData(
+      (student.formData || {}) as Record<string, unknown>,
+      fixedOfficeNo,
+      templateFields,
+    ),
+  }))
   const bleedMm = 3
   const cardWidthMm = template?.cardWidthMm || DEFAULT_CARD_WIDTH_MM
   const cardHeightMm = template?.cardHeightMm || DEFAULT_CARD_HEIGHT_MM
@@ -195,13 +209,13 @@ export async function processGeneratePrintBatch(schoolId: string, payload: Gener
   await storageUpload(
     EXPORT_BUCKET,
     frontPath,
-    generateSimplePdf(students, (template?.frontLayout as any[]) || [], pageW, pageH, bleedPt, "front", school?.name || ""),
+    generateSimplePdf(studentsForPrint, (template?.frontLayout as any[]) || [], pageW, pageH, bleedPt, "front", school?.name || ""),
     { contentType: "application/pdf", upsert: true }
   )
   await storageUpload(
     EXPORT_BUCKET,
     backPath,
-    generateSimplePdf(students, (template?.backLayout as any[]) || [], pageW, pageH, bleedPt, "back", school?.name || ""),
+    generateSimplePdf(studentsForPrint, (template?.backLayout as any[]) || [], pageW, pageH, bleedPt, "back", school?.name || ""),
     { contentType: "application/pdf", upsert: true }
   )
 

@@ -13,7 +13,20 @@ const schoolSchema = z.object({
   address: z.string().optional(),
   logoUrl: z.string().optional(),
   classNames: z.array(z.string()).optional(), // Batch class creation
+  workspaceKind: z.enum(["school", "company"]).optional().default("school"),
 })
+
+const COMPANY_DEFAULT_FIELDS = [
+  { key: "name", label: "Employee Name", type: "text", required: true, role: "name" },
+  { key: "employeeId", label: "Employee ID", type: "text", required: false },
+  { key: "companyName", label: "Company Name", type: "text", required: false },
+  { key: "designation", label: "Designation", type: "text", required: false },
+  { key: "mobile", label: "Employee Contact Number", type: "tel", required: false, role: "mobile" },
+  { key: "emergencyContact", label: "Emergency Contact Number", type: "tel", required: false, role: "mobile" },
+  { key: "bloodGroup", label: "Blood Group", type: "text", required: false, role: "bloodgroup" },
+  { key: "dateOfJoining", label: "Date of Joining", type: "date", required: false },
+  { key: "officeAddress", label: "Office Address", type: "textarea", required: false, role: "address" },
+]
 
 export async function GET(req: Request) {
   try {
@@ -164,17 +177,22 @@ export async function POST(req: Request) {
       await tx.template.create({
         data: {
           schoolId: school.id,
-          name: "Default Template",
+          name: validated.workspaceKind === "company" ? `${validated.name} Employee Template` : "Default Template",
           frontLayout: [],
           backLayout: [],
-          fieldConfig: [],
+          fieldConfig: validated.workspaceKind === "company" ? COMPANY_DEFAULT_FIELDS : [],
         },
       })
 
       // Batch create classes if provided (replaces N sequential API calls)
-      if (validated.classNames && validated.classNames.length > 0) {
+      const workspaceGroups = validated.classNames && validated.classNames.length > 0
+        ? validated.classNames
+        : validated.workspaceKind === "company"
+          ? ["General"]
+          : []
+      if (workspaceGroups.length > 0) {
         await tx.class.createMany({
-          data: validated.classNames
+          data: workspaceGroups
             .filter((name) => name.trim())
             .map((name) => ({
               name: name.trim(),
@@ -183,18 +201,22 @@ export async function POST(req: Request) {
         })
       }
 
-      // Automatically create a Main Teacher login for the new school
+      // The existing TEACHER role is also the compatible login role for a
+      // company representative. User-facing copy remains workspace-specific.
       const bcrypt = require("bcryptjs")
-      const defaultPassword = await bcrypt.hash("Teacher@123", 12)
+      const defaultPasswordText = validated.workspaceKind === "company" ? "Company@123" : "Teacher@123"
+      const defaultPassword = await bcrypt.hash(defaultPasswordText, 12)
       
       const existingUser = await tx.user.findUnique({ where: { email: validated.contactEmail } })
-      const teacherEmail = existingUser ? `teacher_${school.id.substring(0, 8)}@wisemelon.com` : validated.contactEmail
+      const accountEmail = existingUser
+        ? `${validated.workspaceKind === "company" ? "representative" : "teacher"}_${school.id.substring(0, 8)}@wisemelon.com`
+        : validated.contactEmail
       
       await tx.user.create({
         data: {
-          email: teacherEmail,
+          email: accountEmail,
           password: defaultPassword,
-          name: "Main Teacher",
+          name: validated.workspaceKind === "company" ? "Company Representative" : "Main Teacher",
           role: "TEACHER",
           schoolId: school.id,
           isMainTeacher: true,

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
+import { isCompanyWorkspace } from "@/lib/workspace-kind"
 
 export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -16,29 +17,43 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
 
     const school = await prisma.school.findUnique({
       where: { id: params.id },
-      include: { teachers: { where: { isMainTeacher: true } } }
+      include: {
+        teachers: { where: { isMainTeacher: true } },
+        templates: { select: { fieldConfig: true } },
+      }
     })
 
     if (!school) {
-      return NextResponse.json({ error: "School not found" }, { status: 404 })
+      return NextResponse.json({ error: "Workspace not found" }, { status: 404 })
     }
+    const companyMode = isCompanyWorkspace(
+      school.name,
+      school.templates.flatMap(template =>
+        Array.isArray(template.fieldConfig)
+          ? template.fieldConfig as Array<{ key?: string; label?: string }>
+          : []
+      ),
+    )
+    const defaultPasswordText = companyMode ? "Company@123" : "Teacher@123"
+    const accountLabel = companyMode ? "Company representative" : "Main teacher"
 
     if (reset && school.teachers.length > 0) {
       const teacher = school.teachers[0]
-      const defaultPassword = await bcrypt.hash("Teacher@123", 12)
+      const defaultPassword = await bcrypt.hash(defaultPasswordText, 12)
       await prisma.user.update({
         where: { id: teacher.id },
         data: { password: defaultPassword }
       })
-      return NextResponse.json({ success: true, message: "Password reset to Teacher@123" })
+      return NextResponse.json({ success: true, message: `Password reset to ${defaultPasswordText}` })
     }
 
     if (school.teachers.length > 0 && !manualEmail) {
-      return NextResponse.json({ error: "Main teacher already exists" }, { status: 400 })
+      return NextResponse.json({ error: `${accountLabel} already exists` }, { status: 400 })
     }
 
-    const defaultPassword = await bcrypt.hash("Teacher@123", 12)
-    const email = manualEmail || school.contactEmail || `admin_${school.id.substring(0, 8)}@school.com`
+    const defaultPassword = await bcrypt.hash(defaultPasswordText, 12)
+    const email = manualEmail || school.contactEmail ||
+      `${companyMode ? "representative" : "admin"}_${school.id.substring(0, 8)}@${companyMode ? "company" : "school"}.com`
 
     // Check if email already taken
     const existingUser = await prisma.user.findUnique({ where: { email } })
@@ -56,7 +71,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
             data: {
                 email,
                 password: defaultPassword,
-                name: `${school.name} Admin`,
+                name: companyMode ? `${school.name} Representative` : `${school.name} Admin`,
                 role: "TEACHER",
                 schoolId: school.id,
                 isMainTeacher: true,
@@ -64,7 +79,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         })
     }
 
-    return NextResponse.json({ success: true, message: "Main teacher account updated successfully" })
+    return NextResponse.json({ success: true, message: `${accountLabel} account updated successfully` })
   } catch (error) {
     console.error(`POST /api/schools/${params.id}/main-teacher error:`, error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })

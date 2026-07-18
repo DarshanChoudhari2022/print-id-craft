@@ -8,6 +8,7 @@ import {
 } from "./IDMakerDialogs"
 import { resolveDisplayFieldValue, formatDateValue, isPrefixedAddressField } from "@/lib/field-resolver"
 import { isClassDivisionFieldKey } from "@/lib/section-class"
+import { fixedOfficeNumberForField } from "@/lib/fixed-template-values"
 
 const BG_COLOR_PRESETS = [
   // Neutrals
@@ -79,10 +80,12 @@ type CardSettings = {
   backMappings?: FieldMapping[]
   cardSizeLocked?: boolean
   fixedBranch?: string
+  fixedOfficeNo?: string
 }
 
 type JpgTemplateMapperProps = {
   schoolId: string
+  companyMode?: boolean
   /** The template being edited. Required for auto-saving class-specific settings. */
   templateId?: string
   templateImageUrl: string | null
@@ -204,6 +207,7 @@ export default function JpgTemplateMapper({
   initialPhotoBgColor,
   initialCardSettings,
   previewStudent,
+  companyMode = false,
 }: JpgTemplateMapperProps) {
   const [imageUrl, setImageUrl] = useState(initialImageUrl || "")
   const [mappings, setMappings] = useState<FieldMapping[]>(
@@ -435,6 +439,7 @@ export default function JpgTemplateMapper({
   const [bleedMargin, setBleedMargin] = useState(initialCardSettings?.bleedMargin ?? 1) // mm
   const [cardSizeLocked, setCardSizeLocked] = useState(initialCardSettings?.cardSizeLocked || false)
   const [fixedBranch, setFixedBranch] = useState(initialCardSettings?.fixedBranch || "")
+  const [fixedOfficeNo, setFixedOfficeNo] = useState(initialCardSettings?.fixedOfficeNo || "")
 
   // String-based intermediates for width/height inputs so user can type freely
   const [cardWidthStr, setCardWidthStr] = useState(String(initialCardSettings?.cardWidth || 100))
@@ -921,8 +926,19 @@ export default function JpgTemplateMapper({
         backMappings: savedBackMappings,
         cardSizeLocked,
         fixedBranch,
+        fixedOfficeNo,
       }
       await onSave(savedFrontImageUrl, savedFrontMappings, photoBgColor, settings)
+      if (companyMode) {
+        const fixedValueResponse = await fetch(`/api/schools/${schoolId}/fixed-office-number`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fixedOfficeNo: fixedOfficeNo.trim() }),
+        })
+        if (!fixedValueResponse.ok) {
+          throw new Error("Template saved, but the company-wide Office Number could not be synchronized.")
+        }
+      }
       setFrontImageUrl(savedFrontImageUrl)
       setFrontMappings(savedFrontMappings)
       setBackImageUrl(savedBackImageUrl)
@@ -1669,10 +1685,11 @@ export default function JpgTemplateMapper({
               //   3. Field label as a last-resort placeholder.
               let sampleValue = ""
               if (m.type !== "photo" && m.type !== "flag") {
+                const fixedValue = fixedOfficeNumberForField(fixedOfficeNo, m.fieldKey, m.label)
                 const realValue = previewStudent?.formData
                   ? resolveDisplayFieldValue(previewStudent.formData, m.fieldKey)
                   : ""
-                sampleValue = realValue || SAMPLE_DATA[m.fieldKey] || m.label
+                sampleValue = fixedValue || realValue || SAMPLE_DATA[m.fieldKey] || m.label
               }
 
               return (
@@ -3444,7 +3461,7 @@ export default function JpgTemplateMapper({
             {!mappings.find((m) => m.type === "photo") && (
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                 <button
-                  onClick={() => addFieldMapping("photo", "Student Photo", "photo")}
+                  onClick={() => addFieldMapping("photo", companyMode ? "Employee Photo" : "Student Photo", "photo")}
                   style={{
                     flex: 1,
                     padding: "10px 8px",
@@ -3464,7 +3481,7 @@ export default function JpgTemplateMapper({
                   📷 Rect Photo
                 </button>
                 <button
-                  onClick={() => addFieldMapping("photo", "Student Photo", "photo", 999)}
+                  onClick={() => addFieldMapping("photo", companyMode ? "Employee Photo" : "Student Photo", "photo", 999)}
                   style={{
                     flex: 1,
                     padding: "10px 8px",
@@ -3487,7 +3504,7 @@ export default function JpgTemplateMapper({
             )}
 
             {/* Class - Division button (single combined placeholder) */}
-            {!mappings.find((m) => isClassDivisionFieldKey(m.fieldKey)) && (
+            {!companyMode && !mappings.find((m) => isClassDivisionFieldKey(m.fieldKey)) && (
               <button
                 onClick={() => addFieldMapping("class", "Class - Division")}
                 style={{
@@ -3511,7 +3528,7 @@ export default function JpgTemplateMapper({
             )}
 
             {/* Flag button */}
-            {!mappings.find((m) => m.type === "flag") && (
+            {!companyMode && !mappings.find((m) => m.type === "flag") && (
               <button
                 onClick={() => addFieldMapping("flag", "House Flag", "flag")}
                 style={{
@@ -3536,7 +3553,18 @@ export default function JpgTemplateMapper({
 
             {/* Common fields - quick add buttons */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {[
+              {(companyMode ? [
+                { key: "name", label: "Employee Name" },
+                { key: "employeeId", label: "Employee ID" },
+                { key: "companyName", label: "Company Name" },
+                { key: "designation", label: "Designation" },
+                { key: "mobile", label: "Employee Contact Number" },
+                { key: "emergencyContact", label: "Emergency Contact Number" },
+                { key: "bloodGroup", label: "Blood Group" },
+                { key: "dateOfJoining", label: "Date of Joining" },
+                { key: "officeAddress", label: "Office Address" },
+                { key: "serialNumber", label: "Serial Number" },
+              ] : [
                 { key: "name", label: "Student Name" },
                 { key: "division", label: "Division" },
                 { key: "branch", label: "Branch" },
@@ -3555,7 +3583,7 @@ export default function JpgTemplateMapper({
                 { key: "admissionNo", label: "Admission No." },
                 { key: "photoId", label: "Photo ID" },
                 { key: "serialNumber", label: "Serial Number" },
-              ]
+              ])
                 .filter((f) => !mappings.find((m) => m.fieldKey === f.key))
                 .map((f) => (
                   <button
@@ -3805,6 +3833,32 @@ export default function JpgTemplateMapper({
                   </button>
                 ))}
               </div>
+
+              {companyMode && (
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "#3b82f6", marginBottom: 4, display: "block" }}>
+                    Fixed Office Number (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={fixedOfficeNo}
+                    onChange={(e) => setFixedOfficeNo(e.target.value)}
+                    placeholder="e.g. 020-12345678"
+                    style={{
+                      width: "100%",
+                      height: 34,
+                      padding: "0 8px",
+                      border: "1.5px solid #bfdbfe",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      background: "white",
+                    }}
+                  />
+                  <div style={{ fontSize: 9, color: "#6b7280", marginTop: 3, lineHeight: 1.35 }}>
+                    Save once to use this Office No on every employee ID card across all templates for this company. Employee records are not changed.
+                  </div>
+                </div>
+              )}
               <div
                 style={{
                   marginTop: 12,

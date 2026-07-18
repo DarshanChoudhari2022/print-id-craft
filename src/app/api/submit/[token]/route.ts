@@ -172,6 +172,7 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
     const usesClassPicker = classOptions.length > 0
     const needsDivision = usesClassPicker && templateHasDivisionPlaceholder(rawMappings, rawFieldConf) && !isDivisionDisabled(cls.divisionOptions)
     const fixedBranch = ((template?.printConfig as { fixedBranch?: string } | null)?.fixedBranch || "").trim()
+    const fixedOfficeNo = ((template?.printConfig as { fixedOfficeNo?: string } | null)?.fixedOfficeNo || "").trim()
     const publicFieldConfig = fixedBranch
       ? resolvedFieldConfig.filter((f) => getFieldRole(f.key, f.label, f.role) !== "branch")
       : resolvedFieldConfig
@@ -212,6 +213,8 @@ export async function GET(req: Request, props: { params: Promise<{ token: string
         flagImages,
         // Fixed branch option
         fixedBranch,
+        // Fixed company value rendered on every card without changing employee data
+        fixedOfficeNo,
       },
     })
   } catch (error) {
