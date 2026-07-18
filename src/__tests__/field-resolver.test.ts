@@ -327,9 +327,22 @@ describe("resolveFieldValue", () => {
       emergencyContact: "9768673348",
     }
 
-    it("does not let custom contact fields borrow the canonical mobile value", () => {
+    it("does not let generic custom contact fields borrow the canonical mobile value", () => {
       expect(resolveTemplateFieldValue(employee, "contact_number")).toBe("")
-      expect(resolveTemplateFieldValue(employee, "emergency_contact_number")).toBe("")
+    })
+
+    it("maps explicit employee and emergency contact labels independently", () => {
+      expect(resolveTemplateFieldValue(employee, "employee_contact_no")).toBe("8898156694")
+      expect(resolveTemplateFieldValue(employee, "emergency_contact_no")).toBe("9768673348")
+      expect(resolveTemplateFieldValue(employee, "emergency_contact_number")).toBe("9768673348")
+    })
+
+    it("never lets an office number borrow employee or emergency contact data", () => {
+      expect(resolveTemplateFieldValue(employee, "office_no")).toBe("")
+      expect(resolveTemplateFieldValue({
+        ...employee,
+        officeNumber: "020-12345678",
+      }, "office_no")).toBe("020-12345678")
     })
 
     it("resolves exact custom fields independently", () => {

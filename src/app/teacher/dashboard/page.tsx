@@ -14,6 +14,7 @@ import {
   getStudentGrade,
   statusStatsAfterChange,
 } from "@/lib/teacher-student-view"
+import { normalizeStudentFieldValue } from "@/lib/student-text-normalization"
 
 const IDCardPreview = dynamic(() => import("@/components/IDCardPreview"), { ssr: false })
 const JpgCardPreview = dynamic(() => import("@/components/JpgCardPreview"), { ssr: false })
@@ -1143,7 +1144,10 @@ export default function TeacherDashboard() {
                     <label style={{ textTransform: 'capitalize' }}>{key.replace(/([A-Z])/g, ' $1')}</label>
                     <input
                       value={value}
-                      onChange={e => setEditFormData(prev => ({ ...prev, [key]: e.target.value }))}
+                      onChange={e => setEditFormData(prev => ({
+                        ...prev,
+                        [key]: normalizeStudentFieldValue(key, e.target.value),
+                      }))}
                     />
                   </div>
                 ))}

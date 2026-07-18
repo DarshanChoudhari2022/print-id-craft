@@ -23,6 +23,10 @@ import {
 import { uploadStudentPhotoResilient } from "@/lib/client-photo-upload"
 import { PHOTO_BG_STATUS, type PhotoBgStatus } from "@/lib/photo-bg-status"
 import { resolveHouseImageUrl } from "@/lib/house-flags"
+import {
+  normalizeAddress,
+  normalizeStudentFieldValue,
+} from "@/lib/student-text-normalization"
 
 const SUPPORT_PHONE_DISPLAY = "+91 98818 77607"
 const SUPPORT_PHONE_E164 = "+919881877607"
@@ -133,12 +137,12 @@ const formatSubmittedDate = (iso: string) => {
   }
 }
 
-// Title-case each word: "darshan choudhari" -> "Darshan Choudhari".
-// Capitalises the first character of every whitespace-delimited word while
-// leaving the rest of the word as the user typed it, so corrections like
-// "McDonald" survive editing.
-const titleCaseWords = (s: string): string =>
-  s.replace(/(^|\s)([a-zA-Z])/g, (_m, sp, ch) => sp + ch.toUpperCase())
+// Used for non-person labels such as House and Branch, where existing
+// intentional casing (for example "CBSE") must remain untouched.
+const capitalizeWordInitials = (value: string): string =>
+  value.replace(/(^|\s)([a-zA-Z])/g, (_match, space, letter) =>
+    `${space}${letter.toUpperCase()}`,
+  )
 
 const getCleanLabel = (label: string): string => {
   const l = (label || "").toLowerCase().trim()
@@ -1791,7 +1795,7 @@ export default function SubmitPage() {
                         <textarea
                           required={field.required}
                           value={value}
-                          onChange={e => handleFieldChange(field.key, e.target.value)}
+                          onChange={e => handleFieldChange(field.key, normalizeAddress(e.target.value))}
                           rows={3}
                           style={{ resize: 'vertical', minHeight: 70 }}
                           placeholder="e.g. House No 12, MG Road, Kothrud, Pune, 411038"
@@ -1843,7 +1847,7 @@ export default function SubmitPage() {
                           type="text"
                           required={field.required}
                           value={value}
-                          onChange={e => handleFieldChange(field.key, titleCaseWords(e.target.value))}
+                          onChange={e => handleFieldChange(field.key, capitalizeWordInitials(e.target.value))}
                           placeholder="e.g. Blue"
                         />
                       </div>
@@ -1880,7 +1884,7 @@ export default function SubmitPage() {
                           type="text"
                           required={field.required}
                           value={value}
-                          onChange={e => handleFieldChange(field.key, titleCaseWords(e.target.value))}
+                          onChange={e => handleFieldChange(field.key, capitalizeWordInitials(e.target.value))}
                           placeholder="e.g. Bibevewadi Branch"
                         />
                       </div>
@@ -1965,7 +1969,10 @@ export default function SubmitPage() {
                           type="text"
                           required={field.required}
                           value={value}
-                          onChange={e => handleFieldChange(field.key, titleCaseWords(e.target.value))}
+                          onChange={e => handleFieldChange(
+                            field.key,
+                            normalizeStudentFieldValue(field.key, e.target.value, field.label, field.role),
+                          )}
                           placeholder={`e.g. ${example}`}
                           title={showOrderHint
                             ? "Type your full name in this order: First name, then Middle name, then Last name (Surname)."

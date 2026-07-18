@@ -527,6 +527,27 @@ export default function JpgTemplateMapper({
   // Convert label → unique key: "Mob.- Father -" → "mob_father"
   const labelToKey = (label: string): string => {
     const normalizedLabel = label.toLowerCase().replace(/[^a-z0-9]/g, "")
+    const normalizedNumberLabel = normalizedLabel.replace(/no$/, "number")
+    const configuredFields = (fieldConfig || []) as Array<{
+      key: string
+      label?: string
+      role?: string
+    }>
+    const configuredMatch = configuredFields.find((field) => {
+      const configuredLabel = String(field.label || field.key).toLowerCase().replace(/[^a-z0-9]/g, "")
+      const configuredNumberLabel = configuredLabel.replace(/no$/, "number")
+      if (configuredNumberLabel === normalizedNumberLabel) return true
+      if (
+        normalizedNumberLabel === "employeecontactnumber" &&
+        configuredNumberLabel === "contactnumber" &&
+        !configuredLabel.includes("emergency") &&
+        !configuredLabel.includes("office")
+      ) {
+        return true
+      }
+      return false
+    })
+    if (configuredMatch?.key) return configuredMatch.key
     if (normalizedLabel === "class") {
       return "classGrade"
     }

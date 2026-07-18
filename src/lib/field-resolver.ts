@@ -307,6 +307,65 @@ const CANONICAL_TEMPLATE_FIELD_KEYS = new Set([
   "branch",
 ])
 
+/**
+ * Exact, intent-specific aliases for company contact placeholders.
+ *
+ * Keep these separate from the broad mobile group: an emergency or office
+ * field must never silently borrow the employee's primary contact number.
+ */
+const COMPANY_CONTACT_TEMPLATE_ALIASES: Record<string, string[]> = {
+  employeecontactno: [
+    "employeecontactno",
+    "employeecontactnumber",
+    "employeemobile",
+    "employeephone",
+    "mobile",
+    "contactnumber",
+    "contactno",
+    "phone",
+  ],
+  employeecontactnumber: [
+    "employeecontactnumber",
+    "employeecontactno",
+    "employeemobile",
+    "employeephone",
+    "mobile",
+    "contactnumber",
+    "contactno",
+    "phone",
+  ],
+  emergencycontactno: [
+    "emergencycontactno",
+    "emergencycontactnumber",
+    "emergencycontact",
+    "emergencymobile",
+    "emergencyphone",
+  ],
+  emergencycontactnumber: [
+    "emergencycontactnumber",
+    "emergencycontactno",
+    "emergencycontact",
+    "emergencymobile",
+    "emergencyphone",
+  ],
+  officeno: [
+    "officeno",
+    "officenumber",
+    "officecontactnumber",
+    "officecontactno",
+    "officephone",
+    "officemobile",
+  ],
+  officenumber: [
+    "officenumber",
+    "officeno",
+    "officecontactnumber",
+    "officecontactno",
+    "officephone",
+    "officemobile",
+  ],
+}
+
 export function resolveTemplateFieldValue(
   fd: Record<string, string>,
   fieldKey: string
@@ -317,6 +376,15 @@ export function resolveTemplateFieldValue(
   const normKey = normalizeKey(fieldKey)
   const fdNormalized = getNormalizedFd(fd)
   if (fdNormalized[normKey]) return fdNormalized[normKey]
+
+  const companyContactAliases = COMPANY_CONTACT_TEMPLATE_ALIASES[normKey]
+  if (companyContactAliases) {
+    for (const alias of companyContactAliases) {
+      const value = fdNormalized[alias]
+      if (value) return value
+    }
+    return ""
+  }
 
   if (CANONICAL_TEMPLATE_FIELD_KEYS.has(normKey)) {
     return resolveFieldValue(fd, fieldKey)

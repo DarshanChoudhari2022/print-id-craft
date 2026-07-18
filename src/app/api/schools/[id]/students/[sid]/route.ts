@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { withStudentPhotoUrl } from "@/lib/student-photo-url"
 import { buildStudentIndexData } from "@/lib/student-index"
+import { normalizeStudentStringFormData } from "@/lib/student-text-normalization"
 
 export async function GET(req: Request, props: { params: Promise<{ id: string; sid: string }> }) {
   const params = await props.params;
@@ -77,8 +78,10 @@ export async function PATCH(req: Request, props: { params: Promise<{ id: string;
       })
       const targetClassId = classId || currentStudent?.classId
       if (!targetClassId) return NextResponse.json({ error: "Student not found" }, { status: 404 })
-      const targetFormData = formData || currentStudent?.formData
-      if (formData) updateData.formData = formData
+      const targetFormData = formData
+        ? normalizeStudentStringFormData(formData)
+        : currentStudent?.formData
+      if (formData) updateData.formData = targetFormData
       Object.assign(updateData, buildStudentIndexData(targetFormData as Record<string, unknown>, targetClassId))
     }
     if (photoUrl !== undefined) updateData.photoUrl = photoUrl

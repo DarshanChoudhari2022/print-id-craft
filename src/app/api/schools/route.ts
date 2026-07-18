@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { isCompanyWorkspace } from "@/lib/workspace-kind"
 
 export const dynamic = "force-dynamic"
 
@@ -25,6 +26,7 @@ export async function GET(req: Request) {
     const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"))
     const limit = Math.min(100, parseInt(url.searchParams.get("limit") || "50"))
     const search = url.searchParams.get("search")?.trim()
+    const workspace = url.searchParams.get("workspace")
 
     const where: any = {}
     if (search) {
@@ -33,6 +35,60 @@ export async function GET(req: Request) {
         { contactEmail: { contains: search, mode: "insensitive" } },
         { address: { contains: search, mode: "insensitive" } },
       ]
+    }
+
+    if (workspace === "school" || workspace === "company") {
+      const candidates = await prisma.school.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          contactEmail: true,
+          address: true,
+          logoUrl: true,
+          createdAt: true,
+          _count: { select: { classes: true, students: true, batches: true } },
+          templates: {
+            orderBy: { createdAt: "asc" },
+            select: { id: true, fieldConfig: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      })
+      const wantCompany = workspace === "company"
+      const matching = candidates.filter(school =>
+        isCompanyWorkspace(
+          school.name,
+          school.templates.flatMap(template =>
+            Array.isArray(template.fieldConfig)
+              ? template.fieldConfig as Array<{ key?: string; label?: string }>
+              : []
+          ),
+        ) === wantCompany
+      )
+      const start = (page - 1) * limit
+      const pageItems = matching.slice(start, start + limit)
+      const response = NextResponse.json({
+        success: true,
+        data: pageItems.map(({ templates, ...school }) => ({
+          ...school,
+          template: templates[0] ? { id: templates[0].id } : null,
+        })),
+        stats: {
+          totalSchools: matching.length,
+          totalStudents: matching.reduce((sum, school) => sum + school._count.students, 0),
+          totalClasses: matching.reduce((sum, school) => sum + school._count.classes, 0),
+          totalBatches: matching.reduce((sum, school) => sum + school._count.batches, 0),
+        },
+        pagination: {
+          page,
+          limit,
+          total: matching.length,
+          totalPages: Math.ceil(matching.length / limit),
+        },
+      })
+      response.headers.set("Cache-Control", "no-store, max-age=0")
+      return response
     }
 
     const [schools, total, totalSchools, totalStudents, totalClasses, totalBatches] = await prisma.$transaction([

@@ -20,6 +20,7 @@
     "db:migrate:create": "prisma migrate dev --create-only",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:backfill-student-indexes": "ts-node -r tsconfig-paths/register --project tsconfig.seed.json scripts/backfill-student-indexes.ts",
+    "db:normalize-student-text": "ts-node -r tsconfig-paths/register --project tsconfig.seed.json scripts/normalize-student-text.ts",
     "db:query-health": "ts-node -r tsconfig-paths/register --project tsconfig.seed.json scripts/query-health.ts",
     "db:prepare-live": "prisma db push && prisma generate && npm run db:backfill-student-indexes",
     "preflight:live": "ts-node -r tsconfig-paths/register --project tsconfig.seed.json scripts/preflight-live.ts",

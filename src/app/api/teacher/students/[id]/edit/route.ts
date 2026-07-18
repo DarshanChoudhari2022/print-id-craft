@@ -9,6 +9,7 @@ import {
   updateTeacherStudentWithPhotoAiFallback,
 } from "@/lib/teacher-student-edit"
 import { PHOTO_BG_STATUS, type PhotoBgStatus } from "@/lib/photo-bg-status"
+import { normalizeStudentStringFormData } from "@/lib/student-text-normalization"
 
 export const dynamic = "force-dynamic"
 
@@ -32,6 +33,7 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
     if (!formData || typeof formData !== "object") {
       return NextResponse.json({ error: "Invalid form data" }, { status: 400 })
     }
+    const normalizedFormData = normalizeStudentStringFormData(formData)
 
     const hasPhotoUpdate = typeof photoUrl === "string" || typeof photoPath === "string"
     if (hasPhotoUpdate) {
@@ -68,7 +70,7 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
     }
 
     const updateData = {
-      formData,
+      formData: normalizedFormData,
       ...(hasPhotoUpdate ? {
         photoUrl,
         photoPath,
@@ -76,7 +78,7 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
         originalPhotoPath: photoPath,
         photoBgStatus: photoBgStatus as PhotoBgStatus,
       } : {}),
-      ...buildStudentIndexData(formData, student.classId),
+      ...buildStudentIndexData(normalizedFormData, student.classId),
     }
     const compatibleSelect = {
       id: true,

@@ -17,6 +17,7 @@ import { buildStudentIndexData } from "@/lib/student-index"
 import { validateAndBuildClassFields, templateHasDivisionPlaceholder, isDivisionDisabled } from "@/lib/section-class"
 import { recordPublicSubmissionAudit } from "@/lib/submission-audit"
 import { getDefaultTemplate } from "@/lib/template-resolver"
+import { normalizeStudentStringFormData } from "@/lib/student-text-normalization"
 
 const photoUrlRefine = (url: string) => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
@@ -169,13 +170,13 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
     // Pre-compute auto-assigned fields OUTSIDE the transaction to avoid
     // hitting Prisma's default 5 000 ms interactive-transaction timeout.
     const autoFields = await computeAutoAssignedFields(school.id)
-    const finalFormData = {
+    const finalFormData = normalizeStudentStringFormData({
       ...validated.formData,
       ...autoFields,
       class: classFields.class,
       ...(classFields.classGrade ? { classGrade: classFields.classGrade } : {}),
       ...(classFields.division ? { division: classFields.division } : {}),
-    }
+    }, requiredFields)
     const indexData = buildStudentIndexData(finalFormData, cls.id)
     const photoFields = await requireValidSubmitPhotoFields({
       photoUrl: validated.photoUrl,

@@ -12,6 +12,7 @@ import { allocateStudentSerials } from "@/lib/student-serial"
 import { buildStudentIndexData } from "@/lib/student-index"
 import { getDefaultTemplate } from "@/lib/template-resolver"
 import { buildImportIdentityKeys } from "@/lib/import-identity"
+import { normalizeStudentStringFormData } from "@/lib/student-text-normalization"
 
 export const maxDuration = 300; // Vercel Pro function timeout config
 
@@ -345,7 +346,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       }
 
       validRows.push({
-        formData: studentFormData,
+        formData: normalizeStudentStringFormData(studentFormData, fieldConfig),
         photoId,
         className: rowClassName || "Default",
         classId: rowClassId,

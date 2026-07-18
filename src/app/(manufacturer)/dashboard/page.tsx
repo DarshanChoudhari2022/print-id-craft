@@ -120,7 +120,7 @@ export default function ManufacturerDashboard() {
       })
 
     // ── Fetch recent schools (slower: includes per-school counts) ──
-    fetch("/api/schools?limit=5", { cache: "no-store" })
+    fetch("/api/schools?limit=5&workspace=school", { cache: "no-store" })
       .then(async (res) => {
         if (res.status === 401) return null
         if (!res.ok) throw new Error("Schools failed")

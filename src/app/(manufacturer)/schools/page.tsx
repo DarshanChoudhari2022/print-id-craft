@@ -46,7 +46,7 @@ export default function SchoolsPage() {
   const fetchSchools = useCallback(async (p = page, search = searchQuery, retries = 3) => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const params = new URLSearchParams({ page: String(p), limit: "50" })
+        const params = new URLSearchParams({ page: String(p), limit: "50", workspace: "school" })
         if (search) params.set("search", search)
         const res = await fetch(`/api/schools?${params}&_t=${Date.now()}`, {
           cache: "no-store",

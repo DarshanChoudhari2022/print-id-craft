@@ -4,6 +4,7 @@ import ExcelJS from "exceljs"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { buildStudentIndexData } from "@/lib/student-index"
+import { normalizeStudentStringFormData } from "@/lib/student-text-normalization"
 
 export const maxDuration = 300
 
@@ -128,7 +129,7 @@ function mergeInfoOnlyFormData(existing: Record<string, any>, row: Record<string
   if (classGrade) next.classGrade = classGrade
   if (sectionClass) next.class = sectionClass
 
-  return next
+  return normalizeStudentStringFormData(next)
 }
 
 function normalizeStatus(value: string): "PENDING" | "SUBMITTED" | "FLAGGED" | "APPROVED" | "PRINTED" | null {

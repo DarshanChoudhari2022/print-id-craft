@@ -90,6 +90,21 @@ describe('POST /api/schools/[id]/students/import', () => {
       expect(createManyCall.data[0].formData.fullName).toBe('John Doe')
     })
 
+    it('normalizes all-capital names and address punctuation during import', async () => {
+      const csvStr = 'Full Name,Address\nIQRA BANU RAVEEN,\"flat no. 307,hosing Residency,pune\"'
+      const req = new Request('http://localhost:3000/api/schools/s1/students/import', {
+        method: 'POST',
+        body: createMockFormData(csvStr),
+      })
+
+      const res = await POST(req, { params: Promise.resolve({ id: 's1' }) })
+
+      expect(res.status).toBe(200)
+      const createManyCall = (prisma.student.createMany as any).mock.calls[0][0]
+      expect(createManyCall.data[0].formData.fullName).toBe('Iqra Banu Raveen')
+      expect(createManyCall.data[0].formData.address).toBe('Flat no. 307, hosing Residency, pune')
+    })
+
     it('does not create duplicate employees when the same ID Code is uploaded again', async () => {
       ;(prisma.student.findMany as any).mockResolvedValue([
         {

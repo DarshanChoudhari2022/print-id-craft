@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest"
 import { formatSchoolCardFieldValue } from "@/lib/school-card-display"
 
 describe("formatSchoolCardFieldValue", () => {
-  it("adds one space after each comma in Nikos address fields", () => {
+  it("adds one space after each comma and capitalizes an address", () => {
     expect(formatSchoolCardFieldValue(
       "Nikos Public School",
       "address",
-      "403,Supreme Savera,lane no.3,sr.no.53/3/3,Shivneri nagar, Kondhwa",
+      "403,supreme Savera,lane no.3,sr.no.53/3/3,Shivneri nagar, Kondhwa",
     )).toBe("403, Supreme Savera, lane no.3, sr.no.53/3/3, Shivneri nagar, Kondhwa")
   })
 
@@ -18,12 +18,12 @@ describe("formatSchoolCardFieldValue", () => {
     )).toBe("403, Supreme Savera, lane no.3, sr.no.53/3/3, Pune-411048.")
   })
 
-  it("leaves Nikos non-address fields unchanged", () => {
+  it("proper-cases student names", () => {
     expect(formatSchoolCardFieldValue(
       "Nikos Public School",
       "name",
-      "Hussain,Sajid",
-    )).toBe("Hussain,Sajid")
+      "IQRA BANU RAVEEN",
+    )).toBe("Iqra Banu Raveen")
   })
 
   it("formats Nikos prefixed address placeholders", () => {
@@ -34,11 +34,11 @@ describe("formatSchoolCardFieldValue", () => {
     )).toBe("Address: 403, Supreme Savera")
   })
 
-  it("leaves another school's address unchanged", () => {
+  it("applies the same address rule to every school", () => {
     expect(formatSchoolCardFieldValue(
       "Shining Light English School",
       "address",
-      "403,Supreme Savera",
-    )).toBe("403,Supreme Savera")
+      "403,supreme Savera",
+    )).toBe("403, Supreme Savera")
   })
 })

@@ -18,6 +18,7 @@ import { buildStudentIndexData } from "@/lib/student-index"
 import { validateAndBuildClassFields, templateHasDivisionPlaceholder, isDivisionDisabled } from "@/lib/section-class"
 import { recordPublicSubmissionAudit } from "@/lib/submission-audit"
 import { getTemplateForClass } from "@/lib/template-resolver"
+import { normalizeStudentStringFormData } from "@/lib/student-text-normalization"
 
 const photoUrlRefine = (url: string) => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
@@ -161,13 +162,13 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
     // This is a read-only lookup (findMany take:200) that doesn't need the
     // serialisation guarantee of the advisory-lock transaction.
     const autoFields = await computeAutoAssignedFields(cls.school.id)
-    const finalFormData = {
+    const finalFormData = normalizeStudentStringFormData({
       ...formDataWithBranch,
       ...autoFields,
       class: classFields.class,
       ...(classFields.classGrade ? { classGrade: classFields.classGrade } : {}),
       ...(classFields.division ? { division: classFields.division } : {}),
-    }
+    }, requiredFields)
     const indexData = buildStudentIndexData(finalFormData, cls.id)
     const photoFields = await requireValidSubmitPhotoFields({
       photoUrl: validated.photoUrl,

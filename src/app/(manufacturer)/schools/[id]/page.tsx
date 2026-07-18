@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
 import dynamic from "next/dynamic"
@@ -28,6 +28,7 @@ import {
 } from "@/lib/form-validation"
 import { resolveHouseImageUrl } from "@/lib/house-flags"
 import { isCompanyWorkspace } from "@/lib/workspace-kind"
+import { normalizeStudentFieldValue } from "@/lib/student-text-normalization"
 
 const EDIT_ADDRESS_MIN_WORDS = 5
 
@@ -227,6 +228,7 @@ type BatchData = {
 export default function SchoolDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const pathname = usePathname()
   const schoolId = params.id as string
 
   const [tab, setTab] = useState<"overview"|"classes"|"students"|"template"|"generate"|"batches"|"export">("overview")
@@ -2240,6 +2242,9 @@ export default function SchoolDetailPage() {
     school.name,
     (templateData?.fieldConfig || []) as Array<{ key?: string; label?: string }>
   )
+  const companyRoute = companyMode || pathname.startsWith("/companies/")
+  const directoryHref = companyRoute ? "/companies" : "/schools"
+  const directoryLabel = companyRoute ? "Company" : "Schools"
 
   const toggleSectionExpanded = (sectionId: string) => {
     setExpandedSectionIds((prev) => {
@@ -2299,14 +2304,14 @@ export default function SchoolDetailPage() {
       <nav style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#94a3b8', marginBottom: 12, flexWrap: 'wrap' }}>
         <Link href="/dashboard" style={{ color: '#64748b', textDecoration: 'none' }}>Dashboard</Link>
         <span>›</span>
-        <Link href="/schools" style={{ color: '#64748b', textDecoration: 'none' }}>Schools</Link>
+        <Link href={directoryHref} style={{ color: '#64748b', textDecoration: 'none' }}>{directoryLabel}</Link>
         <span>›</span>
         <span style={{ color: '#0f172a', fontWeight: 600 }}>{school.name}</span>
       </nav>
 
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-          <button className="btn-ghost" onClick={() => router.push('/schools')} style={{ padding: 4 }}>
+          <button className="btn-ghost" onClick={() => router.push(directoryHref)} style={{ padding: 4 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -2318,7 +2323,7 @@ export default function SchoolDetailPage() {
               <p style={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{school.address || school.contactEmail}</p>
             </div>
           </div>
-          <Link href={`/schools/${schoolId}/verify`} className="btn btn-outline" style={{ fontSize: 12, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+          <Link href={`${companyRoute ? "/companies" : "/schools"}/${schoolId}/verify`} className="btn btn-outline" style={{ fontSize: 12, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="2" width="8" height="8" rx="1" /><rect x="14" y="2" width="8" height="8" rx="1" /><rect x="2" y="14" width="8" height="8" rx="1" /><rect x="14" y="14" width="4" height="4" rx="0.5" /></svg>
             <span className="hide-on-small-mobile">QR Verify</span>
           </Link>
@@ -3770,7 +3775,15 @@ export default function SchoolDetailPage() {
                         <>
                           <textarea
                             value={editFormFields[field.key] || ''}
-                            onChange={e => setEditFormFields(prev => ({ ...prev, [field.key]: e.target.value }))}
+                            onChange={e => setEditFormFields(prev => ({
+                              ...prev,
+                              [field.key]: normalizeStudentFieldValue(
+                                field.key,
+                                e.target.value,
+                                field.label,
+                                field.role,
+                              ),
+                            }))}
                             rows={3}
                             placeholder="e.g. House No 12, MG Road, Kothrud, Pune, 411038"
                             style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, resize: 'vertical', boxSizing: 'border-box' }}
@@ -3787,7 +3800,15 @@ export default function SchoolDetailPage() {
                       ) : field.inputType === "textarea" ? (
                         <textarea
                           value={editFormFields[field.key] || ''}
-                          onChange={e => setEditFormFields(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          onChange={e => setEditFormFields(prev => ({
+                            ...prev,
+                            [field.key]: normalizeStudentFieldValue(
+                              field.key,
+                              e.target.value,
+                              field.label,
+                              field.role,
+                            ),
+                          }))}
                           rows={3}
                           style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, resize: 'vertical', boxSizing: 'border-box' }}
                         />
@@ -3795,7 +3816,15 @@ export default function SchoolDetailPage() {
                         <input
                           type={field.inputType === "dob" ? "date" : "text"}
                           value={editFormFields[field.key] || ''}
-                          onChange={e => setEditFormFields(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          onChange={e => setEditFormFields(prev => ({
+                            ...prev,
+                            [field.key]: normalizeStudentFieldValue(
+                              field.key,
+                              e.target.value,
+                              field.label,
+                              field.role,
+                            ),
+                          }))}
                           placeholder={`Enter ${field.label}`}
                           style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
                         />
@@ -5095,7 +5124,10 @@ export default function SchoolDetailPage() {
                         defaultValue={String(value || '')}
                         onBlur={(e) => {
                           if (e.target.value !== String(value || '')) {
-                            const updatedFormData = { ...(selectedStudent.formData as Record<string, string>), [key]: e.target.value }
+                            const updatedFormData = {
+                              ...(selectedStudent.formData as Record<string, string>),
+                              [key]: normalizeStudentFieldValue(key, e.target.value),
+                            }
                             setSelectedStudent({ ...selectedStudent, formData: updatedFormData })
                           }
                         }}

@@ -8,6 +8,7 @@ import { buildStudentIndexData } from "@/lib/student-index"
 import { normalizeFormValue } from "@/lib/field-resolver"
 import { reportSlowOperation } from "@/lib/observability"
 import { formatClassSection } from "@/lib/section-class"
+import { normalizeStudentStringFormData } from "@/lib/student-text-normalization"
 
 // Optimize: prefer longer-running function for connection reuse
 export const maxDuration = 10
@@ -180,20 +181,21 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     const { formData, classId, photoUrl, photoPath } = body
     if (!classId) return NextResponse.json({ error: "classId is required" }, { status: 400 })
     if (!formData || typeof formData !== "object") return NextResponse.json({ error: "formData is required" }, { status: 400 })
+    const normalizedFormData = normalizeStudentStringFormData(formData)
 
     const student = await prisma.$transaction(async (tx) => {
       const serialNumber = await getNextStudentSerial(tx, schoolId, school.name)
       const safePhotoPath = typeof photoPath === "string" && photoPath.startsWith(`students/${schoolId}/`)
         ? photoPath
         : ""
-      const indexData = buildStudentIndexData(formData, classId)
+      const indexData = buildStudentIndexData(normalizedFormData, classId)
       return tx.student.create({
         data: {
           schoolId,
           classId,
           serialNumber,
           ...indexData,
-          formData,
+          formData: normalizedFormData,
           photoUrl: photoUrl || "",
           photoPath: safePhotoPath,
           originalPhotoUrl: photoUrl || "",
