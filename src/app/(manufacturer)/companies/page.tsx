@@ -17,7 +17,6 @@ type CompanyWorkspace = {
 type CompanyStats = {
   totalSchools: number
   totalStudents: number
-  totalClasses: number
   totalBatches: number
 }
 
@@ -27,7 +26,6 @@ export default function CompaniesPage() {
   const [stats, setStats] = useState<CompanyStats>({
     totalSchools: 0,
     totalStudents: 0,
-    totalClasses: 0,
     totalBatches: 0,
   })
   const [loading, setLoading] = useState(true)
@@ -149,10 +147,6 @@ export default function CompaniesPage() {
             <div className="stat-card-label">Total Employees</div>
             <div className="stat-card-value">{stats.totalStudents.toLocaleString()}</div>
           </div>
-          <div className="stat-card stat-card-animated" style={{ animationDelay: "160ms" }}>
-            <div className="stat-card-label">Total Departments</div>
-            <div className="stat-card-value">{stats.totalClasses.toLocaleString()}</div>
-          </div>
         </div>
 
         {error ? (
@@ -190,8 +184,8 @@ export default function CompaniesPage() {
                     </div>
                   </div>
                   <div className="school-card-stats">
-                    <span className="school-card-stat"><strong>{workspace._count.classes}</strong> departments</span>
                     <span className="school-card-stat"><strong>{workspace._count.students}</strong> employees</span>
+                    <span className="status-badge" style={{ fontSize: 11, background: "#eff6ff", color: "#1d4ed8" }}>Independent Workspace</span>
                     {workspace.template && <span className="status-badge status-approved" style={{ fontSize: 11 }}>Template Ready</span>}
                   </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
