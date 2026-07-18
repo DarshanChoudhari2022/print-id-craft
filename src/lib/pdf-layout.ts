@@ -270,6 +270,82 @@ export function getMirroredCol(col: number, totalCols: number): number {
   return (totalCols - 1) - col
 }
 
+export type PairedCardPageLayout = {
+  arrangement: "vertical" | "horizontal" | "front-only"
+  front: { x: number; y: number; headerY: number }
+  back?: { x: number; y: number; headerY: number }
+}
+
+/**
+ * Places one employee's FRONT and BACK at their exact physical card size on
+ * one page. Vertical stacking is preferred; side-by-side is used when a tall
+ * card would not fit twice on the selected paper.
+ */
+export function calculatePairedCardPageLayout(
+  pageWidthMm: number,
+  pageHeightMm: number,
+  cardWidthMm: number,
+  cardHeightMm: number,
+  hasBackSide: boolean,
+  marginMm = 8,
+  headerHeightMm = 10,
+  pairGapMm = 8,
+): PairedCardPageLayout {
+  const blockHeight = headerHeightMm + cardHeightMm
+
+  if (!hasBackSide) {
+    const headerY = Math.max(marginMm, (pageHeightMm - blockHeight) / 2)
+    return {
+      arrangement: "front-only",
+      front: {
+        x: (pageWidthMm - cardWidthMm) / 2,
+        y: headerY + headerHeightMm,
+        headerY,
+      },
+    }
+  }
+
+  const verticalHeight = blockHeight * 2 + pairGapMm
+  if (
+    cardWidthMm + marginMm * 2 <= pageWidthMm &&
+    verticalHeight + marginMm * 2 <= pageHeightMm
+  ) {
+    const startY = (pageHeightMm - verticalHeight) / 2
+    const x = (pageWidthMm - cardWidthMm) / 2
+    return {
+      arrangement: "vertical",
+      front: { x, y: startY + headerHeightMm, headerY: startY },
+      back: {
+        x,
+        y: startY + blockHeight + pairGapMm + headerHeightMm,
+        headerY: startY + blockHeight + pairGapMm,
+      },
+    }
+  }
+
+  const horizontalWidth = cardWidthMm * 2 + pairGapMm
+  if (
+    horizontalWidth + marginMm * 2 <= pageWidthMm &&
+    blockHeight + marginMm * 2 <= pageHeightMm
+  ) {
+    const startX = (pageWidthMm - horizontalWidth) / 2
+    const headerY = (pageHeightMm - blockHeight) / 2
+    return {
+      arrangement: "horizontal",
+      front: { x: startX, y: headerY + headerHeightMm, headerY },
+      back: {
+        x: startX + cardWidthMm + pairGapMm,
+        y: headerY + headerHeightMm,
+        headerY,
+      },
+    }
+  }
+
+  throw new Error(
+    `FRONT and BACK at ${cardWidthMm}×${cardHeightMm} mm do not fit together on ${pageWidthMm}×${pageHeightMm} mm paper. Select a larger paper size.`
+  )
+}
+
 /* ─── Direct PDF generation (bypasses the PdfPrintSheet modal) ─── */
 
 export type DirectPdfOptions = {
@@ -303,6 +379,8 @@ export type DirectPdfOptions = {
   showCalibrationScale?: boolean
   /** Optional filename suffix for chunked downloads, e.g. "001-100" */
   filenameSuffix?: string
+  /** Keep each employee's FRONT and BACK together on one verification page. */
+  pairSidesPerEmployee?: boolean
 }
 
 /**
@@ -323,6 +401,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
     addCutMarks = true,
     showCalibrationScale = true,
     filenameSuffix,
+    pairSidesPerEmployee = false,
   } = opts
 
   const pageW = paperWidth
@@ -472,6 +551,80 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
 
   let aliasCounter = 0
 
+  if (pairSidesPerEmployee) {
+    for (let cardIdx = 0; cardIdx < cards.length; cardIdx++) {
+      if (cardIdx > 0) {
+        await yieldToBrowser()
+        doc.addPage([pageW, pageH])
+      }
+
+      const card = cards[cardIdx]
+      const pairedLayout = calculatePairedCardPageLayout(
+        pageW,
+        pageH,
+        cardW,
+        cardH,
+        Boolean(backBytes[cardIdx]),
+      )
+
+      const drawSideHeader = (
+        placement: { x: number; headerY: number },
+        side: "FRONT" | "BACK",
+      ) => {
+        const centerX = placement.x + cardW / 2
+        doc.setTextColor(15, 23, 42)
+        doc.setFont("helvetica", "bold")
+        doc.setFontSize(10)
+        doc.text(card.serialNumber, centerX, placement.headerY + 4, { align: "center" })
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(6)
+        doc.setTextColor(71, 85, 105)
+        doc.text(side, centerX, placement.headerY + 7.5, { align: "center" })
+      }
+
+      drawSideHeader(pairedLayout.front, "FRONT")
+      try {
+        if (frontBytes[cardIdx]) {
+          doc.addImage(
+            frontBytes[cardIdx],
+            frontFmt[cardIdx],
+            pairedLayout.front.x,
+            pairedLayout.front.y,
+            cardW,
+            cardH,
+            `img_${aliasCounter++}`,
+            "FAST",
+          )
+        }
+        if (addCutMarks) {
+          drawCutMarks(doc, pairedLayout.front.x, pairedLayout.front.y, cardW, cardH)
+        }
+      } catch (err) {
+        console.error(`Failed front image ${card.serialNumber}`, err)
+      }
+
+      if (pairedLayout.back && backBytes[cardIdx] && backFmt[cardIdx]) {
+        drawSideHeader(pairedLayout.back, "BACK")
+        try {
+          doc.addImage(
+            backBytes[cardIdx]!,
+            backFmt[cardIdx]!,
+            pairedLayout.back.x,
+            pairedLayout.back.y,
+            cardW,
+            cardH,
+            `img_${aliasCounter++}`,
+            "FAST",
+          )
+          if (addCutMarks) {
+            drawCutMarks(doc, pairedLayout.back.x, pairedLayout.back.y, cardW, cardH)
+          }
+        } catch (err) {
+          console.error(`Failed back image ${card.serialNumber}`, err)
+        }
+      }
+    }
+  } else {
   // Front pages
   for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
     if (pageIdx > 0) await yieldToBrowser()
@@ -530,6 +683,8 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
     }
   }
 
+  }
+
   // Download
   const filename = generatePdfChunkFilename(schoolName, filenameSuffix)
   const pdfBlob = doc.output("blob")
@@ -541,5 +696,10 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
   a.click()
   document.body.removeChild(a)
   setTimeout(() => URL.revokeObjectURL(blobUrl), 5000)
-  toast.success(`PDF saved! ${cards.length} cards on ${totalPages} page(s) · ${pageW}×${pageH}mm · Card ${cardW}×${cardH}mm · Grid ${cols}×${rows}`)
+  const savedPageCount = pairSidesPerEmployee ? cards.length : totalPages * (hasBackSide ? 2 : 1)
+  toast.success(
+    pairSidesPerEmployee
+      ? `PDF saved! ${cards.length} employee card pair(s) on ${savedPageCount} page(s) · FRONT and BACK kept together.`
+      : `PDF saved! ${cards.length} cards on ${savedPageCount} page(s) · ${pageW}×${pageH}mm · Card ${cardW}×${cardH}mm · Grid ${cols}×${rows}`
+  )
 }

@@ -9,7 +9,7 @@ import {
   getCardTextWrapMode,
 } from "@/lib/field-resolver"
 import { PrintDialog, type PrintConfig } from "./IDMakerDialogs"
-import { generateDirectPdf } from "@/lib/pdf-layout"
+import { calculatePairedCardPageLayout, generateDirectPdf } from "@/lib/pdf-layout"
 import {
   DEFAULT_CARD_HEIGHT_MM,
   DEFAULT_CARD_WIDTH_MM,
@@ -1265,6 +1265,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     cols?: number
     rows?: number
     totalPages?: number
+    pairedSides?: boolean
     // For PDF: keep raw rendered cards + studentIds so we can re-stage when user edits layout
     pdfCards?: PdfRenderCard[]
     pdfStudentIds?: string[]
@@ -1470,6 +1471,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         marginMm: 0,
         gapMm: 0,
         filenameSuffix: suffix,
+        pairSidesPerEmployee: true,
       })
 
       if (totalFiles > 1 && chunkIndex < chunks.length - 1) {
@@ -1638,7 +1640,14 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           : printConfig.paperHeight
         const cols = Math.max(1, Math.floor((availW + (hPitch - cw)) / hPitch))
         const rows = Math.max(1, Math.floor((availH + (vPitch - ch)) / vPitch))
-        const totalPages = Math.ceil(allCards.length / (cols * rows))
+        calculatePairedCardPageLayout(
+          printConfig.paperWidth,
+          printConfig.paperHeight,
+          cw,
+          ch,
+          allCards.some(card => Boolean(card.backDataUrl)),
+        )
+        const totalPages = allCards.length
 
         // Stage the save — DO NOT download yet. User must confirm via the
         // preview panel after verifying the layout matches their cutter.
@@ -1657,6 +1666,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           cols,
           rows,
           totalPages,
+          pairedSides: true,
           pdfCards: allCards,
           pdfStudentIds: studentIds,
           pdfChunkSize,
@@ -1676,7 +1686,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         setProgress({
           current: totalCount,
           total: totalCount,
-          status: `Ready! Verify layout below, then click Download. (${cols}×${rows} = ${cols*rows} per page · ${totalPages} pages · ${getPdfFileCount(allCards.length, pdfChunkSize, allCards)} continuous class-ordered PDF file(s))`,
+          status: `Ready! Verify paired FRONT/BACK blocks below, then click Download. (${totalPages} employee pages · ${getPdfFileCount(allCards.length, pdfChunkSize, allCards)} continuous ID-ordered PDF file(s))`,
         })
 
       // ──── CDR (SVG) PATH ────
@@ -2048,7 +2058,18 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     const availH = cfg.v1stPosition > 0 ? cfg.paperHeight - cfg.v1stPosition : cfg.paperHeight
     const cols = Math.max(1, Math.floor((availW + (hPitch - cw)) / hPitch))
     const rows = Math.max(1, Math.floor((availH + (vPitch - ch)) / vPitch))
-    const totalPages = Math.ceil(cards.length / (cols * rows))
+    if (fmt === "PDF_PRINT") {
+      calculatePairedCardPageLayout(
+        cfg.paperWidth,
+        cfg.paperHeight,
+        cw,
+        ch,
+        cards.some(card => Boolean(card.backDataUrl)),
+      )
+    }
+    const totalPages = fmt === "PDF_PRINT"
+      ? cards.length
+      : Math.ceil(cards.length / (cols * rows))
     setLastCardDims({ w: cw, h: ch })
     setPendingSave({
       format: fmt,
@@ -2064,6 +2085,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
       cols,
       rows,
       totalPages,
+      pairedSides: fmt === "PDF_PRINT",
       pdfCards: cards,
       pdfStudentIds: studentIds,
       pdfChunkSize: pendingSave.pdfChunkSize,
@@ -2102,7 +2124,13 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             }, `${generationScopeName}-IDCards-BMP-Pages.zip`)
           },
     })
-    setProgress({ current: cards.length, total: cards.length, status: `Layout updated! (${cols}×${rows} = ${cols * rows} per page · ${totalPages} pages)` })
+    setProgress({
+      current: cards.length,
+      total: cards.length,
+      status: fmt === "PDF_PRINT"
+        ? `Layout updated! ${totalPages} employee page(s), each with paired FRONT/BACK blocks.`
+        : `Layout updated! (${cols}×${rows} = ${cols * rows} per page · ${totalPages} pages)`,
+    })
   }, [downloadPdfInChunks, generationScopeName, pdfChunkSize, pendingSave])
 
   return (
@@ -2604,8 +2632,9 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             </h4>
           </div>
           <p style={{ fontSize: 12, color: "#78350f", marginBottom: 14, lineHeight: 1.5 }}>
-            Cards have been rendered at the <strong>exact dimensions configured below</strong>.
-            Confirm these match your cutter setup before saving.
+            {pendingSave.pairedSides
+              ? <>Each employee is kept on <strong>one page</strong> in ID order, with the ID code and FRONT/BACK label centered above each exact-size side.</>
+              : <>Cards have been rendered at the <strong>exact dimensions configured below</strong>. Confirm these match your cutter setup before saving.</>}
           </p>
 
           <div
@@ -2644,9 +2673,13 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>Grid / Page</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    {pendingSave.pairedSides ? "Page Structure" : "Grid / Page"}
+                  </div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2, fontFamily: "monospace" }}>
-                    {pendingSave.cols} × {pendingSave.rows} = {(pendingSave.cols || 0) * (pendingSave.rows || 0)} cards
+                    {pendingSave.pairedSides
+                      ? "1 employee · FRONT + BACK"
+                      : `${pendingSave.cols} × ${pendingSave.rows} = ${(pendingSave.cols || 0) * (pendingSave.rows || 0)} cards`}
                   </div>
                 </div>
                 <div>
@@ -2655,21 +2688,25 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                     {pendingSave.totalPages}
                   </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>1st Card Position</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2, fontFamily: "monospace" }}>
-                    X: {pendingSave.h1stPosition} mm · Y: {pendingSave.v1stPosition} mm
-                    {(pendingSave.h1stPosition === 0 && pendingSave.v1stPosition === 0) && (
-                      <span style={{ fontSize: 10, color: "#92400e", marginLeft: 6 }}>(auto-centered)</span>
-                    )}
+                {!pendingSave.pairedSides && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>1st Card Position</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2, fontFamily: "monospace" }}>
+                      X: {pendingSave.h1stPosition} mm · Y: {pendingSave.v1stPosition} mm
+                      {(pendingSave.h1stPosition === 0 && pendingSave.v1stPosition === 0) && (
+                        <span style={{ fontSize: 10, color: "#92400e", marginLeft: 6 }}>(auto-centered)</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>Pitch (card-to-card)</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2, fontFamily: "monospace" }}>
-                    H: {pendingSave.hPitch} mm · V: {pendingSave.vPitch} mm
+                )}
+                {!pendingSave.pairedSides && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: 0.5 }}>Pitch (card-to-card)</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2, fontFamily: "monospace" }}>
+                      H: {pendingSave.hPitch} mm · V: {pendingSave.vPitch} mm
+                    </div>
                   </div>
-                </div>
+                )}
               </>
             )}
             <div>
@@ -2680,7 +2717,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             </div>
           </div>
 
-          {(pendingSave.format === "PDF_PRINT" || pendingSave.format === "BMP") && pendingSave.hPitch > 0 && pendingSave.vPitch > 0 && (
+          {!pendingSave.pairedSides && (pendingSave.format === "PDF_PRINT" || pendingSave.format === "BMP") && pendingSave.hPitch > 0 && pendingSave.vPitch > 0 && (
             (pendingSave.hPitch < pendingSave.cardW || pendingSave.vPitch < pendingSave.cardH) && (
               <div style={{
                 background: "#fee2e2",
@@ -2866,6 +2903,9 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           >
             {previewCards.map((card) => (
               <div key={card.serialNumber}>
+                <div style={{ textAlign: "center", fontSize: 12, fontWeight: 700, color: "#334155", fontFamily: "monospace" }}>
+                  {card.serialNumber}
+                </div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textAlign: "center" }}>FRONT</div>
                 <img
                   src={card.frontDataUrl}
@@ -2879,7 +2919,10 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 />
                 {card.backDataUrl && (
                   <>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, marginTop: 8, textAlign: "center" }}>BACK</div>
+                    <div style={{ textAlign: "center", fontSize: 12, fontWeight: 700, color: "#334155", marginTop: 12, fontFamily: "monospace" }}>
+                      {card.serialNumber}
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textAlign: "center" }}>BACK</div>
                     <img
                       src={card.backDataUrl}
                       alt={`ID Card Back ${card.serialNumber}`}
@@ -2892,18 +2935,6 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                     />
                   </>
                 )}
-                <div
-                  style={{
-                    textAlign: "center",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "#64748b",
-                    marginTop: 6,
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {card.serialNumber}
-                </div>
               </div>
             ))}
           </div>
