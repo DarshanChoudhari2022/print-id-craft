@@ -15,8 +15,11 @@ describe("generation filter UI wiring", () => {
     expect(source).toContain("reconcileGenerationScopeSelection")
   })
 
-  it("renders Section, Class/Grade, and Division controls", () => {
-    expect(source).toMatch(/>\s*Section\s*</)
+  it("renders school filters but switches to company employee terminology", () => {
+    expect(source).toContain('{companyMode ? "Department" : "Section"}')
+    expect(source).toContain('{companyMode ? "All Departments" : "All Sections"}')
+    expect(source).toContain('{companyMode ? "Employee Status" : "Student Status"}')
+    expect(source).toContain("!companyMode && <div")
     expect(source).toMatch(/>\s*Class\/Grade\s*</)
     expect(source).toMatch(/>\s*Division\s*</)
     expect(source).toContain("All Sections")

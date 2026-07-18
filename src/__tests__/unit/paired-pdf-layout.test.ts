@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { calculatePairedCardPageLayout } from "@/lib/pdf-layout"
+import {
+  calculatePairedCardPageLayout,
+  calculatePairedEmployeeSheetLayout,
+} from "@/lib/pdf-layout"
 
 describe("paired employee PDF layout", () => {
   it("keeps tall FRONT and BACK cards together side-by-side on A4 landscape", () => {
@@ -37,5 +40,42 @@ describe("paired employee PDF layout", () => {
     expect(() =>
       calculatePairedCardPageLayout(100, 100, 90, 90, true),
     ).toThrow(/Select a larger paper size/)
+  })
+
+  it("packs five exact 58×100 mm employee pairs onto A4 landscape", () => {
+    const layout = calculatePairedEmployeeSheetLayout(
+      297,
+      210,
+      58,
+      100,
+      true,
+    )
+
+    expect(layout.arrangement).toBe("vertical")
+    expect(layout.pairsPerPage).toBe(5)
+    expect(layout.placements).toHaveLength(5)
+
+    for (const pair of layout.placements) {
+      expect(pair.back).toBeDefined()
+      expect(pair.front.x).toBe(pair.back!.x)
+      expect(pair.front.y).toBe(5)
+      expect(pair.back!.y).toBe(110)
+      expect(pair.back!.y + 100).toBeLessThanOrEqual(210)
+    }
+
+    expect(layout.placements[0].front.x).toBe(3.5)
+    expect(layout.placements[4].front.x + 58).toBe(293.5)
+  })
+
+  it("never exceeds the requested five-employee sheet cap", () => {
+    const layout = calculatePairedEmployeeSheetLayout(
+      420,
+      297,
+      58,
+      100,
+      true,
+    )
+
+    expect(layout.pairsPerPage).toBe(5)
   })
 })

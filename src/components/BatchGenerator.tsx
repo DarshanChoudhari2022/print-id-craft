@@ -9,7 +9,7 @@ import {
   getCardTextWrapMode,
 } from "@/lib/field-resolver"
 import { PrintDialog, type PrintConfig } from "./IDMakerDialogs"
-import { calculatePairedCardPageLayout, generateDirectPdf } from "@/lib/pdf-layout"
+import { calculatePairedEmployeeSheetLayout, generateDirectPdf } from "@/lib/pdf-layout"
 import {
   DEFAULT_CARD_HEIGHT_MM,
   DEFAULT_CARD_WIDTH_MM,
@@ -95,6 +95,7 @@ type BatchGeneratorProps = {
   schoolId: string
   schoolName: string
   classes: { id: string; name: string; _count: { students: number } }[]
+  companyMode?: boolean
 }
 
 // normalizeKey, FIELD_GROUPS, resolveDisplayFieldValue imported from @/lib/field-resolver
@@ -1229,7 +1230,7 @@ async function saveBmpPagesToFolder(
   }
 }
 
-export default function BatchGenerator({ schoolId, schoolName, classes }: BatchGeneratorProps) {
+export default function BatchGenerator({ schoolId, schoolName, classes, companyMode = false }: BatchGeneratorProps) {
   const [selectedClassId, setSelectedClassId] = useState("")
   const [selectedClassGrade, setSelectedClassGrade] = useState("")
   const [selectedDivision, setSelectedDivision] = useState("")
@@ -1266,6 +1267,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     rows?: number
     totalPages?: number
     pairedSides?: boolean
+    pairsPerPage?: number
     // For PDF: keep raw rendered cards + studentIds so we can re-stage when user edits layout
     pdfCards?: PdfRenderCard[]
     pdfStudentIds?: string[]
@@ -1640,14 +1642,14 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           : printConfig.paperHeight
         const cols = Math.max(1, Math.floor((availW + (hPitch - cw)) / hPitch))
         const rows = Math.max(1, Math.floor((availH + (vPitch - ch)) / vPitch))
-        calculatePairedCardPageLayout(
+        const pairedLayout = calculatePairedEmployeeSheetLayout(
           printConfig.paperWidth,
           printConfig.paperHeight,
           cw,
           ch,
           allCards.some(card => Boolean(card.backDataUrl)),
         )
-        const totalPages = allCards.length
+        const totalPages = Math.ceil(allCards.length / pairedLayout.pairsPerPage)
 
         // Stage the save — DO NOT download yet. User must confirm via the
         // preview panel after verifying the layout matches their cutter.
@@ -1667,6 +1669,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           rows,
           totalPages,
           pairedSides: true,
+          pairsPerPage: pairedLayout.pairsPerPage,
           pdfCards: allCards,
           pdfStudentIds: studentIds,
           pdfChunkSize,
@@ -1686,7 +1689,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         setProgress({
           current: totalCount,
           total: totalCount,
-          status: `Ready! Verify paired FRONT/BACK blocks below, then click Download. (${totalPages} employee pages · ${getPdfFileCount(allCards.length, pdfChunkSize, allCards)} continuous ID-ordered PDF file(s))`,
+          status: `Ready! Verify paired FRONT/BACK blocks below, then click Download. (${pairedLayout.pairsPerPage} employees per sheet · ${totalPages} pages · ${getPdfFileCount(allCards.length, pdfChunkSize, allCards)} continuous ID-ordered PDF file(s))`,
         })
 
       // ──── CDR (SVG) PATH ────
@@ -1981,7 +1984,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
       setProgress({
         current: pendingSave.cardCount,
         total: pendingSave.cardCount,
-        status: `Downloaded ${pendingSave.cardCount} card(s) in ${fileCount} file(s). Student status is unchanged until you confirm physical printing.`,
+        status: `Downloaded ${pendingSave.cardCount} card(s) in ${fileCount} file(s). ${companyMode ? "Employee" : "Student"} status is unchanged until you confirm physical printing.`,
       })
       if (pendingSave.pdfStudentIds?.length) {
         setLastDownloadedPrintJob({
@@ -1999,7 +2002,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     } finally {
       setDownloading(false)
     }
-  }, [getPdfFileCount, pdfChunkSize, pendingSave])
+  }, [companyMode, getPdfFileCount, pdfChunkSize, pendingSave])
 
   const handleCancelDownload = useCallback(() => {
     setPendingSave(null)
@@ -2009,7 +2012,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
   const handleConfirmPrinted = useCallback(async () => {
     if (!lastDownloadedPrintJob || markingPrinted) return
     const ok = window.confirm(
-      `Mark ${lastDownloadedPrintJob.cardCount} downloaded student(s) as PRINTED?\n\nOnly confirm this after the cards have physically printed correctly.`
+      `Mark ${lastDownloadedPrintJob.cardCount} downloaded ${companyMode ? "employee" : "student"}(s) as PRINTED?\n\nOnly confirm this after the cards have physically printed correctly.`
     )
     if (!ok) return
 
@@ -2029,12 +2032,12 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
         throw new Error(data.error || "Failed to mark printed")
       }
       const printedCount = data.printedCount ?? lastDownloadedPrintJob.cardCount
-      toast.success(`${printedCount} student(s) marked as PRINTED.`)
+      toast.success(`${printedCount} ${companyMode ? "employee" : "student"}(s) marked as PRINTED.`)
       setLastDownloadedPrintJob(null)
       setProgress({
         current: lastDownloadedPrintJob.cardCount,
         total: lastDownloadedPrintJob.cardCount,
-        status: `${printedCount} student(s) confirmed as physically printed.`,
+        status: `${printedCount} ${companyMode ? "employee" : "student"}(s) confirmed as physically printed.`,
       })
     } catch (err: any) {
       console.error(err)
@@ -2042,7 +2045,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     } finally {
       setMarkingPrinted(false)
     }
-  }, [lastDownloadedPrintJob, markingPrinted, schoolId])
+  }, [companyMode, lastDownloadedPrintJob, markingPrinted, schoolId])
 
   // Re-stage save (PDF or BMP) using already-rendered cards but a (possibly new) printConfig.
   // Called when the user clicks "Edit Layout" and confirms the dialog — avoids re-rendering.
@@ -2058,17 +2061,17 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
     const availH = cfg.v1stPosition > 0 ? cfg.paperHeight - cfg.v1stPosition : cfg.paperHeight
     const cols = Math.max(1, Math.floor((availW + (hPitch - cw)) / hPitch))
     const rows = Math.max(1, Math.floor((availH + (vPitch - ch)) / vPitch))
-    if (fmt === "PDF_PRINT") {
-      calculatePairedCardPageLayout(
+    const pairedLayout = fmt === "PDF_PRINT"
+      ? calculatePairedEmployeeSheetLayout(
         cfg.paperWidth,
         cfg.paperHeight,
         cw,
         ch,
         cards.some(card => Boolean(card.backDataUrl)),
       )
-    }
+      : null
     const totalPages = fmt === "PDF_PRINT"
-      ? cards.length
+      ? Math.ceil(cards.length / pairedLayout!.pairsPerPage)
       : Math.ceil(cards.length / (cols * rows))
     setLastCardDims({ w: cw, h: ch })
     setPendingSave({
@@ -2086,6 +2089,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
       rows,
       totalPages,
       pairedSides: fmt === "PDF_PRINT",
+      pairsPerPage: pairedLayout?.pairsPerPage,
       pdfCards: cards,
       pdfStudentIds: studentIds,
       pdfChunkSize: pendingSave.pdfChunkSize,
@@ -2128,7 +2132,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
       current: cards.length,
       total: cards.length,
       status: fmt === "PDF_PRINT"
-        ? `Layout updated! ${totalPages} employee page(s), each with paired FRONT/BACK blocks.`
+        ? `Layout updated! ${pairedLayout!.pairsPerPage} employees per paired FRONT/BACK sheet · ${totalPages} pages.`
         : `Layout updated! (${cols}×${rows} = ${cols * rows} per page · ${totalPages} pages)`,
     })
   }, [downloadPdfInChunks, generationScopeName, pdfChunkSize, pendingSave])
@@ -2174,7 +2178,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
             <label
               style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 6, display: "block" }}
             >
-              Section
+              {companyMode ? "Department" : "Section"}
             </label>
             <select
               value={selectedClassId}
@@ -2194,16 +2198,16 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 fontSize: 14,
               }}
             >
-              <option value="">All Sections</option>
+              <option value="">{companyMode ? "All Departments" : "All Sections"}</option>
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} ({c._count.students} students)
+                  {c.name} ({c._count.students} {companyMode ? "employees" : "students"})
                 </option>
               ))}
             </select>
           </div>
 
-          <div style={{ flex: "1 1 160px" }}>
+          {!companyMode && <div style={{ flex: "1 1 160px" }}>
             <label
               style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 6, display: "block" }}
             >
@@ -2234,9 +2238,9 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 </option>
               ))}
             </select>
-          </div>
+          </div>}
 
-          <div style={{ flex: "1 1 150px" }}>
+          {!companyMode && <div style={{ flex: "1 1 150px" }}>
             <label
               style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 6, display: "block" }}
             >
@@ -2266,13 +2270,13 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                 </option>
               ))}
             </select>
-          </div>
+          </div>}
 
           <div style={{ flex: "1 1 160px" }}>
             <label
               style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 6, display: "block" }}
             >
-              Student Status
+              {companyMode ? "Employee Status" : "Student Status"}
             </label>
             <select
               value={statusFilter}
@@ -2340,9 +2344,9 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                   background: "#fff7ed",
                 }}
               >
-                <option value={50}>50 students/file</option>
-                <option value={100}>100 students/file</option>
-                <option value={200}>200 students/file</option>
+                <option value={50}>50 {companyMode ? "employees" : "students"}/file</option>
+                <option value={100}>100 {companyMode ? "employees" : "students"}/file</option>
+                <option value={200}>200 {companyMode ? "employees" : "students"}/file</option>
                 <option value={0}>All in one PDF (auto-split if large)</option>
               </select>
             </div>
@@ -2633,7 +2637,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
           </div>
           <p style={{ fontSize: 12, color: "#78350f", marginBottom: 14, lineHeight: 1.5 }}>
             {pendingSave.pairedSides
-              ? <>Each employee is kept on <strong>one page</strong> in ID order, with the ID code and FRONT/BACK label centered above each exact-size side.</>
+              ? <>Up to <strong>{pendingSave.pairsPerPage} employees are packed on each sheet</strong> in ID order. Every exact-size FRONT remains directly paired with its matching BACK and ID code.</>
               : <>Cards have been rendered at the <strong>exact dimensions configured below</strong>. Confirm these match your cutter setup before saving.</>}
           </p>
 
@@ -2678,7 +2682,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes }: BatchG
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginTop: 2, fontFamily: "monospace" }}>
                     {pendingSave.pairedSides
-                      ? "1 employee · FRONT + BACK"
+                      ? `${pendingSave.pairsPerPage} employees · paired FRONT + BACK`
                       : `${pendingSave.cols} × ${pendingSave.rows} = ${(pendingSave.cols || 0) * (pendingSave.rows || 0)} cards`}
                   </div>
                 </div>

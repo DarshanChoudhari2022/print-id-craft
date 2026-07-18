@@ -60,8 +60,8 @@ function defaultCropRect(imgBox: Rect, aspectRatio: number): Rect {
 
 /**
  * PhotoCropper — interactive crop UI with a fixed aspect ratio.
- * Supports zoom/pan on the source image so parents can see the entire
- * photo and frame the crop box anywhere on it.
+ * Supports quarter-turn rotation plus zoom/pan on the source image so users
+ * can correct orientation and frame the crop box anywhere on it.
  */
 export default function PhotoCropper({
   photoUrl,
@@ -72,6 +72,7 @@ export default function PhotoCropper({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
+  const [workingPhotoUrl, setWorkingPhotoUrl] = useState(photoUrl)
   const [viewport, setViewport] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
   const [imgBox, setImgBox] = useState<Rect>({ x: 0, y: 0, w: 0, h: 0 })
   const [crop, setCrop] = useState<Rect>({ x: 0, y: 0, w: 0, h: 0 })
@@ -79,6 +80,8 @@ export default function PhotoCropper({
   const [imageScale, setImageScale] = useState(1)
   const [imagePan, setImagePan] = useState({ x: 0, y: 0 })
   const [showFullPreview, setShowFullPreview] = useState(false)
+  const [rotating, setRotating] = useState(false)
+  const [rotationError, setRotationError] = useState("")
   const [dragMode, setDragMode] = useState<
     | { kind: "move"; startX: number; startY: number; orig: Rect }
     | { kind: "resize"; corner: "tl" | "tr" | "bl" | "br"; startX: number; startY: number; orig: Rect }
@@ -86,6 +89,12 @@ export default function PhotoCropper({
     | null
   >(null)
   const pinchRef = useRef<{ dist: number; scale: number } | null>(null)
+
+  useEffect(() => {
+    setWorkingPhotoUrl(photoUrl)
+    setRotationError("")
+    setRotating(false)
+  }, [photoUrl])
 
   const computeImgBox = useCallback(
     (vp: { w: number; h: number }, scale: number, pan: { x: number; y: number }): Rect => {
@@ -179,6 +188,39 @@ export default function PhotoCropper({
   const adjustZoom = (delta: number) => {
     setShowFullPreview(false)
     setImageScale((s) => clamp(Number((s + delta).toFixed(2)), MIN_IMAGE_SCALE, MAX_IMAGE_SCALE))
+  }
+
+  const rotatePhoto = (quarterTurns: -1 | 1) => {
+    const img = imgRef.current
+    if (!img?.naturalWidth || rotating) return
+
+    setRotating(true)
+    setRotationError("")
+    setShowFullPreview(false)
+    setDragMode(null)
+    try {
+      const canvas = document.createElement("canvas")
+      canvas.width = img.naturalHeight
+      canvas.height = img.naturalWidth
+      const ctx = canvas.getContext("2d")
+      if (!ctx) throw new Error("Canvas is unavailable")
+
+      ctx.translate(canvas.width / 2, canvas.height / 2)
+      ctx.rotate(quarterTurns * Math.PI / 2)
+      ctx.drawImage(
+        img,
+        -img.naturalWidth / 2,
+        -img.naturalHeight / 2,
+        img.naturalWidth,
+        img.naturalHeight,
+      )
+      // PNG avoids cumulative JPEG quality loss when users rotate repeatedly.
+      setWorkingPhotoUrl(canvas.toDataURL("image/png"))
+    } catch (error) {
+      console.error("Photo rotation failed", error)
+      setRotationError("Could not rotate this photo. Try choosing the photo again.")
+      setRotating(false)
+    }
   }
 
   const onPointerDown = (e: React.PointerEvent, kind: "move" | "tl" | "tr" | "bl" | "br" | "pan") => {
@@ -348,11 +390,37 @@ export default function PhotoCropper({
         >
           {showFullPreview ? "Back to crop" : "Preview full photo"}
         </button>
+        <button
+          type="button"
+          onClick={() => rotatePhoto(-1)}
+          style={toolBtnStyle}
+          aria-label="Rotate photo left 90 degrees"
+          title="Rotate left 90°"
+          disabled={rotating}
+        >
+          ↶ 90°
+        </button>
+        <button
+          type="button"
+          onClick={() => rotatePhoto(1)}
+          style={toolBtnStyle}
+          aria-label="Rotate photo right 90 degrees"
+          title="Rotate right 90°"
+          disabled={rotating}
+        >
+          ↷ 90°
+        </button>
       </div>
 
       <div style={{ fontSize: 11, color: "#64748b", textAlign: "center", marginBottom: 8 }}>
-        Zoom {zoomPercent}% · Pinch or use −/+ · Drag dark area to move photo
+        Zoom {zoomPercent}% · Rotate 90° · Pinch or use −/+ · Drag dark area to move photo
       </div>
+
+      {rotationError && (
+        <div role="alert" style={{ fontSize: 11, color: "#b91c1c", textAlign: "center", marginBottom: 8 }}>
+          {rotationError}
+        </div>
+      )}
 
       <div
         ref={containerRef}
@@ -377,10 +445,13 @@ export default function PhotoCropper({
       >
         <img
           ref={imgRef}
-          src={photoUrl}
+          src={workingPhotoUrl}
           alt="Crop source"
           crossOrigin="anonymous"
-          onLoad={layout}
+          onLoad={() => {
+            layout()
+            setRotating(false)
+          }}
           draggable={false}
           style={{
             position: "absolute",
@@ -444,7 +515,7 @@ export default function PhotoCropper({
       <div style={{ marginTop: 10, fontSize: 11, color: "#64748b", textAlign: "center", lineHeight: 1.5 }}>
         {showFullPreview
           ? "Full photo preview — tap Back to crop when ready."
-          : `Move crop box · Resize corners · Pan photo on dark area · Aspect ${aspectLabel}`}
+          : `Rotate if needed · Move crop box · Resize corners · Pan photo on dark area · Aspect ${aspectLabel}`}
       </div>
 
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>

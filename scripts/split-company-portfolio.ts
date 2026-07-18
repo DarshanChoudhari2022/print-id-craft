@@ -229,6 +229,7 @@ async function main() {
       const company = await tx.school.create({
         data: {
           name: item.companyName,
+          workspaceKind: "company",
           address: item.companyAddress,
           contactEmail: item.representativeEmail,
           logoUrl: source.logoUrl,

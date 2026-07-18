@@ -56,6 +56,7 @@ export async function GET(req: Request) {
         select: {
           id: true,
           name: true,
+          workspaceKind: true,
           contactEmail: true,
           address: true,
           logoUrl: true,
@@ -77,6 +78,7 @@ export async function GET(req: Request) {
               ? template.fieldConfig as Array<{ key?: string; label?: string }>
               : []
           ),
+          school.workspaceKind,
         ) === wantCompany
       )
       const start = (page - 1) * limit
@@ -167,6 +169,7 @@ export async function POST(req: Request) {
       const school = await tx.school.create({
         data: {
           name: validated.name,
+          workspaceKind: validated.workspaceKind,
           contactEmail: validated.contactEmail,
           address: validated.address || null,
           logoUrl: validated.logoUrl || null,

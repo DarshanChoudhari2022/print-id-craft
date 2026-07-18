@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     const [school, classes, students, totalCount, statusCounts, template] = await Promise.all([
       safeQuery(() => prisma.school.findUnique({
         where: { id: schoolId as string },
-        select: { name: true, logoUrl: true },
+        select: { name: true, logoUrl: true, workspaceKind: true },
       }), null),
       // Main teacher sees all classes; class teacher sees only their class
       safeQuery(() => prisma.class.findMany({

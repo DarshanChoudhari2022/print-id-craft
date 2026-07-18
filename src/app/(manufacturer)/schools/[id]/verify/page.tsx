@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
-import { useParams } from "next/navigation"
+import { useParams, usePathname } from "next/navigation"
 import { toast } from "sonner"
 
 type VerifyResult = {
@@ -17,19 +17,25 @@ type VerifyResult = {
 
 export default function VerifyPage() {
   const params = useParams()
+  const pathname = usePathname()
   const schoolId = params.id as string
   const [mode, setMode] = useState<"manual" | "scan">("manual")
   const [serialInput, setSerialInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<VerifyResult | null>(null)
   const [schoolName, setSchoolName] = useState("")
+  const [companyWorkspace, setCompanyWorkspace] = useState(pathname.startsWith("/companies/"))
 
   useEffect(() => {
     fetch(`/api/schools/${schoolId}`)
       .then(r => r.json())
-      .then(d => { if (d.success) setSchoolName(d.data.name) })
+      .then(d => {
+        if (!d.success) return
+        setSchoolName(d.data.name)
+        setCompanyWorkspace(pathname.startsWith("/companies/") || d.data.workspaceKind === "company")
+      })
       .catch(() => {})
-  }, [schoolId])
+  }, [pathname, schoolId])
 
   const handleVerify = async (serial?: string) => {
     const query = serial || serialInput.trim()
@@ -42,10 +48,10 @@ export default function VerifyPage() {
       const data = await res.json()
       if (data.success && data.data.length > 0) {
         setResult({ found: true, student: data.data[0] })
-        toast.success("Student found!")
+        toast.success(`${companyWorkspace ? "Employee" : "Student"} found!`)
       } else {
         setResult({ found: false })
-        toast.error("No student found with this serial number")
+        toast.error(`No ${companyWorkspace ? "employee" : "student"} found with this serial number`)
       }
     } catch (err) {
       toast.error("Verification failed")
@@ -80,7 +86,7 @@ export default function VerifyPage() {
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="2" width="8" height="8" rx="1" /><rect x="14" y="2" width="8" height="8" rx="1" /><rect x="2" y="14" width="8" height="8" rx="1" /><rect x="14" y="14" width="4" height="4" rx="0.5" /><rect x="20" y="14" width="2" height="2" rx="0.25" /><rect x="14" y="20" width="2" height="2" rx="0.25" /><rect x="18" y="18" width="4" height="4" rx="0.5" /></svg>
         </div>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>ID Card Verification</h1>
-        <p style={{ fontSize: 14, color: '#64748b' }}>{schoolName || "Verify student ID cards"}</p>
+        <p style={{ fontSize: 14, color: '#64748b' }}>{schoolName || `Verify ${companyWorkspace ? "employee" : "student"} ID cards`}</p>
       </div>
 
       {/* Mode Toggle */}
@@ -145,10 +151,10 @@ export default function VerifyPage() {
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: result.found ? '#16a34a' : '#dc2626' }}>
-                {result.found ? "VERIFIED — Student Found" : "NOT FOUND"}
+                {result.found ? `VERIFIED — ${companyWorkspace ? "Employee" : "Student"} Found` : "NOT FOUND"}
               </div>
               <div style={{ fontSize: 12, color: '#64748b' }}>
-                {result.found ? `Serial: ${result.student?.serialNumber}` : "No student matches this serial number"}
+                {result.found ? `Serial: ${result.student?.serialNumber}` : `No ${companyWorkspace ? "employee" : "student"} matches this serial number`}
               </div>
             </div>
           </div>

@@ -19,4 +19,12 @@ describe("company workspace detection", () => {
       { key: "dateOfBirth", label: "Date of Birth" },
     ])).toBe(false)
   })
+
+  it("uses the explicit workspace kind before template heuristics", () => {
+    expect(isCompanyWorkspace("DataShastra", [], "company")).toBe(true)
+    expect(isCompanyWorkspace("Company ID Cards", [
+      { key: "employeeId", label: "Employee ID" },
+      { key: "companyName", label: "Company Name" },
+    ], "school")).toBe(false)
+  })
 })

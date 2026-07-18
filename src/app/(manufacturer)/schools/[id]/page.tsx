@@ -202,6 +202,7 @@ function studentHasPhoto(s: Pick<StudentData, "id" | "photoUrl" | "photoPath" | 
 type SchoolDetail = {
   id: string
   name: string
+  workspaceKind: string
   contactEmail: string
   address: string | null
   logoUrl: string | null
@@ -230,6 +231,7 @@ export default function SchoolDetailPage() {
   const router = useRouter()
   const pathname = usePathname()
   const schoolId = params.id as string
+  const isCompanyRoute = pathname.startsWith("/companies/")
 
   const [tab, setTab] = useState<"overview"|"classes"|"students"|"template"|"generate"|"batches"|"export">("overview")
   const [mounted, setMounted] = useState(false)
@@ -463,7 +465,7 @@ export default function SchoolDetailPage() {
         console.error(`Failed to load classes attempt ${attempt}`, err)
         if (attempt === 2) {
           setClassesLoadError(true)
-          if (showToast) toast.error('Failed to load classes. Student data can still load.')
+          if (showToast) toast.error(`Failed to load ${companyMode ? "departments" : "classes"}. ${companyMode ? "Employee" : "Student"} data can still load.`)
         } else {
           await new Promise((resolve) => setTimeout(resolve, 600))
         }
@@ -837,7 +839,7 @@ export default function SchoolDetailPage() {
         item.id === cls.id ? { ...item, name: savedName } : item
       )))
       cancelEditSectionName()
-      toast.success("Section name updated")
+      toast.success(`${companyMode ? "Department" : "Section"} name updated`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not rename section")
     } finally {
@@ -897,7 +899,7 @@ export default function SchoolDetailPage() {
   }
 
   const handleDeleteClass = async (cid: string, name: string) => {
-    const confirmed = prompt(`Type "DELETE" to confirm removing class "${name}" and all its students:`)
+    const confirmed = prompt(`Type "DELETE" to confirm removing ${companyMode ? "department" : "class"} "${name}" and all its ${companyMode ? "employees" : "students"}:`)
     if (confirmed !== "DELETE") return
     await fetch(`/api/schools/${schoolId}/classes/${cid}`, { method: "DELETE" })
     toast.success("Class deleted")
@@ -982,7 +984,7 @@ export default function SchoolDetailPage() {
       })
       const data = await res.json()
       if (data.success) {
-        toast.success("Template assigned to class")
+        toast.success(`Template assigned to ${companyMode ? "department" : "class"}`)
         fetchClasses()
       } else {
         toast.error(data.error || "Failed to assign template")
@@ -1199,14 +1201,14 @@ export default function SchoolDetailPage() {
   }
 
   const handleGenerateBatch = async () => {
-    if (!confirm(`Generate print batch for all submitted/approved students in ${school?.name}?`)) return
+    if (!confirm(`Generate print batch for all submitted/approved ${companyMode ? "employees" : "students"} in ${school?.name}?`)) return
     setGeneratingBatch(true)
     clearBatchPolling()
     try {
       const res = await fetch(`/api/schools/${schoolId}/batches`, { method: "POST" })
       const data = await res.json()
       if (data.success) {
-        toast.success(`Batch generation started! ${data.data.studentCount} students included.`)
+        toast.success(`Batch generation started! ${data.data.studentCount} ${companyMode ? "employees" : "students"} included.`)
         // Poll for completion
         const batchId = data.data.batchId
         batchPollIntervalRef.current = setInterval(async () => {
@@ -1361,7 +1363,7 @@ export default function SchoolDetailPage() {
         })
         setEditPhotoFile(file)
         closePhotoCrop()
-        toast.success("Photo cropped — save the student to upload.")
+        toast.success(`Photo cropped — save the ${companyMode ? "employee" : "student"} to upload.`)
         return
       }
       if (target === "detail" && studentId) {
@@ -1390,7 +1392,7 @@ export default function SchoolDetailPage() {
   }
 
   const handleSaveStudent = async () => {
-    if (!editClassId) { toast.error("Please select a class"); return }
+    if (!editClassId) { toast.error(`Please select a ${companyMode ? "department" : "class"}`); return }
 
     const editFields = buildEditStudentFields(templateData)
     const validation = validatePublicSubmissionDetails(editFormFields, editFields)
@@ -1466,7 +1468,7 @@ export default function SchoolDetailPage() {
       return
     }
     const confirm1 = window.prompt(
-      `⚠️ This will PERMANENTLY delete ALL ${studentTotal} students for this school ` +
+      `⚠️ This will PERMANENTLY delete ALL ${studentTotal} ${companyMode ? "employees" : "students"} for this ${companyMode ? "company" : "school"} ` +
       `(including their photos and QR codes from the database).\n\n` +
       `Type DELETE to confirm:`
     )
@@ -1537,7 +1539,7 @@ export default function SchoolDetailPage() {
         throw new Error(data.error || "Information update failed")
       }
       setInfoUpdateResult(data.data)
-      toast.success(`Updated ${data.data.updated} student record(s). Photos preserved.`)
+      toast.success(`Updated ${data.data.updated} ${companyMode ? "employee" : "student"} record(s). Photos preserved.`)
       fetchStudents(studentPage)
       fetchSchool()
     } catch (err: any) {
@@ -1777,8 +1779,8 @@ export default function SchoolDetailPage() {
       setPhotoResult(result)
       toast.success(
         photoUploadMode === "replace"
-          ? `${result.matched} of ${totalFiles} photos replaced by student name!`
-          : `${result.matched} of ${totalFiles} photos matched to students!`
+          ? `${result.matched} of ${totalFiles} photos replaced by ${companyMode ? "employee" : "student"} name!`
+          : `${result.matched} of ${totalFiles} photos matched to ${companyMode ? "employees" : "students"}!`
       )
       fetchStudents(studentPage)
     } catch (err) {
@@ -1844,7 +1846,7 @@ export default function SchoolDetailPage() {
     const fd = s.formData as Record<string, string>
     const photoUrl = getStudentPhotoUrl(s)
     if (!photoUrl) {
-      toast.error("No photo on file for this student. Ask them to re-submit via the form link, or upload a photo manually.")
+      toast.error(`No photo on file for this ${companyMode ? "employee" : "student"}. Ask them to re-submit via the form link, or upload a photo manually.`)
       return
     }
     const studentClass = classes.find((c) => c.id === s.classId)
@@ -1944,7 +1946,7 @@ export default function SchoolDetailPage() {
 
   const openReprocessModal = async () => {
     if (!classFilter) {
-      toast.error("Select a section/class first, then process photos for that class.")
+      toast.error(`Select a ${companyMode ? "department" : "section/class"} first, then process photos for that ${companyMode ? "department" : "class"}.`)
       return
     }
     setReprocessOpen(true)
@@ -1960,7 +1962,7 @@ export default function SchoolDetailPage() {
   const selectedBatchClassLabel = [
     selectedStudentSection?.name,
     gradeClassFilter && sectionClassPickerOptions.find((o) => o.value === gradeClassFilter)?.label,
-  ].filter(Boolean).join(" / ") || "Selected class"
+  ].filter(Boolean).join(" / ") || `Selected ${isCompanyRoute ? "department" : "class"}`
 
   // Flag management handlers
   const fetchFlags = async () => {
@@ -2132,7 +2134,7 @@ export default function SchoolDetailPage() {
         return false
       }
       if (job?.status === "RUNNING" && attempt > 0 && attempt % 15 === 0) {
-        const countLabel = totalStudents ? `${totalStudents.toLocaleString()} students` : "large export"
+        const countLabel = totalStudents ? `${totalStudents.toLocaleString()} ${companyMode ? "employees" : "students"}` : "large export"
         toast.message(`Still preparing ${countLabel}… (${Math.round((attempt * 2) / 60)} min)`)
       }
     }
@@ -2205,7 +2207,7 @@ export default function SchoolDetailPage() {
       })
       const data = await res.json()
       if (data.success) {
-        toast.success("School logo updated!")
+        toast.success(`${companyMode ? "Company" : "School"} logo updated!`)
         fetchSchool()
       } else {
         toast.error("Failed to update school record")
@@ -2248,11 +2250,14 @@ export default function SchoolDetailPage() {
     </div>
   )
   if (!school) return <div style={{ padding: 32 }}>{pathname.startsWith("/companies/") ? "Company" : "School"} not found.</div>
-  const companyMode = isCompanyWorkspace(
+  // The route is available before any template request finishes. Trust it
+  // immediately so company pages never flash school/student terminology.
+  const companyRoute = isCompanyRoute || isCompanyWorkspace(
     school.name,
-    (templateData?.fieldConfig || []) as Array<{ key?: string; label?: string }>
+    (templateData?.fieldConfig || []) as Array<{ key?: string; label?: string }>,
+    school.workspaceKind,
   )
-  const companyRoute = companyMode || pathname.startsWith("/companies/")
+  const companyMode = companyRoute
   const legacyCompanyPortfolio = companyMode && normalizeKey(school.name).includes("companyidcard")
   const directoryHref = companyRoute ? "/companies" : "/schools"
   const directoryLabel = companyRoute ? "Company" : "Schools"
@@ -3667,14 +3672,14 @@ export default function SchoolDetailPage() {
                               ) : (
                                 <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#f59e0b', color: '#d97706' }} onClick={() => handleFlag(s.id)}>🚩</button>
                               )}
-                              <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#ef4444', color: '#dc2626' }} onClick={() => handleDeleteStudent(s.id, studentName)} title="Delete student">🗑</button>
+                              <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 8px', borderColor: '#ef4444', color: '#dc2626' }} onClick={() => handleDeleteStudent(s.id, studentName)} title={`Delete ${companyMode ? "employee" : "student"}`}>🗑</button>
                             </div>
                           </td>
                         </tr>
                       )
                     })}
                     {students.length === 0 && (
-                      <tr><td colSpan={totalCols} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No students found</td></tr>
+                      <tr><td colSpan={totalCols} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No {companyMode ? "employees" : "students"} found</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -5035,6 +5040,7 @@ export default function SchoolDetailPage() {
             schoolId={schoolId}
             schoolName={school.name}
             classes={classes}
+            companyMode={companyMode}
           />
         )}
 

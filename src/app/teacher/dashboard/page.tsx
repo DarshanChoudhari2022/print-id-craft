@@ -57,7 +57,7 @@ type SubTeacher = {
 }
 
 type DashboardData = {
-  school: { name: string; logoUrl: string | null } | null
+  school: { name: string; logoUrl: string | null; workspaceKind: string } | null
   classes: ClassData[]
   students: StudentData[]
   stats: { total: number; submitted: number; approved: number; flagged: number; pending: number; printed: number }
@@ -584,7 +584,8 @@ export default function TeacherDashboard() {
   const isMain = data?.isMainTeacher ?? false
   const companyMode = isCompanyWorkspace(
     data?.school?.name,
-    (templateData?.fieldConfig || []) as Array<{ key?: string; label?: string }>
+    (templateData?.fieldConfig || []) as Array<{ key?: string; label?: string }>,
+    data?.school?.workspaceKind,
   )
 
   return (

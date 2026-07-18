@@ -40,6 +40,14 @@ describe("manufacturer company navigation", () => {
     expect(detailSource).toContain('const directoryLabel = companyRoute ? "Company" : "Schools"')
   })
 
+  it("uses the company route before delayed template data to prevent school terminology flicker", () => {
+    const routeIndex = detailSource.indexOf('const isCompanyRoute = pathname.startsWith("/companies/")')
+    const modeIndex = detailSource.indexOf("const companyMode = companyRoute")
+    expect(routeIndex).toBeGreaterThan(-1)
+    expect(modeIndex).toBeGreaterThan(routeIndex)
+    expect(detailSource).toContain("companyMode={companyMode}")
+  })
+
   it("creates company defaults and a company representative account", () => {
     expect(schoolsApiSource).toContain("COMPANY_DEFAULT_FIELDS")
     expect(schoolsApiSource).toContain('"Company Representative"')

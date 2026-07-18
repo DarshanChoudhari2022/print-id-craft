@@ -988,10 +988,10 @@ export default function JpgTemplateMapper({
                 marginBottom: 8,
               }}
             >
-              Step 1: Upload School ID Card Template
+              Step 1: Upload {companyMode ? "Company Employee" : "School"} ID Card Template
             </h3>
             <p style={{ fontSize: 14, color: "#64748b", maxWidth: 480, margin: "0 auto" }}>
-              Upload the pre-designed JPG/PNG template image of the school's ID
+              Upload the pre-designed JPG/PNG template image of the {companyMode ? "company employee" : "school"} ID
               card. You'll then place text boxes in front of each printed field.
             </p>
           </div>
@@ -3790,7 +3790,7 @@ export default function JpgTemplateMapper({
                   gap: 6,
                 }}
               >
-                <span style={{ fontSize: 14 }}>🎨</span> Student Photo Background
+                <span style={{ fontSize: 14 }}>🎨</span> {companyMode ? "Employee" : "Student"} Photo Background
               </div>
               <div
                 style={{

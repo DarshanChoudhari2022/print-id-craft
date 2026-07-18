@@ -33,6 +33,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
           ? template.fieldConfig as Array<{ key?: string; label?: string }>
           : []
       ),
+      school.workspaceKind,
     )
     const defaultPasswordText = companyMode ? "Company@123" : "Teacher@123"
     const accountLabel = companyMode ? "Company representative" : "Main teacher"

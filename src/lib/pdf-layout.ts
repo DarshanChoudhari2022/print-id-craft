@@ -276,6 +276,134 @@ export type PairedCardPageLayout = {
   back?: { x: number; y: number; headerY: number }
 }
 
+export type PairedEmployeeSheetLayout = {
+  arrangement: PairedCardPageLayout["arrangement"]
+  pairsPerPage: number
+  placements: PairedCardPageLayout[]
+}
+
+/**
+ * Packs exact-size employee FRONT/BACK pairs onto one sheet, capped at five
+ * employees for easy visual checking. The standard 58×100 mm card on A4
+ * landscape becomes five columns with FRONT above BACK.
+ */
+export function calculatePairedEmployeeSheetLayout(
+  pageWidthMm: number,
+  pageHeightMm: number,
+  cardWidthMm: number,
+  cardHeightMm: number,
+  hasBackSide: boolean,
+  maxPairsPerPage = 5,
+  marginMm = 0,
+  headerHeightMm = 5,
+  pairGapMm = 0,
+  employeeGapMm = 0,
+): PairedEmployeeSheetLayout {
+  const sideHeight = headerHeightMm + cardHeightMm
+  const availableWidth = pageWidthMm - marginMm * 2
+  const availableHeight = pageHeightMm - marginMm * 2
+
+  type Candidate = {
+    arrangement: PairedCardPageLayout["arrangement"]
+    blockWidth: number
+    blockHeight: number
+    cols: number
+    rows: number
+    capacity: number
+  }
+
+  const buildCandidate = (
+    arrangement: Candidate["arrangement"],
+    blockWidth: number,
+    blockHeight: number,
+  ): Candidate | null => {
+    if (blockWidth > availableWidth || blockHeight > availableHeight) return null
+    const cols = Math.max(
+      1,
+      Math.floor((availableWidth + employeeGapMm) / (blockWidth + employeeGapMm)),
+    )
+    const rows = Math.max(
+      1,
+      Math.floor((availableHeight + employeeGapMm) / (blockHeight + employeeGapMm)),
+    )
+    return {
+      arrangement,
+      blockWidth,
+      blockHeight,
+      cols,
+      rows,
+      capacity: Math.min(maxPairsPerPage, cols * rows),
+    }
+  }
+
+  const candidates = hasBackSide
+    ? [
+        buildCandidate("vertical", cardWidthMm, sideHeight * 2 + pairGapMm),
+        buildCandidate("horizontal", cardWidthMm * 2 + pairGapMm, sideHeight),
+      ]
+    : [buildCandidate("front-only", cardWidthMm, sideHeight)]
+
+  const candidate = candidates
+    .filter((value): value is Candidate => Boolean(value))
+    .sort((a, b) => b.capacity - a.capacity)[0]
+
+  if (!candidate) {
+    throw new Error(
+      `FRONT and BACK at ${cardWidthMm}×${cardHeightMm} mm do not fit together on ${pageWidthMm}×${pageHeightMm} mm paper. Select a larger paper size.`,
+    )
+  }
+
+  const usedCols = Math.min(candidate.cols, candidate.capacity)
+  const usedRows = Math.ceil(candidate.capacity / usedCols)
+  const usedWidth =
+    usedCols * candidate.blockWidth + Math.max(0, usedCols - 1) * employeeGapMm
+  const usedHeight =
+    usedRows * candidate.blockHeight + Math.max(0, usedRows - 1) * employeeGapMm
+  const startX = (pageWidthMm - usedWidth) / 2
+  const startY = (pageHeightMm - usedHeight) / 2
+  const placements: PairedCardPageLayout[] = []
+
+  for (let slot = 0; slot < candidate.capacity; slot++) {
+    const row = Math.floor(slot / usedCols)
+    const col = slot % usedCols
+    const blockX = startX + col * (candidate.blockWidth + employeeGapMm)
+    const blockY = startY + row * (candidate.blockHeight + employeeGapMm)
+
+    if (candidate.arrangement === "vertical") {
+      placements.push({
+        arrangement: "vertical",
+        front: { x: blockX, y: blockY + headerHeightMm, headerY: blockY },
+        back: {
+          x: blockX,
+          y: blockY + sideHeight + pairGapMm + headerHeightMm,
+          headerY: blockY + sideHeight + pairGapMm,
+        },
+      })
+    } else if (candidate.arrangement === "horizontal") {
+      placements.push({
+        arrangement: "horizontal",
+        front: { x: blockX, y: blockY + headerHeightMm, headerY: blockY },
+        back: {
+          x: blockX + cardWidthMm + pairGapMm,
+          y: blockY + headerHeightMm,
+          headerY: blockY,
+        },
+      })
+    } else {
+      placements.push({
+        arrangement: "front-only",
+        front: { x: blockX, y: blockY + headerHeightMm, headerY: blockY },
+      })
+    }
+  }
+
+  return {
+    arrangement: candidate.arrangement,
+    pairsPerPage: candidate.capacity,
+    placements,
+  }
+}
+
 /**
  * Places one employee's FRONT and BACK at their exact physical card size on
  * one page. Vertical stacking is preferred; side-by-side is used when a tall
@@ -291,59 +419,17 @@ export function calculatePairedCardPageLayout(
   headerHeightMm = 10,
   pairGapMm = 8,
 ): PairedCardPageLayout {
-  const blockHeight = headerHeightMm + cardHeightMm
-
-  if (!hasBackSide) {
-    const headerY = Math.max(marginMm, (pageHeightMm - blockHeight) / 2)
-    return {
-      arrangement: "front-only",
-      front: {
-        x: (pageWidthMm - cardWidthMm) / 2,
-        y: headerY + headerHeightMm,
-        headerY,
-      },
-    }
-  }
-
-  const verticalHeight = blockHeight * 2 + pairGapMm
-  if (
-    cardWidthMm + marginMm * 2 <= pageWidthMm &&
-    verticalHeight + marginMm * 2 <= pageHeightMm
-  ) {
-    const startY = (pageHeightMm - verticalHeight) / 2
-    const x = (pageWidthMm - cardWidthMm) / 2
-    return {
-      arrangement: "vertical",
-      front: { x, y: startY + headerHeightMm, headerY: startY },
-      back: {
-        x,
-        y: startY + blockHeight + pairGapMm + headerHeightMm,
-        headerY: startY + blockHeight + pairGapMm,
-      },
-    }
-  }
-
-  const horizontalWidth = cardWidthMm * 2 + pairGapMm
-  if (
-    horizontalWidth + marginMm * 2 <= pageWidthMm &&
-    blockHeight + marginMm * 2 <= pageHeightMm
-  ) {
-    const startX = (pageWidthMm - horizontalWidth) / 2
-    const headerY = (pageHeightMm - blockHeight) / 2
-    return {
-      arrangement: "horizontal",
-      front: { x: startX, y: headerY + headerHeightMm, headerY },
-      back: {
-        x: startX + cardWidthMm + pairGapMm,
-        y: headerY + headerHeightMm,
-        headerY,
-      },
-    }
-  }
-
-  throw new Error(
-    `FRONT and BACK at ${cardWidthMm}×${cardHeightMm} mm do not fit together on ${pageWidthMm}×${pageHeightMm} mm paper. Select a larger paper size.`
-  )
+  return calculatePairedEmployeeSheetLayout(
+    pageWidthMm,
+    pageHeightMm,
+    cardWidthMm,
+    cardHeightMm,
+    hasBackSide,
+    1,
+    marginMm,
+    headerHeightMm,
+    pairGapMm,
+  ).placements[0]
 }
 
 /* ─── Direct PDF generation (bypasses the PdfPrintSheet modal) ─── */
@@ -379,8 +465,10 @@ export type DirectPdfOptions = {
   showCalibrationScale?: boolean
   /** Optional filename suffix for chunked downloads, e.g. "001-100" */
   filenameSuffix?: string
-  /** Keep each employee's FRONT and BACK together on one verification page. */
+  /** Keep each employee's FRONT and BACK adjacent on compact verification sheets. */
   pairSidesPerEmployee?: boolean
+  /** Maximum employee FRONT/BACK pairs packed onto each paired sheet. */
+  maxEmployeePairsPerPage?: number
 }
 
 /**
@@ -402,6 +490,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
     showCalibrationScale = true,
     filenameSuffix,
     pairSidesPerEmployee = false,
+    maxEmployeePairsPerPage = 5,
   } = opts
 
   const pageW = paperWidth
@@ -509,6 +598,35 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
     d.line(x + w + off, y + h, x + w + off + cm, y + h); d.line(x + w, y + h + off, x + w, y + h + off + cm)
   }
 
+  // Dense paired sheets can have edge-to-edge columns. Put their cut guides
+  // only in the page edges/header bands so no guide is printed over a card.
+  const drawPairedSheetCutGuides = (
+    d: typeof doc,
+    placements: PairedCardPageLayout[],
+  ) => {
+    const xCuts = new Set<number>()
+    const yCuts = new Set<number>()
+    for (const pair of placements) {
+      for (const side of [pair.front, pair.back]) {
+        if (!side) continue
+        xCuts.add(side.x)
+        xCuts.add(side.x + cardW)
+        yCuts.add(side.y)
+        yCuts.add(side.y + cardH)
+      }
+    }
+
+    d.setDrawColor(0, 0, 0)
+    d.setLineWidth(0.1)
+    for (const x of xCuts) {
+      d.line(x, 0, x, Math.min(3, pageH))
+    }
+    for (const y of yCuts) {
+      d.line(0, y, Math.min(3, pageW), y)
+      d.line(Math.max(0, pageW - 3), y, pageW, y)
+    }
+  }
+
   // These rulers align with the first card: measuring them confirms the printer
   // has not used "Fit to page" or any other scaling.
   const drawCalibrationScale = (d: typeof doc) => {
@@ -552,76 +670,82 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
   let aliasCounter = 0
 
   if (pairSidesPerEmployee) {
-    for (let cardIdx = 0; cardIdx < cards.length; cardIdx++) {
-      if (cardIdx > 0) {
+    const pairedSheetLayout = calculatePairedEmployeeSheetLayout(
+      pageW,
+      pageH,
+      cardW,
+      cardH,
+      hasBackSide,
+      maxEmployeePairsPerPage,
+    )
+    const pairedPageCount = Math.ceil(cards.length / pairedSheetLayout.pairsPerPage)
+
+    for (let pageIdx = 0; pageIdx < pairedPageCount; pageIdx++) {
+      if (pageIdx > 0) {
         await yieldToBrowser()
         doc.addPage([pageW, pageH])
       }
 
-      const card = cards[cardIdx]
-      const pairedLayout = calculatePairedCardPageLayout(
-        pageW,
-        pageH,
-        cardW,
-        cardH,
-        Boolean(backBytes[cardIdx]),
-      )
-
       const drawSideHeader = (
         placement: { x: number; headerY: number },
         side: "FRONT" | "BACK",
+        serialNumber: string,
       ) => {
         const centerX = placement.x + cardW / 2
         doc.setTextColor(15, 23, 42)
         doc.setFont("helvetica", "bold")
-        doc.setFontSize(10)
-        doc.text(card.serialNumber, centerX, placement.headerY + 4, { align: "center" })
+        doc.setFontSize(7)
+        doc.text(serialNumber, centerX, placement.headerY + 2.1, { align: "center" })
         doc.setFont("helvetica", "normal")
-        doc.setFontSize(6)
+        doc.setFontSize(4.5)
         doc.setTextColor(71, 85, 105)
-        doc.text(side, centerX, placement.headerY + 7.5, { align: "center" })
+        doc.text(side, centerX, placement.headerY + 4.2, { align: "center" })
       }
 
-      drawSideHeader(pairedLayout.front, "FRONT")
-      try {
-        if (frontBytes[cardIdx]) {
-          doc.addImage(
-            frontBytes[cardIdx],
-            frontFmt[cardIdx],
-            pairedLayout.front.x,
-            pairedLayout.front.y,
-            cardW,
-            cardH,
-            `img_${aliasCounter++}`,
-            "FAST",
-          )
-        }
-        if (addCutMarks) {
-          drawCutMarks(doc, pairedLayout.front.x, pairedLayout.front.y, cardW, cardH)
-        }
-      } catch (err) {
-        console.error(`Failed front image ${card.serialNumber}`, err)
-      }
+      for (let slot = 0; slot < pairedSheetLayout.pairsPerPage; slot++) {
+        const cardIdx = pageIdx * pairedSheetLayout.pairsPerPage + slot
+        if (cardIdx >= cards.length) break
+        const card = cards[cardIdx]
+        const pairedLayout = pairedSheetLayout.placements[slot]
 
-      if (pairedLayout.back && backBytes[cardIdx] && backFmt[cardIdx]) {
-        drawSideHeader(pairedLayout.back, "BACK")
+        drawSideHeader(pairedLayout.front, "FRONT", card.serialNumber)
         try {
-          doc.addImage(
-            backBytes[cardIdx]!,
-            backFmt[cardIdx]!,
-            pairedLayout.back.x,
-            pairedLayout.back.y,
-            cardW,
-            cardH,
-            `img_${aliasCounter++}`,
-            "FAST",
-          )
-          if (addCutMarks) {
-            drawCutMarks(doc, pairedLayout.back.x, pairedLayout.back.y, cardW, cardH)
+          if (frontBytes[cardIdx]) {
+            doc.addImage(
+              frontBytes[cardIdx],
+              frontFmt[cardIdx],
+              pairedLayout.front.x,
+              pairedLayout.front.y,
+              cardW,
+              cardH,
+              `img_${aliasCounter++}`,
+              "FAST",
+            )
           }
         } catch (err) {
-          console.error(`Failed back image ${card.serialNumber}`, err)
+          console.error(`Failed front image ${card.serialNumber}`, err)
         }
+
+        if (pairedLayout.back && backBytes[cardIdx] && backFmt[cardIdx]) {
+          drawSideHeader(pairedLayout.back, "BACK", card.serialNumber)
+          try {
+            doc.addImage(
+              backBytes[cardIdx]!,
+              backFmt[cardIdx]!,
+              pairedLayout.back.x,
+              pairedLayout.back.y,
+              cardW,
+              cardH,
+              `img_${aliasCounter++}`,
+              "FAST",
+            )
+          } catch (err) {
+            console.error(`Failed back image ${card.serialNumber}`, err)
+          }
+        }
+      }
+      if (addCutMarks) {
+        drawPairedSheetCutGuides(doc, pairedSheetLayout.placements)
       }
     }
   } else {
@@ -696,10 +820,22 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
   a.click()
   document.body.removeChild(a)
   setTimeout(() => URL.revokeObjectURL(blobUrl), 5000)
-  const savedPageCount = pairSidesPerEmployee ? cards.length : totalPages * (hasBackSide ? 2 : 1)
+  const pairedSheetLayout = pairSidesPerEmployee
+    ? calculatePairedEmployeeSheetLayout(
+        pageW,
+        pageH,
+        cardW,
+        cardH,
+        hasBackSide,
+        maxEmployeePairsPerPage,
+      )
+    : null
+  const savedPageCount = pairedSheetLayout
+    ? Math.ceil(cards.length / pairedSheetLayout.pairsPerPage)
+    : totalPages * (hasBackSide ? 2 : 1)
   toast.success(
     pairSidesPerEmployee
-      ? `PDF saved! ${cards.length} employee card pair(s) on ${savedPageCount} page(s) · FRONT and BACK kept together.`
+      ? `PDF saved! ${cards.length} employee card pair(s) on ${savedPageCount} page(s) · up to ${pairedSheetLayout!.pairsPerPage} employees per sheet · FRONT and BACK kept together.`
       : `PDF saved! ${cards.length} cards on ${savedPageCount} page(s) · ${pageW}×${pageH}mm · Card ${cardW}×${cardH}mm · Grid ${cols}×${rows}`
   )
 }

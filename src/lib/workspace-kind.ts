@@ -17,8 +17,13 @@ const COMPANY_FIELD_MARKERS = new Set([
 
 export function isCompanyWorkspace(
   schoolName: string | null | undefined,
-  fields: WorkspaceField[] = []
+  fields: WorkspaceField[] = [],
+  workspaceKind?: string | null,
 ): boolean {
+  const explicitKind = normalizeKey(String(workspaceKind || ""))
+  if (explicitKind === "company") return true
+  if (explicitKind === "school") return false
+
   const normalizedName = normalizeKey(String(schoolName || ""))
   if (
     normalizedName.includes("companyidcard") ||
