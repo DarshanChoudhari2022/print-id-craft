@@ -1482,7 +1482,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
         marginMm: 0,
         gapMm: 0,
         filenameSuffix: suffix,
-        pairSidesPerEmployee: true,
+        pairSidesPerEmployee: chunk.some(card => Boolean(card.backDataUrl)),
       })
 
       if (totalFiles > 1 && chunkIndex < chunks.length - 1) {
@@ -1651,14 +1651,19 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
           : printConfig.paperHeight
         const cols = Math.max(1, Math.floor((availW + (hPitch - cw)) / hPitch))
         const rows = Math.max(1, Math.floor((availH + (vPitch - ch)) / vPitch))
-        const pairedLayout = calculatePairedEmployeeSheetLayout(
-          printConfig.paperWidth,
-          printConfig.paperHeight,
-          cw,
-          ch,
-          allCards.some(card => Boolean(card.backDataUrl)),
-        )
-        const totalPages = Math.ceil(allCards.length / pairedLayout.pairsPerPage)
+        const hasBackSide = allCards.some(card => Boolean(card.backDataUrl))
+        const pairedLayout = hasBackSide
+          ? calculatePairedEmployeeSheetLayout(
+              printConfig.paperWidth,
+              printConfig.paperHeight,
+              cw,
+              ch,
+              hasBackSide,
+            )
+          : null
+        const totalPages = pairedLayout
+          ? Math.ceil(allCards.length / pairedLayout.pairsPerPage)
+          : Math.ceil(allCards.length / (cols * rows)) * (hasBackSide ? 2 : 1)
 
         // Stage the save — DO NOT download yet. User must confirm via the
         // preview panel after verifying the layout matches their cutter.
@@ -1677,8 +1682,8 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
           cols,
           rows,
           totalPages,
-          pairedSides: true,
-          pairsPerPage: pairedLayout.pairsPerPage,
+          pairedSides: Boolean(pairedLayout),
+          pairsPerPage: pairedLayout?.pairsPerPage,
           pdfCards: allCards,
           pdfStudentIds: studentIds,
           pdfChunkSize,
@@ -1698,7 +1703,9 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
         setProgress({
           current: totalCount,
           total: totalCount,
-          status: `Ready! Verify paired FRONT/BACK blocks below, then click Download. (${pairedLayout.pairsPerPage} employees per sheet · ${totalPages} pages · ${getPdfFileCount(allCards.length, pdfChunkSize, allCards)} continuous ID-ordered PDF file(s))`,
+          status: pairedLayout
+            ? `Ready! Verify paired FRONT/BACK blocks below, then click Download. (${pairedLayout.pairsPerPage} employees per sheet · ${totalPages} pages · ${getPdfFileCount(allCards.length, pdfChunkSize, allCards)} continuous ID-ordered PDF file(s))`
+            : `Ready! Verify the ${cols}×${rows} school-card grid below, then click Download. (${cols * rows} cards per page · ${totalPages} front/back pages · ${getPdfFileCount(allCards.length, pdfChunkSize, allCards)} continuous ID-ordered PDF file(s))`,
         })
 
       // ──── CDR (SVG) PATH ────
@@ -2070,7 +2077,8 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
     const availH = cfg.v1stPosition > 0 ? cfg.paperHeight - cfg.v1stPosition : cfg.paperHeight
     const cols = Math.max(1, Math.floor((availW + (hPitch - cw)) / hPitch))
     const rows = Math.max(1, Math.floor((availH + (vPitch - ch)) / vPitch))
-    const pairedLayout = fmt === "PDF_PRINT"
+    const hasBackSide = cards.some(card => Boolean(card.backDataUrl))
+    const pairedLayout = fmt === "PDF_PRINT" && hasBackSide
       ? calculatePairedEmployeeSheetLayout(
         cfg.paperWidth,
         cfg.paperHeight,
@@ -2079,9 +2087,9 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
         cards.some(card => Boolean(card.backDataUrl)),
       )
       : null
-    const totalPages = fmt === "PDF_PRINT"
-      ? Math.ceil(cards.length / pairedLayout!.pairsPerPage)
-      : Math.ceil(cards.length / (cols * rows))
+    const totalPages = pairedLayout
+      ? Math.ceil(cards.length / pairedLayout.pairsPerPage)
+      : Math.ceil(cards.length / (cols * rows)) * (fmt === "PDF_PRINT" && hasBackSide ? 2 : 1)
     setLastCardDims({ w: cw, h: ch })
     setPendingSave({
       format: fmt,
@@ -2097,7 +2105,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
       cols,
       rows,
       totalPages,
-      pairedSides: fmt === "PDF_PRINT",
+      pairedSides: Boolean(pairedLayout),
       pairsPerPage: pairedLayout?.pairsPerPage,
       pdfCards: cards,
       pdfStudentIds: studentIds,
@@ -2140,8 +2148,8 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
     setProgress({
       current: cards.length,
       total: cards.length,
-      status: fmt === "PDF_PRINT"
-        ? `Layout updated! ${pairedLayout!.pairsPerPage} employees per paired FRONT/BACK sheet · ${totalPages} pages.`
+      status: pairedLayout
+        ? `Layout updated! ${pairedLayout.pairsPerPage} employees per paired FRONT/BACK sheet · ${totalPages} pages.`
         : `Layout updated! (${cols}×${rows} = ${cols * rows} per page · ${totalPages} pages)`,
     })
   }, [downloadPdfInChunks, generationScopeName, pdfChunkSize, pendingSave])
