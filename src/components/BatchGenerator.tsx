@@ -342,7 +342,7 @@ async function drawHouseFlagCanvas(
 // Caller threads cardWidthMm through so we convert the user's
 // typographic-pt fontSize into canvas pixels exactly. When omitted
 // we fall back to legacy 600-px reference behaviour.
-function fitTextToBoxCanvas(
+export function fitTextToBoxCanvas(
   ctx: CanvasRenderingContext2D,
   text: string,
   boxW: number,
@@ -424,10 +424,25 @@ function fitTextToBoxCanvas(
     return { lines: [text.slice(0, lo) + ellipsis], fontSize: userPx, lineHeight: userPx * 1.15 }
   }
 
-  const fontSize = userPx
+  const minFont = Math.max(7, boxH * 0.28)
+  let fontSize = userPx
   setFont(fontSize)
-  const lines = ctx.measureText(text).width <= maxW ? [text] : wrap(fontSize)
-  return { lines, fontSize, lineHeight: fontSize * 1.15 }
+  while (ctx.measureText(text).width > maxW && fontSize > minFont) {
+    fontSize = Math.max(minFont, fontSize - 0.5)
+    setFont(fontSize)
+  }
+  if (ctx.measureText(text).width <= maxW) {
+    return { lines: [text], fontSize, lineHeight: fontSize * 1.15 }
+  }
+
+  let lines = wrap(fontSize)
+  let lineHeight = fontSize * 1.15
+  while (lines.length * lineHeight > maxH && fontSize > minFont) {
+    fontSize = Math.max(minFont, fontSize - 0.5)
+    lines = wrap(fontSize)
+    lineHeight = fontSize * 1.15
+  }
+  return { lines, fontSize, lineHeight }
 }
 
 /**
