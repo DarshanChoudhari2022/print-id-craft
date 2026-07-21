@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { storageUpload, storagePublicUrl, ensureBucket } from "@/lib/storage"
+import { isCompanyWorkspace } from "@/lib/workspace-kind"
 
 export const maxDuration = 300; // Vercel Pro function timeout config
 
@@ -24,6 +25,7 @@ let bucketReady = false
 type StudentRow = { id: string; serialNumber: string; formData: any; photoUrl: string | null; photoPath?: string | null }
 type LookupMaps = {
   byId: Map<string, StudentRow>
+  byEmployeeCode: Map<string, StudentRow>
   byPhotoId: Map<string, StudentRow>
   bySerial: Map<string, StudentRow>
   byRollNo: Map<string, StudentRow>
@@ -69,6 +71,7 @@ async function getLookupMaps(schoolId: string): Promise<LookupMaps> {
 
   const maps: LookupMaps = {
     byId: new Map(),
+    byEmployeeCode: new Map(),
     byPhotoId: new Map(),
     bySerial: new Map(),
     byRollNo: new Map(),
@@ -90,8 +93,17 @@ async function getLookupMaps(schoolId: string): Promise<LookupMaps> {
 function buildIndexForStudent(s: StudentRow, maps: LookupMaps) {
   maps.byId.set(s.id, s)
   maps.bySerial.set(s.serialNumber.toLowerCase().trim(), s)
+  maps.bySerial.set(normalizeIdentifierKey(s.serialNumber), s)
 
   const fd = s.formData as Record<string, string>
+
+  const employeeCode = fd?.employeeCode || fd?.["Employee Code"] || fd?.["ID Code"] || fd?.["Id Code"] || fd?.idCode
+    || fd?.employeeId || fd?.["Employee ID"] || fd?.["Emp Code"] || fd?.empCode || fd?.["EMP CODE"] || ""
+  if (employeeCode) {
+    const code = String(employeeCode).toLowerCase().trim()
+    maps.byEmployeeCode.set(code, s)
+    maps.byEmployeeCode.set(normalizeIdentifierKey(code), s)
+  }
 
   let photoId = fd?.photoId || fd?.["Photo ID"] || fd?.["photo_id"] || fd?.["PhotoID"]
     || fd?.["PHOTO NO."] || fd?.["Photo No"] || fd?.["Photo No."] || fd?.["photo no"] || fd?.["photo no."]
@@ -156,6 +168,10 @@ function normalizeNameMatchKey(value: string): string {
     .toLowerCase()
 }
 
+function normalizeIdentifierKey(value: string): string {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "")
+}
+
 function nameMatchCandidatesFromFilename(baseName: string): string[] {
   const withoutLeadingOrdinal = baseName.replace(/^\s*\d+[\s._-]+/, "")
   const genericWordsRemoved = withoutLeadingOrdinal.replace(
@@ -210,11 +226,27 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
 
     const schoolId = params.id
 
+    const school = await prisma.school.findUnique({
+      where: { id: schoolId },
+      select: {
+        name: true,
+        workspaceKind: true,
+        templates: { take: 1, select: { fieldConfig: true } },
+      },
+    })
+    if (!school) {
+      return NextResponse.json({ error: "School not found" }, { status: 404 })
+    }
+    const templateFields = Array.isArray(school.templates?.[0]?.fieldConfig)
+      ? (school.templates[0].fieldConfig as Array<{ key?: string; label?: string }>)
+      : []
+    const companyMode = isCompanyWorkspace(school.name, templateFields, school.workspaceKind)
+
     const maps = await getLookupMaps(schoolId)
     if (maps.count === 0) {
       return NextResponse.json({ error: "No students found in this school. Import students first." }, { status: 400 })
     }
-    const { byId, byPhotoId, bySerial, byRollNo, byName, byStrictName, duplicateStrictNames, byFather, byStudentName } = maps
+    const { byId, byEmployeeCode, byPhotoId, bySerial, byRollNo, byName, byStrictName, duplicateStrictNames, byFather, byStudentName } = maps
 
     const formData = await req.formData()
     const files = formData.getAll("photos") as File[]
@@ -255,6 +287,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         const nameCandidates = nameMatchCandidatesFromFilename(baseName)
         // Also strip underscores/hyphens for fuzzy match
         const baseNameNormalized = baseNameLower.replace(/[\s_-]+/g, "")
+        const baseIdentifier = normalizeIdentifierKey(baseName)
 
         // Validate file
         if (!ALLOWED_TYPES.includes(file.type)) {
@@ -275,6 +308,30 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
             return
           }
           student = byStrictName.get(baseNameStrict)
+        } else if (companyMode) {
+          // Company photo uploads intentionally avoid roll/contact/office-number
+          // fallback matching so a numeric filename cannot attach to the wrong employee.
+          student = byEmployeeCode.get(baseNameLower) || byEmployeeCode.get(baseIdentifier)
+          matchedBy = "Employee Code"
+
+          if (!student) {
+            student = bySerial.get(baseNameLower) || bySerial.get(baseIdentifier)
+            matchedBy = "Serial Number"
+          }
+          if (!student) {
+            for (const candidate of nameCandidates) {
+              if (duplicateStrictNames.has(candidate)) {
+                errors.push({ filename, error: "Duplicate employee name found. Rename or update the employee name before uploading this photo." })
+                return
+              }
+              const strictMatch = byStrictName.get(candidate)
+              if (strictMatch) {
+                student = strictMatch
+                matchedBy = "Employee Name (filename)"
+                break
+              }
+            }
+          }
         } else {
           // Try to match: photoId → serial → rollNo → name → father → studentName (priority order)
           student = byPhotoId.get(baseNameLower)

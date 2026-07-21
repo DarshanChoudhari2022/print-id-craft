@@ -4272,8 +4272,10 @@ export default function SchoolDetailPage() {
                         : photoUploading
                           ? 'Uploading photos...'
                           : photoUploadMode === "replace"
-                            ? 'Upload the edited photo folder again — filenames are matched strictly by student name and existing photos are replaced'
-                            : 'Upload a folder of student photos — auto-matched by Photo ID from Excel'}
+                            ? `Upload the edited photo folder again - filenames are matched strictly by ${companyMode ? "employee" : "student"} name and existing photos are replaced`
+                            : companyMode
+                              ? 'Upload company photos - matched only by Employee Code, Serial Number, or exact employee name'
+                              : 'Upload a folder of student photos - auto-matched by Photo ID from Excel'}
                     </p>
                   </div>
                   {!photoUploading && <button onClick={resetPhotoUpload} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#f1f5f9', cursor: 'pointer', fontSize: 16 }}>✕</button>}
@@ -4407,6 +4409,17 @@ export default function SchoolDetailPage() {
                           <div style={{ fontSize: 12, color: '#2563eb', lineHeight: 1.8 }}>
                             Each filename must match the student name exactly after ignoring case, punctuation, and extra spaces. Example: <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>Mohammad Owais Sajid Hussain.jpg</code> replaces that student's current photo. Duplicate student names are reported as errors so the system does not guess.
                           </div>
+                        ) : companyMode ? (
+                          <>
+                            <div style={{ fontSize: 12, color: '#2563eb', lineHeight: 1.8 }}>
+                              Company photos are matched conservatively. Office/contact numbers are never used for matching, so Office No will not be touched.
+                            </div>
+                            <ol style={{ margin: '6px 0 0 0', paddingLeft: 20, fontSize: 12, color: '#3b82f6', lineHeight: 2 }}>
+                              <li><strong>Employee Code / ID Code</strong> - e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>LPT047.jpg</code></li>
+                              <li><strong>Serial Number</strong> - e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>LPT-0047.jpg</code></li>
+                              <li><strong>Exact employee name</strong> - e.g. <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: 4 }}>Sahil Rana.png</code></li>
+                            </ol>
+                          </>
                         ) : (
                           <>
                             <div style={{ fontSize: 12, color: '#2563eb', lineHeight: 1.8 }}>
@@ -4426,7 +4439,11 @@ export default function SchoolDetailPage() {
                       {photoUploadMode === "bulk" && (
                       <div style={{ marginTop: 10, padding: 12, background: '#fefce8', borderRadius: 10, border: '1px solid #fde68a' }}>
                         <div style={{ fontSize: 12, color: '#92400e' }}>
-                          💡 <strong>Tip:</strong> If your Excel has a &quot;<strong>Photo ID</strong>&quot; column (e.g. BB25035, DSC_8541), simply keep your photo filenames as-is — the system will match them automatically!
+                          {companyMode ? (
+                            <>Tip: Name files with Employee Code like <strong>LPT047.jpg</strong> or exact employee name. Office No/contact numbers are ignored for safety.</>
+                          ) : (
+                            <>💡 <strong>Tip:</strong> If your Excel has a &quot;<strong>Photo ID</strong>&quot; column (e.g. BB25035, DSC_8541), simply keep your photo filenames as-is — the system will match them automatically!</>
+                          )}
                         </div>
                       </div>
                       )}

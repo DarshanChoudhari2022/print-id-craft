@@ -26,4 +26,12 @@ describe("reupload all photos wiring", () => {
     expect(bulkPhotoRouteSource).toContain("isNumericIdentifierFilename(baseName)")
     expect(bulkPhotoRouteSource).toContain('matchedBy = "Full Name (filename)"')
   })
+
+  it("uses company-safe photo matching that ignores office/contact numbers", () => {
+    expect(bulkPhotoRouteSource).toContain("isCompanyWorkspace")
+    expect(bulkPhotoRouteSource).toContain("byEmployeeCode")
+    expect(bulkPhotoRouteSource).toContain('matchedBy = "Employee Code"')
+    expect(bulkPhotoRouteSource).toContain("Company photo uploads intentionally avoid roll/contact/office-number")
+    expect(schoolPageSource).toContain("Office/contact numbers are never used for matching")
+  })
 })
