@@ -766,6 +766,26 @@ export default function JpgTemplateMapper({
     )
   }
 
+  const centerFieldOnCard = (id: string) => {
+    const mapping = mappings.find((m) => m.id === id)
+    if (!mapping) return
+    pushToHistory(mappings)
+    updateMapping(id, {
+      x: Number(((100 - mapping.width) / 2).toFixed(1)),
+    })
+  }
+
+  const fullWidthCenterField = (id: string) => {
+    const mapping = mappings.find((m) => m.id === id)
+    if (!mapping) return
+    pushToHistory(mappings)
+    updateMapping(id, {
+      x: 0,
+      width: 100,
+      textAlign: "center",
+    })
+  }
+
   const rememberSelectedTextFieldStyle = useCallback(() => {
     const mapping = mappings.find((m) => m.id === selectedId)
     if (mapping) rememberTextFieldStyle(mapping)
@@ -2985,6 +3005,57 @@ export default function JpgTemplateMapper({
                     </div>
                   </div>
 
+                  {/* Field Alignment */}
+                  <div>
+                    <label
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#64748b",
+                        marginBottom: 4,
+                        display: "block",
+                      }}
+                    >
+                      Field Alignment
+                    </label>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                      <button
+                        type="button"
+                        onClick={() => centerFieldOnCard(selectedMapping.id)}
+                        style={{
+                          padding: "7px 10px",
+                          borderRadius: 6,
+                          border: "1.5px solid #bfdbfe",
+                          background: "#eff6ff",
+                          color: "#1d4ed8",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                        title="Move this field box to the horizontal center of the card"
+                      >
+                        Center on Card
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fullWidthCenterField(selectedMapping.id)}
+                        style={{
+                          padding: "7px 10px",
+                          borderRadius: 6,
+                          border: "1.5px solid #c7d2fe",
+                          background: "#eef2ff",
+                          color: "#4338ca",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                        title="Make this field full card width and center the text"
+                      >
+                        Full Width + Center
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Text Alignment */}
                   <div>
                     <label
@@ -4427,6 +4498,8 @@ export default function JpgTemplateMapper({
               else if (action === "wrapBitmapReduceFontSize") openDialogWithSnapshot(() => setShowWrapDialog(true))
               else if (action === "imageProperties" || action === "setPhotoSize") openDialogWithSnapshot(() => setShowPhotoSizeDialog(true))
               else if (action === "photoBorderRoundedCorner") openDialogWithSnapshot(() => setShowPhotoBorderDialog(true))
+              else if (action === "centerField") centerFieldOnCard(field.id)
+              else if (action === "alignments" || action === "fullWidthCenter") fullWidthCenterField(field.id)
               else if (action === "gridView") setShowGrid((v) => !v)
             }}
             onClose={() => setContextMenu(null)}

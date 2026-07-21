@@ -1230,6 +1230,8 @@ type ContextMenuAction =
   | "textProperties"
   | "backgroundProperties"
   | "alignments"
+  | "centerField"
+  | "fullWidthCenter"
   | "gridView"
   | "insertImage"
   | "setPhotoSize"
@@ -1325,7 +1327,7 @@ export function FieldContextMenu({
         <Item label="Image Properties" action="imageProperties" hasSubmenu />
         <Item label="Text Properties" action="textProperties" hasSubmenu />
         <Item label="Background Properties" action="backgroundProperties" hasSubmenu />
-        <Item label="Alignments" action="alignments" hasSubmenu />
+        <Item label="Alignments" action="fullWidthCenter" hasSubmenu />
         <Item label="Grid View" action="gridView" />
 
         {fieldType === "photo" && (
@@ -1340,6 +1342,8 @@ export function FieldContextMenu({
         {fieldType === "text" && (
           <>
             <Separator />
+            <Item label="Center Field on Card" action="centerField" />
+            <Item label="Full Width + Center Text" action="fullWidthCenter" />
             <Item label="Set Text Axis" action="setTextAxis" />
             <Item label="Color" action="color" />
             <Item label="Rotate" action="rotate" hasSubmenu />
