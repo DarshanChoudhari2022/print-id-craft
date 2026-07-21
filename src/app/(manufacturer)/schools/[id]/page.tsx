@@ -1352,6 +1352,17 @@ export default function SchoolDetailPage() {
     })
   }
 
+  const cropEditPhotoPreview = () => {
+    if (!editPhotoPreview) {
+      toast.error("No photo available to crop.")
+      return
+    }
+    setPhotoCrop((prev) => {
+      if (prev?.url.startsWith("blob:")) URL.revokeObjectURL(prev.url)
+      return { url: editPhotoPreview, target: "edit" }
+    })
+  }
+
   const handlePhotoCropped = async (croppedDataUrl: string) => {
     if (!photoCrop) return
     const { target, studentId } = photoCrop
@@ -3736,16 +3747,28 @@ export default function SchoolDetailPage() {
                         </div>
                       )}
                       <div style={{ flex: 1 }}>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: '#374151' }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-                          {editPhotoPreview ? 'Change Photo' : 'Upload Photo'}
-                          <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={e => {
-                            const f = e.target.files?.[0]
-                            if (!f) return
-                            pickPhotoForCrop(f, "edit")
-                            e.target.value = ""
-                          }} />
-                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: '#374151' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                            {editPhotoPreview ? 'Change Photo' : 'Upload Photo'}
+                            <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={e => {
+                              const f = e.target.files?.[0]
+                              if (!f) return
+                              pickPhotoForCrop(f, "edit")
+                              e.target.value = ""
+                            }} />
+                          </label>
+                          {editPhotoPreview && (
+                            <button
+                              type="button"
+                              onClick={cropEditPhotoPreview}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#1d4ed8' }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+                              Crop Photo
+                            </button>
+                          )}
+                        </div>
                         {editPhotoFile && <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{editPhotoFile.name}</div>}
                         {editPhotoPreview && !editPhotoFile && editStudentTarget && (
                           <div style={{ fontSize: 11, color: '#22c55e', marginTop: 4 }}>✓ Current photo loaded</div>
