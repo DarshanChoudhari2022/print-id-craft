@@ -502,6 +502,8 @@ export default function JpgTemplateMapper({
   // Custom field creation
   const [newFieldLabel, setNewFieldLabel] = useState("")
   const [newOptionalFieldLabel, setNewOptionalFieldLabel] = useState("")
+  const [newFixedFieldLabel, setNewFixedFieldLabel] = useState("")
+  const [newFixedFieldValue, setNewFixedFieldValue] = useState("")
   const [newFieldType, setNewFieldType] = useState<"text" | "tel">("text")
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -663,11 +665,12 @@ export default function JpgTemplateMapper({
     type: "text" | "photo" | "flag" = "text",
     initialRadius?: number,
     required = true,
+    fixedValue?: string,
   ) => {
     // Prevent duplicate fieldKeys
     if (mappings.find((m) => m.fieldKey === fieldKey)) {
       alert(`Field "${label}" is already placed on the template.`)
-      return
+      return null
     }
 
     pushToHistory(mappings)
@@ -681,6 +684,8 @@ export default function JpgTemplateMapper({
       label,
       type,
       required,
+      useFixedValue: fixedValue !== undefined,
+      fixedValue,
       x: type === "photo" ? 5 : type === "flag" ? 75 : 40,
       y: type === "photo" ? 25 : type === "flag" ? 5 : 30 + mappings.filter((m) => m.type === "text").length * 6,
       width: type === "photo" ? (isCircularPhoto ? 20 : 18) : type === "flag" ? 12 : savedTextStyle?.width ?? (isPrefixedAddress ? 55 : 30),
@@ -703,6 +708,7 @@ export default function JpgTemplateMapper({
     }
     setMappings((prev) => [...prev, newMapping])
     setSelectedId(newMapping.id)
+    return newMapping
   }
 
   const addCustomField = () => {
@@ -719,6 +725,28 @@ export default function JpgTemplateMapper({
     const key = labelToKey(label)
     addFieldMapping(key, label, "text", undefined, false)
     setNewOptionalFieldLabel("")
+  }
+
+  const addFixedCustomField = () => {
+    const label = newFixedFieldLabel.trim()
+    const value = newFixedFieldValue.trim()
+    if (!label || !value) return
+    const key = labelToKey(label)
+    const existing = mappings.find((m) => m.fieldKey === key)
+    if (existing) {
+      pushToHistory(mappings)
+      updateMapping(existing.id, {
+        label,
+        required: false,
+        useFixedValue: true,
+        fixedValue: value,
+      })
+      setSelectedId(existing.id)
+    } else {
+      addFieldMapping(key, label, "text", undefined, false, value)
+    }
+    setNewFixedFieldLabel("")
+    setNewFixedFieldValue("")
   }
 
   const removeFieldMapping = (id: string) => {
@@ -3854,6 +3882,88 @@ export default function JpgTemplateMapper({
               </button>
             </div>
           </div>
+
+          {/* Fixed Custom Field Creator */}
+          {companyMode && (
+            <div
+              style={{
+                background: "white",
+                borderRadius: 14,
+                border: "1px solid #bfdbfe",
+                padding: 16,
+              }}
+            >
+              <h4
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: "#1e3a8a",
+                  marginBottom: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 16 }}>#</span> Add Fixed Field
+              </h4>
+              <p style={{ fontSize: 11, color: "#64748b", marginBottom: 10, lineHeight: 1.45 }}>
+                Use this when one value is same for this company, like Office No, branch, or department.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <input
+                  type="text"
+                  value={newFixedFieldLabel}
+                  onChange={(e) => setNewFixedFieldLabel(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addFixedCustomField()}
+                  placeholder="Field label, e.g. Office No"
+                  style={{
+                    width: "100%",
+                    height: 36,
+                    padding: "0 10px",
+                    border: "1.5px solid #bfdbfe",
+                    borderRadius: 8,
+                    fontSize: 13,
+                  }}
+                />
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    type="text"
+                    value={newFixedFieldValue}
+                    onChange={(e) => setNewFixedFieldValue(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addFixedCustomField()}
+                    placeholder="Fixed value, e.g. 020-12345678"
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      height: 36,
+                      padding: "0 10px",
+                      border: "1.5px solid #bfdbfe",
+                      borderRadius: 8,
+                      fontSize: 13,
+                    }}
+                  />
+                  <button
+                    onClick={addFixedCustomField}
+                    disabled={!newFixedFieldLabel.trim() || !newFixedFieldValue.trim()}
+                    style={{
+                      height: 36,
+                      padding: "0 14px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: newFixedFieldLabel.trim() && newFixedFieldValue.trim() ? "#2563eb" : "#e2e8f0",
+                      color: newFixedFieldLabel.trim() && newFixedFieldValue.trim() ? "white" : "#94a3b8",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: newFixedFieldLabel.trim() && newFixedFieldValue.trim() ? "pointer" : "default",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    + Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Not Compulsory Custom Field Creator */}
           <div

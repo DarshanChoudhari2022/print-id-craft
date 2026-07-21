@@ -75,6 +75,8 @@ describe("optional fixed template field values", () => {
     const printBatch = readFileSync("src/lib/jobs/processors/generate-print-batch.ts", "utf8")
 
     expect(mapper).toContain("Use a fixed / hardcoded value on every ID card")
+    expect(mapper).toContain("Add Fixed Field")
+    expect(mapper).toContain("addFixedCustomField")
     expect(mapper).toContain("useFixedValue")
     expect(preview).toContain("getFixedTemplateValue(field)")
     expect(batchGenerator).toContain("getFixedTemplateValue(field)")
