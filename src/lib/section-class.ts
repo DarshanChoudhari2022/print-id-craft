@@ -193,12 +193,17 @@ export function templateHasDivisionPlaceholder(
   fieldConfig: any[]
 ): boolean {
   const DIVISION_KEYS = new Set(["division", "div", "section"])
-  for (const m of fieldMappings) {
+  const mappings = Array.isArray(fieldMappings) ? fieldMappings : []
+  const config = Array.isArray(fieldConfig) ? fieldConfig : []
+  for (const m of mappings) {
     const fk = String(m.fieldKey || "").toLowerCase().replace(/[^a-z0-9]/g, "")
     if (DIVISION_KEYS.has(fk)) return true
     if (isClassDivisionFieldKey(m.fieldKey)) return true
   }
-  for (const f of fieldConfig) {
+
+  if (mappings.length > 0) return false
+
+  for (const f of config) {
     const fk = String(f.key || "").toLowerCase().replace(/[^a-z0-9]/g, "")
     if (DIVISION_KEYS.has(fk)) return true
     if (isClassDivisionFieldKey(f.key)) return true

@@ -83,7 +83,7 @@ export function buildImportIdentityKeys(
       : `school:${schoolId.key}:${schoolId.value}`)
   }
   if (name && dob) keys.push(`name-dob:${name}:${dob}`)
-  if (name && mobile) keys.push(`name-mobile:${name}:${mobile}`)
+  if (!options.useStudentNameIdentity && name && mobile) keys.push(`name-mobile:${name}:${mobile}`)
 
   const record = stableRecordFingerprint(formData)
   if (record) keys.push(`record:${record}`)

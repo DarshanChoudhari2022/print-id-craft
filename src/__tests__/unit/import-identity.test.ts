@@ -41,6 +41,8 @@ describe("bulk import identity", () => {
     const firstNameKey = first.find(key => key.startsWith("student-name:"))
     expect(firstNameKey).toBe("student-name:zarataufifshaikh")
     expect(second).toContain(firstNameKey)
+    expect(first.some(key => key.startsWith("name-mobile:"))).toBe(false)
+    expect(second.some(key => key.startsWith("name-mobile:"))).toBe(false)
   })
 
   it("does not use name-only identity unless school import asks for it", () => {

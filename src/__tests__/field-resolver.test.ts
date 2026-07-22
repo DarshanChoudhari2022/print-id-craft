@@ -483,6 +483,10 @@ describe("resolveFieldValue", () => {
       // 3. Neither
       expect(templateHasDivisionPlaceholder([{ fieldKey: "name" }], [])).toBe(false)
       expect(templateHasDivisionPlaceholder([], [{ key: "fatherName", label: "Father Name" }])).toBe(false)
+      expect(templateHasDivisionPlaceholder(
+        [{ fieldKey: "classGrade", label: "Class" }],
+        [{ key: "class", label: "Class - Division" }]
+      )).toBe(false)
     })
   })
 })
