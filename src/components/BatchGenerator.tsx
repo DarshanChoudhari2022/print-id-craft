@@ -289,37 +289,6 @@ function drawImageContain(
   ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, dw, dh)
 }
 
-function drawImageCover(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-) {
-  const photoAspect = img.naturalWidth / img.naturalHeight
-  const boxAspect = w / h
-  let dx: number, dy: number, dw: number, dh: number
-  if (photoAspect > boxAspect) {
-    dh = h
-    dw = h * photoAspect
-    dx = x + (w - dw) / 2
-    dy = y
-  } else {
-    dw = w
-    dh = w / photoAspect
-    dx = x
-    dy = y + (h - dh) / 2
-  }
-  ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, dw, dh)
-}
-
-function isCircularPhotoFrame(w: number, h: number, radiusPx: number): boolean {
-  const minSide = Math.min(w, h)
-  if (minSide <= 0) return false
-  return Math.abs(w - h) / minSide <= 0.18 && radiusPx >= minSide * 0.45
-}
-
 function drawPhotoForFrame(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
@@ -327,13 +296,9 @@ function drawPhotoForFrame(
   y: number,
   w: number,
   h: number,
-  radiusPx: number,
+  _radiusPx: number,
 ) {
-  if (isCircularPhotoFrame(w, h, radiusPx)) {
-    drawImageCover(ctx, img, x, y, w, h)
-  } else {
-    drawImageContain(ctx, img, x, y, w, h)
-  }
+  drawImageContain(ctx, img, x, y, w, h)
 }
 
 async function drawHouseFlagCanvas(
@@ -712,11 +677,9 @@ async function renderIdCardSvg(
         const borderPx = ((field.photoBorderWidth || 0) / BATCH_EDITOR_REFERENCE_WIDTH) * w
         const radius = Math.max(0, Math.min(radiusPx, Math.min(fw, fh) / 2))
 
-        const preserveAspectRatio = isCircularPhotoFrame(fw, fh, radiusPx)
-          ? "xMidYMid slice"
-          : "xMidYMid meet"
+        const preserveAspectRatio = "xMidYMid meet"
 
-        // clipPath for rounded corners; circular frames use slice to fill the circle.
+        // clipPath for rounded corners; meet preserves the whole uploaded photo.
         const clipId = `clip-${field.id}`
         const clipRect = radius > 0
           ? `<rect x="${fx}" y="${fy}" width="${fw}" height="${fh}" rx="${radius}" ry="${radius}" />`

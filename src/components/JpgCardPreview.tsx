@@ -105,37 +105,6 @@ function drawImageContain(
   ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, dw, dh)
 }
 
-function drawImageCover(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-) {
-  const photoAspect = img.naturalWidth / img.naturalHeight
-  const boxAspect = w / h
-  let dx: number, dy: number, dw: number, dh: number
-  if (photoAspect > boxAspect) {
-    dh = h
-    dw = h * photoAspect
-    dx = x + (w - dw) / 2
-    dy = y
-  } else {
-    dw = w
-    dh = w / photoAspect
-    dx = x
-    dy = y + (h - dh) / 2
-  }
-  ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, dw, dh)
-}
-
-function isCircularPhotoFrame(w: number, h: number, radiusPx: number): boolean {
-  const minSide = Math.min(w, h)
-  if (minSide <= 0) return false
-  return Math.abs(w - h) / minSide <= 0.18 && radiusPx >= minSide * 0.45
-}
-
 function drawPhotoForFrame(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
@@ -143,13 +112,9 @@ function drawPhotoForFrame(
   y: number,
   w: number,
   h: number,
-  radiusPx: number,
+  _radiusPx: number,
 ) {
-  if (isCircularPhotoFrame(w, h, radiusPx)) {
-    drawImageCover(ctx, img, x, y, w, h)
-  } else {
-    drawImageContain(ctx, img, x, y, w, h)
-  }
+  drawImageContain(ctx, img, x, y, w, h)
 }
 
 async function drawHouseFlag(

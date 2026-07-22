@@ -46,10 +46,11 @@ describe("reupload all photos wiring", () => {
   })
 
   it("renders ID card photos without auto-cropping or auto-zooming", () => {
-    expect(jpgCardPreviewSource).toContain("drawImageContain(ctx, photoImg, fx, fy, fw, fh)")
+    expect(jpgCardPreviewSource).toMatch(/function drawPhotoForFrame[\s\S]*?drawImageContain\(ctx, img, x, y, w, h\)/)
     expect(jpgTemplateMapperSource).toContain('objectFit: "contain"')
-    expect(batchGeneratorSource).toContain("Contain-fit keeps the uploaded portrait intact")
+    expect(batchGeneratorSource).toMatch(/function drawPhotoForFrame[\s\S]*?drawImageContain\(ctx, img, x, y, w, h\)/)
     expect(batchGeneratorSource).toContain('preserveAspectRatio="xMidYMid meet"')
-    expect(batchGeneratorSource).not.toContain('preserveAspectRatio="xMidYMin slice"')
+    expect(batchGeneratorSource).not.toContain("xMidYMid slice")
+    expect(batchGeneratorSource).not.toContain("xMidYMin slice")
   })
 })
