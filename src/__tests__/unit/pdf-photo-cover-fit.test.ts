@@ -9,7 +9,7 @@ describe("PDF card photo fit wiring", () => {
   )
 
   it("keeps contain-fit as the raster renderer behavior", () => {
-    expect(source).toMatch(/function drawPhotoForFrame[\s\S]*?drawImageContain\(ctx, img, x, y, w, h\)/)
+    expect(source).toMatch(/function drawPhotoForFrame[\s\S]*?fillStyle = "#ffffff"[\s\S]*?drawImageContain\(ctx, img, x, y, w, h\)/)
   })
 
   it("keeps SVG/PDF embedded photos in meet mode instead of slice mode", () => {

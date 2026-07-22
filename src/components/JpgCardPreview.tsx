@@ -114,6 +114,8 @@ function drawPhotoForFrame(
   h: number,
   _radiusPx: number,
 ) {
+  ctx.fillStyle = "#ffffff"
+  ctx.fillRect(x, y, w, h)
   drawImageContain(ctx, img, x, y, w, h)
 }
 
