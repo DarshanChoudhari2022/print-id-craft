@@ -16,6 +16,7 @@ import {
 } from "@/lib/teacher-student-view"
 import { normalizeStudentFieldValue } from "@/lib/student-text-normalization"
 import { isCompanyWorkspace } from "@/lib/workspace-kind"
+import { applyFixedTemplateValuesToFormData } from "@/lib/fixed-template-values"
 
 const IDCardPreview = dynamic(() => import("@/components/IDCardPreview"), { ssr: false })
 const JpgCardPreview = dynamic(() => import("@/components/JpgCardPreview"), { ssr: false })
@@ -1192,6 +1193,14 @@ export default function TeacherDashboard() {
         {selectedStudent && (() => {
           const studentClass = data?.classes.find(c => c.name === selectedStudent.class?.name)
           const studentTemplate = studentClass?.template || templateData
+          const previewMappings = [
+            ...((studentTemplate?.fieldMappings || []) as any[]),
+            ...((studentTemplate?.backFieldMappings || []) as any[]),
+          ]
+          const previewFormData = applyFixedTemplateValuesToFormData(
+            selectedStudent.formData as Record<string, string>,
+            previewMappings,
+          ) as Record<string, string>
           return (
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }} onClick={() => setSelectedStudent(null)}>
               <div style={{ background: 'white', borderRadius: 20, maxWidth: 800, width: '100%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
@@ -1247,7 +1256,7 @@ export default function TeacherDashboard() {
                               <JpgCardPreview
                                 templateImageUrl={studentTemplate.templateImageUrl}
                                 fieldMappings={studentTemplate.fieldMappings || []}
-                                formData={selectedStudent.formData as Record<string, string>}
+                                formData={previewFormData}
                                 studentPhoto={selectedStudent.photoUrl}
                                 scale={0.5}
                                 watermark="PREVIEW ONLY"
@@ -1261,7 +1270,7 @@ export default function TeacherDashboard() {
                                 <JpgCardPreview
                                   templateImageUrl={studentTemplate.backTemplateImageUrl}
                                   fieldMappings={studentTemplate.backFieldMappings || []}
-                                  formData={selectedStudent.formData as Record<string, string>}
+                                  formData={previewFormData}
                                   studentPhoto={selectedStudent.photoUrl}
                                   scale={0.5}
                                   watermark="PREVIEW ONLY"
@@ -1279,7 +1288,7 @@ export default function TeacherDashboard() {
                                 layout={studentTemplate.frontLayout || []}
                                 widthMm={studentTemplate.cardWidthMm || DEFAULT_CARD_WIDTH_MM}
                                 heightMm={studentTemplate.cardHeightMm || DEFAULT_CARD_HEIGHT_MM}
-                                formData={selectedStudent.formData as Record<string, string>}
+                                formData={previewFormData}
                                 studentPhoto={selectedStudent.photoUrl}
                                 serialNumber={selectedStudent.serialNumber}
                                 scale={3.2}
@@ -1292,7 +1301,7 @@ export default function TeacherDashboard() {
                                   layout={studentTemplate.backLayout || []}
                                   widthMm={studentTemplate.cardWidthMm || DEFAULT_CARD_WIDTH_MM}
                                   heightMm={studentTemplate.cardHeightMm || DEFAULT_CARD_HEIGHT_MM}
-                                  formData={selectedStudent.formData as Record<string, string>}
+                                  formData={previewFormData}
                                   serialNumber={selectedStudent.serialNumber}
                                   scale={3.2}
                                 />

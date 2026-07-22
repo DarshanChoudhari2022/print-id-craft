@@ -34,6 +34,7 @@ export const FIELD_GROUPS: Record<string, string[]> = {
   address: ["address", "addr", "location"],
   dateofbirth: ["dob", "dateofbirth", "birthdate", "birthday"],
   bloodgroup: ["bloodgroup", "blood group", "bg"],
+  employeeid: ["employeeid", "employeecode", "idcode", "id code", "employee code"],
   admissionno: ["admissionno", "admno", "registrationno", "regno"],
   photoid: ["photoid", "photo_id", "imageid", "imgid", "photono", "photo_no", "photonumber", "img", "imgno", "img_no", "imageno", "image_no"],
   serialnumber: ["serialnumber", "serial", "sr"],

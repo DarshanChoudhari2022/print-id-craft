@@ -167,6 +167,11 @@ describe("resolveFieldValue", () => {
       const fd = { regno: "ADM001" }
       expect(resolveFieldValue(fd, "admissionno")).toBe("ADM001")
     })
+
+    it("resolves employee ID placeholders from employee code data", () => {
+      const fd = { employeeCode: "LLP020" }
+      expect(resolveFieldValue(fd, "employeeId")).toBe("LLP020")
+    })
   })
 
   describe("No match", () => {

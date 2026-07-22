@@ -289,6 +289,53 @@ function drawImageContain(
   ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, dw, dh)
 }
 
+function drawImageCover(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  const photoAspect = img.naturalWidth / img.naturalHeight
+  const boxAspect = w / h
+  let dx: number, dy: number, dw: number, dh: number
+  if (photoAspect > boxAspect) {
+    dh = h
+    dw = h * photoAspect
+    dx = x + (w - dw) / 2
+    dy = y
+  } else {
+    dw = w
+    dh = w / photoAspect
+    dx = x
+    dy = y + (h - dh) / 2
+  }
+  ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, dw, dh)
+}
+
+function isCircularPhotoFrame(w: number, h: number, radiusPx: number): boolean {
+  const minSide = Math.min(w, h)
+  if (minSide <= 0) return false
+  return Math.abs(w - h) / minSide <= 0.18 && radiusPx >= minSide * 0.45
+}
+
+function drawPhotoForFrame(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radiusPx: number,
+) {
+  if (isCircularPhotoFrame(w, h, radiusPx)) {
+    drawImageCover(ctx, img, x, y, w, h)
+  } else {
+    drawImageContain(ctx, img, x, y, w, h)
+  }
+}
+
 async function drawHouseFlagCanvas(
   ctx: CanvasRenderingContext2D,
   formData: Record<string, string>,
@@ -499,28 +546,10 @@ async function renderIdCard(
       if (student.photoUrl) {
         const photoImg = await getCachedImage(student.photoUrl)
         if (photoImg) {
-          // Contain-fit keeps the uploaded portrait intact. Do not auto-zoom
-          // or crop the face to fill the mapped photo box.
-          const photoAspect = photoImg.naturalWidth / photoImg.naturalHeight
-          const boxAspect = fw / fh
-          let dx: number, dy: number, dw: number, dh: number
-          if (photoAspect > boxAspect) {
-            // Photo is wider → fit width, center vertically
-            dw = fw
-            dh = fw / photoAspect
-            dx = fx
-            dy = fy + (fh - dh) / 2
-          } else {
-            // Photo is taller → fit height, center horizontally
-            dh = fh
-            dw = fh * photoAspect
-            dx = fx + (fw - dw) / 2
-            dy = fy
-          }
           ctx.save()
           pathRoundedRect(ctx, fx, fy, fw, fh, radiusPx)
           ctx.clip()
-          ctx.drawImage(photoImg, 0, 0, photoImg.naturalWidth, photoImg.naturalHeight, dx, dy, dw, dh)
+          drawPhotoForFrame(ctx, photoImg, fx, fy, fw, fh, radiusPx)
           ctx.restore()
         }
       }
@@ -683,14 +712,18 @@ async function renderIdCardSvg(
         const borderPx = ((field.photoBorderWidth || 0) / BATCH_EDITOR_REFERENCE_WIDTH) * w
         const radius = Math.max(0, Math.min(radiusPx, Math.min(fw, fh) / 2))
 
-        // clipPath for rounded corners; meet preserves the whole uploaded photo.
+        const preserveAspectRatio = isCircularPhotoFrame(fw, fh, radiusPx)
+          ? "xMidYMid slice"
+          : "xMidYMid meet"
+
+        // clipPath for rounded corners; circular frames use slice to fill the circle.
         const clipId = `clip-${field.id}`
         const clipRect = radius > 0
           ? `<rect x="${fx}" y="${fy}" width="${fw}" height="${fh}" rx="${radius}" ry="${radius}" />`
           : `<rect x="${fx}" y="${fy}" width="${fw}" height="${fh}" />`
 
         lines.push(`  <defs><clipPath id="${clipId}">${clipRect}</clipPath></defs>`)
-        lines.push(`  <image href="${photoDataUrl}" x="${fx}" y="${fy}" width="${fw}" height="${fh}" preserveAspectRatio="xMidYMid meet" clip-path="url(#${clipId})" />`)
+        lines.push(`  <image href="${photoDataUrl}" x="${fx}" y="${fy}" width="${fw}" height="${fh}" preserveAspectRatio="${preserveAspectRatio}" clip-path="url(#${clipId})" />`)
 
         if (borderPx > 0) {
           const borderColor = field.photoBorderColor || "#000000"

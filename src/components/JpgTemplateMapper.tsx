@@ -1891,7 +1891,7 @@ export default function JpgTemplateMapper({
                           style={{
                             width: "100%",
                             height: "100%",
-                            objectFit: "contain",
+                            objectFit: (m.photoBorderRadius || 0) >= 300 ? "cover" : "contain",
                             objectPosition: "center",
                             borderRadius: `${m.photoBorderRadius || 0}px`,
                           }}

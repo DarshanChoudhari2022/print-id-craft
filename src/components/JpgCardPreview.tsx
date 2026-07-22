@@ -105,6 +105,53 @@ function drawImageContain(
   ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, dw, dh)
 }
 
+function drawImageCover(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  const photoAspect = img.naturalWidth / img.naturalHeight
+  const boxAspect = w / h
+  let dx: number, dy: number, dw: number, dh: number
+  if (photoAspect > boxAspect) {
+    dh = h
+    dw = h * photoAspect
+    dx = x + (w - dw) / 2
+    dy = y
+  } else {
+    dw = w
+    dh = w / photoAspect
+    dx = x
+    dy = y + (h - dh) / 2
+  }
+  ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, dw, dh)
+}
+
+function isCircularPhotoFrame(w: number, h: number, radiusPx: number): boolean {
+  const minSide = Math.min(w, h)
+  if (minSide <= 0) return false
+  return Math.abs(w - h) / minSide <= 0.18 && radiusPx >= minSide * 0.45
+}
+
+function drawPhotoForFrame(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radiusPx: number,
+) {
+  if (isCircularPhotoFrame(w, h, radiusPx)) {
+    drawImageCover(ctx, img, x, y, w, h)
+  } else {
+    drawImageContain(ctx, img, x, y, w, h)
+  }
+}
+
 async function drawHouseFlag(
   ctx: CanvasRenderingContext2D,
   formData: Record<string, string>,
@@ -431,7 +478,7 @@ export default function JpgCardPreview({
               ctx.save()
               pathRoundedRect(ctx, fx, fy, fw, fh, radiusPx)
               ctx.clip()
-              drawImageContain(ctx, photoImg, fx, fy, fw, fh)
+              drawPhotoForFrame(ctx, photoImg, fx, fy, fw, fh, radiusPx)
               ctx.restore()
             } catch (err) {
               ctx.save()
@@ -625,21 +672,10 @@ export async function generateJpgCard(
       if (studentPhoto) {
         try {
           const photoImg = await loadImage(studentPhoto)
-          // Contain-fit: scale to fit entirely inside the box, no cropping.
-          const photoAspect = photoImg.naturalWidth / photoImg.naturalHeight
-          const boxAspect = fw / fh
-          let dx: number, dy: number, dw: number, dh: number
-          if (photoAspect > boxAspect) {
-            dw = fw; dh = fw / photoAspect
-            dx = fx; dy = fy + (fh - dh) / 2
-          } else {
-            dh = fh; dw = fh * photoAspect
-            dx = fx + (fw - dw) / 2; dy = fy
-          }
           ctx.save()
           pathRoundedRect(ctx, fx, fy, fw, fh, radiusPx)
           ctx.clip()
-          ctx.drawImage(photoImg, 0, 0, photoImg.naturalWidth, photoImg.naturalHeight, dx, dy, dw, dh)
+          drawPhotoForFrame(ctx, photoImg, fx, fy, fw, fh, radiusPx)
           ctx.restore()
         } catch {}
       }

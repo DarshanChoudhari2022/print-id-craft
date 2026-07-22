@@ -30,12 +30,14 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
     const studentId = params.id
     const { formData, photoUrl, photoPath, photoBgStatus = "" } = await req.json()
 
-    if (!formData || typeof formData !== "object") {
+    const hasPhotoUpdate = typeof photoUrl === "string" || typeof photoPath === "string"
+    const hasFormDataUpdate = formData !== undefined
+    if (!hasFormDataUpdate && !hasPhotoUpdate) {
+      return NextResponse.json({ error: "No changes provided" }, { status: 400 })
+    }
+    if (hasFormDataUpdate && (!formData || typeof formData !== "object" || Array.isArray(formData))) {
       return NextResponse.json({ error: "Invalid form data" }, { status: 400 })
     }
-    const normalizedFormData = normalizeStudentStringFormData(formData)
-
-    const hasPhotoUpdate = typeof photoUrl === "string" || typeof photoPath === "string"
     if (hasPhotoUpdate) {
       if (typeof photoUrl !== "string" || typeof photoPath !== "string") {
         return NextResponse.json({ error: "Invalid photo update" }, { status: 400 })
@@ -63,14 +65,23 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
 
     const student = await prisma.student.findFirst({
       where: whereClause,
-      select: TEACHER_EDIT_AUTH_SELECT,
+      select: { ...TEACHER_EDIT_AUTH_SELECT, formData: true },
     })
     if (!student) {
       return NextResponse.json({ error: "Student not found or not authorized" }, { status: 404 })
     }
 
+    const existingFormData = (student.formData || {}) as Record<string, string>
+    const normalizedIncomingFormData = hasFormDataUpdate
+      ? normalizeStudentStringFormData(formData)
+      : {}
+    const mergedFormData = {
+      ...existingFormData,
+      ...normalizedIncomingFormData,
+    }
+
     const updateData = {
-      formData: normalizedFormData,
+      formData: mergedFormData,
       ...(hasPhotoUpdate ? {
         photoUrl,
         photoPath,
@@ -78,7 +89,7 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
         originalPhotoPath: photoPath,
         photoBgStatus: photoBgStatus as PhotoBgStatus,
       } : {}),
-      ...buildStudentIndexData(normalizedFormData, student.classId),
+      ...buildStudentIndexData(mergedFormData, student.classId),
     }
     const compatibleSelect = {
       id: true,
