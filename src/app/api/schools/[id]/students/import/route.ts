@@ -364,6 +364,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     // Make the import idempotent. Re-uploading the same workbook must not
     // create another copy of every student/employee. Match strong employee or
     // school identifiers first, then exact/name-based fallback identities.
+    const useStudentNameIdentity = school.workspaceKind !== "company"
     const existingStudents = await prisma.student.findMany({
       where: { schoolId },
       select: { formData: true },
@@ -371,13 +372,13 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     const existingIdentities = new Set<string>()
     for (const student of existingStudents) {
       const fd = (student.formData || {}) as Record<string, string>
-      for (const identity of buildImportIdentityKeys(fd)) existingIdentities.add(identity)
+      for (const identity of buildImportIdentityKeys(fd, { useStudentNameIdentity })) existingIdentities.add(identity)
     }
 
     const importIdentities = new Set<string>()
     const duplicateRows: Array<{ row: number; name: string }> = []
     const importableRows = validRows.filter(row => {
-      const identities = buildImportIdentityKeys(row.formData)
+      const identities = buildImportIdentityKeys(row.formData, { useStudentNameIdentity })
       const duplicate = identities.some(identity =>
         existingIdentities.has(identity) || importIdentities.has(identity)
       )

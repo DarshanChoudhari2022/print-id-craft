@@ -85,7 +85,7 @@ describe("Shining Light sibling duplicate detection", () => {
     })
   })
 
-  it("does not change the existing duplicate behavior for another class", async () => {
+  it("allows a different student name to reuse the parent mobile number in any class", async () => {
     ;(prisma.student.findFirst as any).mockImplementation(
       ({ where }: { where: Record<string, unknown> }) =>
         where.normalizedRollNo ? Promise.resolve(existingStudent) : Promise.resolve(null)
@@ -99,11 +99,12 @@ describe("Shining Light sibling duplicate detection", () => {
       dateOfBirth: "07/07/2021",
     })
 
-    expect(result).toMatchObject({
-      isDuplicate: true,
-      kind: "roll",
-      error: "DUPLICATE_ROLL",
-    })
+    expect(result).toEqual({ isDuplicate: false })
+    expect(prisma.student.findFirst).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ normalizedRollNo: expect.any(String) }),
+      })
+    )
   })
 
   it("allows the same pre-primary roll number in a different class option", async () => {

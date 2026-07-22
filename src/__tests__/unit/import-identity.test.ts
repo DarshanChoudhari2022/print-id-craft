@@ -28,4 +28,23 @@ describe("bulk import identity", () => {
     const second = buildImportIdentityKeys({ fullName: "Aditi Rao", phone: "9999999999" })
     expect(first).not.toContain(second.find(key => key.startsWith("name-mobile:")))
   })
+
+  it("can use only the full student name as the school import identity", () => {
+    const first = buildImportIdentityKeys(
+      { fullName: "Zara Taufif Shaikh", phone: "9999999999" },
+      { useStudentNameIdentity: true }
+    )
+    const second = buildImportIdentityKeys(
+      { fullName: "Zara Taufif Shaikh", phone: "8888888888" },
+      { useStudentNameIdentity: true }
+    )
+    const firstNameKey = first.find(key => key.startsWith("student-name:"))
+    expect(firstNameKey).toBe("student-name:zarataufifshaikh")
+    expect(second).toContain(firstNameKey)
+  })
+
+  it("does not use name-only identity unless school import asks for it", () => {
+    expect(buildImportIdentityKeys({ fullName: "Zara Taufif Shaikh", phone: "9999999999" }))
+      .not.toContain("student-name:zarataufifshaikh")
+  })
 })

@@ -51,7 +51,10 @@ function stableRecordFingerprint(formData: Record<string, string>): string {
  * school identifiers win; record and name-based fallbacks catch unchanged
  * spreadsheets that do not contain a formal ID column.
  */
-export function buildImportIdentityKeys(formData: Record<string, string>): string[] {
+export function buildImportIdentityKeys(
+  formData: Record<string, string>,
+  options: { useStudentNameIdentity?: boolean } = {}
+): string[] {
   const keys: string[] = []
   const employeeIds: string[] = []
   const schoolIds: Array<{ key: string; value: string }> = []
@@ -70,6 +73,7 @@ export function buildImportIdentityKeys(formData: Record<string, string>): strin
   const name = identityValue(resolveFieldValue(formData, "name"))
   const dob = identityValue(resolveFieldValue(formData, "dateofbirth"))
   const mobile = identityValue(resolveFieldValue(formData, "mobile"))
+  if (options.useStudentNameIdentity && name) keys.push(`student-name:${name}`)
   for (const employeeId of employeeIds) {
     keys.push(name ? `employee:${employeeId}:${name}` : `employee:${employeeId}`)
   }
