@@ -13,7 +13,7 @@ const ADDRESS_MIN_WORDS = 5
 
 export function stripIndianPrefix(raw: string): string {
   if (!raw) return ""
-  const explicit = raw.match(/^\+?\s*91[\s-]*(\d{0,10})\s*$/)
+  const explicit = raw.match(/^\+\s*91[\s-]*(\d{10})\s*$/)
   if (explicit) return explicit[1]
   const digits = raw.replace(/\D/g, "")
   if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2)

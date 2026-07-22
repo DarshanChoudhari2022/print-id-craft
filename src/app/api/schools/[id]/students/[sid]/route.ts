@@ -78,9 +78,13 @@ export async function PATCH(req: Request, props: { params: Promise<{ id: string;
       })
       const targetClassId = classId || currentStudent?.classId
       if (!targetClassId) return NextResponse.json({ error: "Student not found" }, { status: 404 })
-      const targetFormData = formData
+      const existingFormData = (currentStudent?.formData || {}) as Record<string, unknown>
+      const incomingFormData = formData
         ? normalizeStudentStringFormData(formData)
-        : currentStudent?.formData
+        : {}
+      const targetFormData = formData
+        ? { ...existingFormData, ...incomingFormData }
+        : existingFormData
       if (formData) updateData.formData = targetFormData
       Object.assign(updateData, buildStudentIndexData(targetFormData as Record<string, unknown>, targetClassId))
     }

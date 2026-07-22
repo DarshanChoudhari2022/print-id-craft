@@ -182,7 +182,7 @@ const stripIndianPrefix = (raw: string): string => {
   if (!raw) return ""
   // Recognize a stored value that was clearly written by our own input
   // ("+91 XXXXXXXXXX" / "+91XXXXXXXXXX") — strip the prefix verbatim.
-  const explicit = raw.match(/^\+?\s*91[\s-]*(\d{0,10})\s*$/)
+  const explicit = raw.match(/^\+\s*91[\s-]*(\d{10})\s*$/)
   if (explicit) return explicit[1]
   const digits = raw.replace(/\D/g, "")
   // 12-digit string starting with 91 → country code + 10 local digits
