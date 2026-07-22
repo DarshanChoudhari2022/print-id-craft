@@ -6,6 +6,13 @@ import { withStudentPhotoUrl } from "@/lib/student-photo-url"
 import { buildStudentIndexData } from "@/lib/student-index"
 import { normalizeStudentStringFormData } from "@/lib/student-text-normalization"
 
+function shouldKeepExistingFormValue(existingValue: unknown, incomingValue: unknown): boolean {
+  const existing = String(existingValue ?? "").trim()
+  if (!existing) return false
+  const incoming = String(incomingValue ?? "").trim()
+  return !incoming || /^#(?:ERROR|VALUE|N\/A|REF|DIV\/0|NAME|NUM|NULL)!?$/i.test(incoming)
+}
+
 export async function GET(req: Request, props: { params: Promise<{ id: string; sid: string }> }) {
   const params = await props.params;
   try {
@@ -82,8 +89,13 @@ export async function PATCH(req: Request, props: { params: Promise<{ id: string;
       const incomingFormData = formData
         ? normalizeStudentStringFormData(formData)
         : {}
+      const safeIncomingFormData = Object.fromEntries(
+        Object.entries(incomingFormData).filter(([key, value]) =>
+          !shouldKeepExistingFormValue(existingFormData[key], value)
+        )
+      )
       const targetFormData = formData
-        ? { ...existingFormData, ...incomingFormData }
+        ? { ...existingFormData, ...safeIncomingFormData }
         : existingFormData
       if (formData) updateData.formData = targetFormData
       Object.assign(updateData, buildStudentIndexData(targetFormData as Record<string, unknown>, targetClassId))

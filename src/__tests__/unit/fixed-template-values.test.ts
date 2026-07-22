@@ -93,6 +93,7 @@ describe("optional fixed template field values", () => {
     expect(manufacturerPage).toContain("!m.useFixedValue")
     expect(manufacturerPage).toContain("const formDataForSave = applyFixedTemplateValuesToFormData")
     expect(manufacturerPage).toContain("validatePublicSubmissionDetails(formDataForSave, editFields)")
-    expect(manufacturerPage).toContain("JSON.stringify({ formData: formDataForSave")
+    expect(manufacturerPage).toContain("shouldSendFormData")
+    expect(manufacturerPage).toContain("...(shouldSendFormData ? { formData: formDataForSave } : {})")
   })
 })

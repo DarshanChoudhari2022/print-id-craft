@@ -1358,6 +1358,7 @@ export default function SchoolDetailPage() {
   const [editStudentOpen, setEditStudentOpen] = useState(false)
   const [editStudentTarget, setEditStudentTarget] = useState<StudentData | null>(null)
   const [editFormFields, setEditFormFields] = useState<Record<string, string>>({})
+  const [editOriginalFormFields, setEditOriginalFormFields] = useState<Record<string, string>>({})
   const [editMobileLocals, setEditMobileLocals] = useState<Record<string, string>>({})
   const [editClassId, setEditClassId] = useState("")
   const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null)
@@ -1367,6 +1368,7 @@ export default function SchoolDetailPage() {
   const openAddStudent = () => {
     setEditStudentTarget(null)
     setEditFormFields({})
+    setEditOriginalFormFields({})
     setEditMobileLocals({})
     setEditClassId(classes[0]?.id || "")
     setEditPhotoFile(null)
@@ -1379,6 +1381,7 @@ export default function SchoolDetailPage() {
     const hydrated = hydrateEditFormFromStudent(templateData, fd)
     setEditStudentTarget(s)
     setEditFormFields(hydrated.formFields)
+    setEditOriginalFormFields(hydrated.formFields)
     setEditMobileLocals(hydrated.mobileLocals)
     setEditClassId(s.classId || s.class?.id || "")
     setEditPhotoFile(null)
@@ -1456,10 +1459,14 @@ export default function SchoolDetailPage() {
       editFormFields,
       getEditTemplateMappings(templateData),
     ) as Record<string, string>
-    const validation = validatePublicSubmissionDetails(formDataForSave, editFields)
-    if (!validation.ok) {
-      toast.error(validation.error)
-      return
+    const shouldSendFormData = !editStudentTarget
+      || JSON.stringify(editFormFields) !== JSON.stringify(editOriginalFormFields)
+    if (shouldSendFormData) {
+      const validation = validatePublicSubmissionDetails(formDataForSave, editFields)
+      if (!validation.ok) {
+        toast.error(validation.error)
+        return
+      }
     }
 
     setEditSaving(true)
@@ -1482,7 +1489,12 @@ export default function SchoolDetailPage() {
         const res = await fetch(`/api/schools/${schoolId}/students/${editStudentTarget.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ formData: formDataForSave, photoUrl, photoPath, classId: editClassId }),
+          body: JSON.stringify({
+            ...(shouldSendFormData ? { formData: formDataForSave } : {}),
+            photoUrl,
+            photoPath,
+            classId: editClassId,
+          }),
         })
         const data = await res.json()
         if (data.success) {
