@@ -27,7 +27,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
         },
         templates: { take: 1, select: { id: true, fieldConfig: true } },
         teachers: {
-          select: { id: true, email: true, name: true, role: true, isMainTeacher: true },
+          select: { id: true, email: true, name: true, role: true, isMainTeacher: true, isActive: true, expiresAt: true },
           where: { role: 'TEACHER' }
         },
       },

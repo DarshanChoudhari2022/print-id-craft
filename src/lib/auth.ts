@@ -43,6 +43,17 @@ export const authOptions: NextAuthOptions = {
           throw new Error("User not found")
         }
 
+        if (user.role === "TEACHER") {
+          if (!user.isActive) {
+            authWarn("[AUTH] Teacher account closed", `[AUTH] Teacher account closed: ${email}`)
+            throw new Error("This teacher login has been closed. Please contact the manufacturer.")
+          }
+          if (user.expiresAt && user.expiresAt.getTime() <= Date.now()) {
+            authWarn("[AUTH] Teacher account expired", `[AUTH] Teacher account expired: ${email}`)
+            throw new Error("This teacher login has expired. Please contact the manufacturer.")
+          }
+        }
+
         const isMatch = await bcrypt.compare(credentials.password, user.password)
 
         if (!isMatch) {
@@ -87,6 +98,14 @@ export const authOptions: NextAuthOptions = {
         token.classId = (user as any).classId
         token.isMainTeacher = (user as any).isMainTeacher
         token.name = user.name
+      } else if (token.role === "TEACHER" && token.id) {
+        const freshUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { isActive: true, expiresAt: true },
+        })
+        if (!freshUser || !freshUser.isActive || (freshUser.expiresAt && freshUser.expiresAt.getTime() <= Date.now())) {
+          token.role = "BLOCKED"
+        }
       }
       return token
     },

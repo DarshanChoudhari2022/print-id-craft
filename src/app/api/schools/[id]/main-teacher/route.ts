@@ -13,7 +13,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const body = await req.json().catch(() => ({}))
-    const { email: manualEmail, reset } = body
+    const { email: manualEmail, reset, action, expiresAt } = body
 
     const school = await prisma.school.findUnique({
       where: { id: params.id },
@@ -43,9 +43,42 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       const defaultPassword = await bcrypt.hash(defaultPasswordText, 12)
       await prisma.user.update({
         where: { id: teacher.id },
-        data: { password: defaultPassword }
+        data: { password: defaultPassword, isActive: true, expiresAt: null }
       })
       return NextResponse.json({ success: true, message: `Password reset to ${defaultPasswordText}` })
+    }
+
+    if (action && school.teachers.length > 0) {
+      const teacher = school.teachers[0]
+      if (action === "close") {
+        await prisma.user.update({
+          where: { id: teacher.id },
+          data: { isActive: false },
+        })
+        return NextResponse.json({ success: true, message: "Coordinator login closed" })
+      }
+      if (action === "reopen") {
+        await prisma.user.update({
+          where: { id: teacher.id },
+          data: { isActive: true, expiresAt: null },
+        })
+        return NextResponse.json({ success: true, message: "Coordinator login reopened" })
+      }
+      if (action === "expiry") {
+        const parsedExpiry = expiresAt ? new Date(expiresAt) : null
+        if (expiresAt && Number.isNaN(parsedExpiry?.getTime())) {
+          return NextResponse.json({ error: "Invalid expiry date" }, { status: 400 })
+        }
+        await prisma.user.update({
+          where: { id: teacher.id },
+          data: {
+            isActive: !parsedExpiry || parsedExpiry.getTime() > Date.now(),
+            expiresAt: parsedExpiry,
+          },
+        })
+        return NextResponse.json({ success: true, message: parsedExpiry ? "Coordinator login expiry updated" : "Coordinator login expiry removed" })
+      }
+      return NextResponse.json({ error: "Invalid action" }, { status: 400 })
     }
 
     if (school.teachers.length > 0 && !manualEmail) {
@@ -65,7 +98,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     if (existingUser) {
         await prisma.user.update({
             where: { id: existingUser.id },
-            data: { isMainTeacher: true, role: "TEACHER", schoolId: school.id }
+            data: { isMainTeacher: true, role: "TEACHER", schoolId: school.id, isActive: true, expiresAt: null }
         })
     } else {
         await prisma.user.create({

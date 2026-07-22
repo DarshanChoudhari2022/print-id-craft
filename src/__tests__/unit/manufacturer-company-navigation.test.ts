@@ -10,6 +10,7 @@ const representativeDashboardSource = readFileSync("src/app/teacher/dashboard/pa
 const schoolsApiSource = readFileSync("src/app/api/schools/route.ts", "utf8")
 const representativeApiSource = readFileSync("src/app/api/schools/[id]/main-teacher/route.ts", "utf8")
 const templateMapperSource = readFileSync("src/components/JpgTemplateMapper.tsx", "utf8")
+const authSource = readFileSync("src/lib/auth.ts", "utf8")
 
 describe("manufacturer company navigation", () => {
   it("places Company directly after Schools in the left navigation", () => {
@@ -65,5 +66,14 @@ describe("manufacturer company navigation", () => {
     expect(templateMapperSource).toContain('"Employee Photo"')
     expect(templateMapperSource).toContain('"Emergency Contact Number"')
     expect(templateMapperSource).toContain('"Office Address"')
+  })
+
+  it("lets manufacturers close or expire coordinator teacher logins", () => {
+    expect(detailSource).toContain("Close Login")
+    expect(detailSource).toContain("Set Expiry Date")
+    expect(representativeApiSource).toContain('action === "close"')
+    expect(representativeApiSource).toContain('action === "expiry"')
+    expect(authSource).toContain("Teacher account closed")
+    expect(authSource).toContain("Teacher account expired")
   })
 })

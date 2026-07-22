@@ -19,12 +19,15 @@ model User {
   classId       String?
   class         Class?   @relation(fields: [classId], references: [id])
   isMainTeacher Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  expiresAt     DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([schoolId])
   @@index([role])
   @@index([classId])
+  @@index([role, isActive, expiresAt])
 }
 
 enum Role {

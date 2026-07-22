@@ -160,7 +160,7 @@ type ClassData = {
     byClass: Array<{ label: string; count: number }>
     byGrade: Array<{ grade: string; count: number }>
   }
-  teachers: { id: string; name: string; email: string; isMainTeacher: boolean }[]
+  teachers: { id: string; name: string; email: string; isMainTeacher: boolean; isActive?: boolean; expiresAt?: string | null }[]
   createdAt: string
 }
 
@@ -317,6 +317,8 @@ export default function SchoolDetailPage() {
   // Inline expiry editor (per-row): which class is being edited + its draft value
   const [editingExpiryFor, setEditingExpiryFor] = useState<string | null>(null)
   const [editingExpiryValue, setEditingExpiryValue] = useState<string>("")
+  const [editingTeacherExpiryFor, setEditingTeacherExpiryFor] = useState<string | null>(null)
+  const [editingTeacherExpiryValue, setEditingTeacherExpiryValue] = useState<string>("")
 
   // Per-class template management
   const [schoolTemplates, setSchoolTemplates] = useState<SchoolTemplateSummary[]>([])
@@ -897,6 +899,14 @@ export default function SchoolDetailPage() {
     }
     setEditingExpiryFor(cid)
     setEditingExpiryValue(initial)
+  }
+
+  const toDateTimeLocalValue = (currentIso?: string | null) => {
+    if (!currentIso) return ""
+    const d = new Date(currentIso)
+    if (Number.isNaN(d.getTime())) return ""
+    const pad = (n: number) => String(n).padStart(2, "0")
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
   }
 
   const cancelEditExpiry = () => {
@@ -1597,6 +1607,45 @@ export default function SchoolDetailPage() {
       toast.error(err?.message || "Information update failed")
     } finally {
       setInfoUpdateUploading(false)
+    }
+  }
+
+  const updateMainTeacherLogin = async (
+    body: Record<string, unknown>,
+    successMessage: string,
+  ) => {
+    const res = await fetch(`/api/schools/${schoolId}/main-teacher`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(json.error || "Could not update coordinator login")
+    toast.success(successMessage)
+    fetchSchool()
+  }
+
+  const startEditTeacherExpiry = (teacherId: string, currentIso?: string | null) => {
+    setEditingTeacherExpiryFor(teacherId)
+    setEditingTeacherExpiryValue(toDateTimeLocalValue(currentIso))
+  }
+
+  const cancelEditTeacherExpiry = () => {
+    setEditingTeacherExpiryFor(null)
+    setEditingTeacherExpiryValue("")
+  }
+
+  const saveTeacherExpiry = async () => {
+    const raw = editingTeacherExpiryValue.trim()
+    const expiresAt = raw ? new Date(raw).toISOString() : null
+    try {
+      await updateMainTeacherLogin(
+        { action: "expiry", expiresAt },
+        expiresAt ? "Coordinator login expiry updated" : "Coordinator login expiry removed",
+      )
+      cancelEditTeacherExpiry()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update coordinator expiry")
     }
   }
 
@@ -2463,7 +2512,13 @@ export default function SchoolDetailPage() {
               </p>
               
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
-                {school.teachers?.filter((t: any) => t.isMainTeacher).map((t: any) => (
+                {school.teachers?.filter((t: any) => t.isMainTeacher).map((t: any) => {
+                  const teacherExpired = !!(t.expiresAt && new Date(t.expiresAt).getTime() <= Date.now())
+                  const teacherClosed = t.isActive === false
+                  const teacherBlocked = teacherClosed || teacherExpired
+                  const statusText = teacherClosed ? "Closed" : teacherExpired ? "Expired" : "Active"
+                  const statusColor = teacherBlocked ? "#dc2626" : "#16a34a"
+                  return (
                   <div key={t.id} style={{ background: 'white', borderRadius: 12, padding: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                     <div style={{ marginBottom: 12 }}>
                       <span style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>Login URL</span>
@@ -2488,8 +2543,63 @@ export default function SchoolDetailPage() {
                         </div>
                       </div>
                     </div>
+                    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 10 }}>
+                        <div>
+                          <span style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>Login Status</span>
+                          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 999, background: statusColor, display: 'inline-block' }} />
+                            <span style={{ color: statusColor, fontSize: 13, fontWeight: 700 }}>{statusText}</span>
+                            {t.expiresAt && (
+                              <span style={{ color: '#64748b', fontSize: 12 }}>
+                                Expires {new Date(t.expiresAt).toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button className="btn btn-outline" style={{ padding: '6px 10px', fontSize: 12, minHeight: 0, color: teacherBlocked ? '#16a34a' : '#dc2626' }} onClick={async () => {
+                          try {
+                            if (teacherBlocked) {
+                              await updateMainTeacherLogin({ action: "reopen" }, "Coordinator login reopened")
+                            } else if (confirm("Close this coordinator login? They will not be able to log in again until you reopen it.")) {
+                              await updateMainTeacherLogin({ action: "close" }, "Coordinator login closed")
+                            }
+                          } catch (error) {
+                            toast.error(error instanceof Error ? error.message : "Could not update login")
+                          }
+                        }}>
+                          {teacherBlocked ? "Reopen Login" : "Close Login"}
+                        </button>
+                      </div>
+                      {editingTeacherExpiryFor === t.id ? (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <input
+                            type="datetime-local"
+                            value={editingTeacherExpiryValue}
+                            onChange={e => setEditingTeacherExpiryValue(e.target.value)}
+                            style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13 }}
+                          />
+                          <button className="btn btn-primary" style={{ padding: '7px 10px', fontSize: 12, minHeight: 0 }} onClick={saveTeacherExpiry}>Save Expiry</button>
+                          <button className="btn btn-outline" style={{ padding: '7px 10px', fontSize: 12, minHeight: 0 }} onClick={async () => {
+                            setEditingTeacherExpiryValue("")
+                            try {
+                              await updateMainTeacherLogin({ action: "expiry", expiresAt: null }, "Coordinator login expiry removed")
+                              cancelEditTeacherExpiry()
+                            } catch (error) {
+                              toast.error(error instanceof Error ? error.message : "Could not remove expiry")
+                            }
+                          }}>No Expiry</button>
+                          <button className="btn btn-outline" style={{ padding: '7px 10px', fontSize: 12, minHeight: 0 }} onClick={cancelEditTeacherExpiry}>Cancel</button>
+                        </div>
+                      ) : (
+                        <button className="btn btn-outline" style={{ padding: '6px 10px', fontSize: 12, minHeight: 0 }} onClick={() => startEditTeacherExpiry(t.id, t.expiresAt)}>
+                          Set Expiry Date
+                        </button>
+                      )}
+                    </div>
                   </div>
-                ))}
+                  )
+                })}
                 
                 {/* Manual Add Option (Always show as an alternative or if missing) */}
                 {(!school.teachers || !school.teachers.some((t: any) => t.isMainTeacher)) && (
