@@ -146,10 +146,27 @@ const capitalizeWordInitials = (value: string): string =>
 
 const getCleanLabel = (label: string): string => {
   const l = (label || "").toLowerCase().trim()
-  if (l === "mother (no.)" || l === "mother no." || l === "mother no" || l === "motherphone" || l === "mother phone") {
+  const compact = l.replace(/[^a-z0-9]/g, "")
+  const isMobileNumberLabel = /(mobile|mob|phone|no|number)/.test(l)
+  if (
+    l === "mother (no.)" ||
+    l === "mother no." ||
+    l === "mother no" ||
+    l === "motherphone" ||
+    l === "mother phone" ||
+    (compact.includes("mother") && isMobileNumberLabel && !compact.includes("name"))
+  ) {
     return "Mother's Mobile No."
   }
-  if (l === "mob.- father" || l === "father (no.)" || l === "father no." || l === "father no" || l === "fatherphone" || l === "father phone") {
+  if (
+    l === "mob.- father" ||
+    l === "father (no.)" ||
+    l === "father no." ||
+    l === "father no" ||
+    l === "fatherphone" ||
+    l === "father phone" ||
+    (compact.includes("father") && isMobileNumberLabel && !compact.includes("name"))
+  ) {
     return "Father's Mobile No."
   }
   return label
