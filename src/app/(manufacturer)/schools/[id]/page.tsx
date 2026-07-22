@@ -29,6 +29,10 @@ import {
 import { resolveHouseImageUrl } from "@/lib/house-flags"
 import { isCompanyWorkspace } from "@/lib/workspace-kind"
 import { normalizeStudentFieldValue } from "@/lib/student-text-normalization"
+import {
+  applyFixedTemplateValuesToFormData,
+  getFixedTemplateFieldKeys,
+} from "@/lib/fixed-template-values"
 
 const EDIT_ADDRESS_MIN_WORDS = 5
 
@@ -36,10 +40,33 @@ type EditStudentField = FormField & {
   inputType: "flag" | "mobile" | "address" | "dob" | "text" | "textarea"
 }
 
+function canonicalEditStudentFieldKey(fieldKey: string, label: string): string {
+  const normalized = normalizeKey(`${fieldKey} ${label}`)
+  const isContactLike = /(contact|mobile|phone|tel|no|number)/.test(normalized)
+  if (normalized.includes("emergency") && isContactLike) return "emergencyContact"
+  if (normalized.includes("office") && isContactLike) return "officeNo"
+  if (normalized.includes("employee") && isContactLike) return "mobile"
+  return fieldKey
+}
+
+function getEditTemplateMappings(templateData: any): any[] {
+  return [
+    ...((templateData?.fieldMappings || []) as any[]),
+    ...((templateData?.backFieldMappings || []) as any[]),
+  ]
+}
+
 function buildEditStudentFields(templateData: any): EditStudentField[] {
-  const mappings = (templateData?.fieldMappings || []) as any[]
+  const mappings = getEditTemplateMappings(templateData)
+  const fixedKeys = getFixedTemplateFieldKeys(mappings)
   const textMappings = mappings.filter(
-    (m) => m.type !== "photo" && m.fieldKey !== "class" && m.fieldKey !== "classSection"
+    (m) => (
+      m.type !== "photo" &&
+      m.fieldKey !== "class" &&
+      m.fieldKey !== "classSection" &&
+      !m.useFixedValue &&
+      !fixedKeys.has(normalizeKey(canonicalEditStudentFieldKey(m.fieldKey, m.label)))
+    )
   )
   if (textMappings.length === 0) {
     return [
@@ -48,7 +75,9 @@ function buildEditStudentFields(templateData: any): EditStudentField[] {
       { key: "address", label: "Address", type: "text", required: true, role: "address", inputType: "address" },
     ]
   }
+  const seenKeys = new Set<string>()
   return textMappings.map((m) => {
+    const key = canonicalEditStudentFieldKey(m.fieldKey, m.label)
     const role = getFieldRole(m.fieldKey, m.label)
     let inputType: EditStudentField["inputType"] = "text"
     if (m.type === "flag") inputType = "flag"
@@ -57,13 +86,17 @@ function buildEditStudentFields(templateData: any): EditStudentField[] {
     else if (role === "dob") inputType = "dob"
     else if (m.fieldKey.toLowerCase().includes("address")) inputType = "textarea"
     return {
-      key: m.fieldKey,
+      key,
       label: m.label,
       type: role === "mobile" ? "tel" : "text",
       required: true,
       role,
       inputType,
     }
+  }).filter((field) => {
+    if (seenKeys.has(field.key)) return false
+    seenKeys.add(field.key)
+    return true
   })
 }
 
@@ -77,7 +110,10 @@ function hydrateEditFormFromStudent(
   fd: Record<string, string>
 ): { formFields: Record<string, string>; mobileLocals: Record<string, string> } {
   const fields = buildEditStudentFields(templateData)
-  const formFields = { ...fd }
+  const formFields = applyFixedTemplateValuesToFormData(
+    { ...fd },
+    getEditTemplateMappings(templateData),
+  ) as Record<string, string>
   const mobileLocals: Record<string, string> = {}
 
   for (const field of fields) {
@@ -1406,7 +1442,11 @@ export default function SchoolDetailPage() {
     if (!editClassId) { toast.error(`Please select a ${companyMode ? "department" : "class"}`); return }
 
     const editFields = buildEditStudentFields(templateData)
-    const validation = validatePublicSubmissionDetails(editFormFields, editFields)
+    const formDataForSave = applyFixedTemplateValuesToFormData(
+      editFormFields,
+      getEditTemplateMappings(templateData),
+    ) as Record<string, string>
+    const validation = validatePublicSubmissionDetails(formDataForSave, editFields)
     if (!validation.ok) {
       toast.error(validation.error)
       return
@@ -1432,7 +1472,7 @@ export default function SchoolDetailPage() {
         const res = await fetch(`/api/schools/${schoolId}/students/${editStudentTarget.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ formData: editFormFields, photoUrl, photoPath, classId: editClassId }),
+          body: JSON.stringify({ formData: formDataForSave, photoUrl, photoPath, classId: editClassId }),
         })
         const data = await res.json()
         if (data.success) {
@@ -1444,7 +1484,7 @@ export default function SchoolDetailPage() {
         const res = await fetch(`/api/schools/${schoolId}/students`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ formData: editFormFields, classId: editClassId, photoUrl, photoPath }),
+          body: JSON.stringify({ formData: formDataForSave, classId: editClassId, photoUrl, photoPath }),
         })
         const data = await res.json()
         if (data.success) {

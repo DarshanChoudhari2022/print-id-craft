@@ -18,7 +18,6 @@ import {
   printCanvasSize,
   resolveCardDimensions,
 } from "@/lib/card-dimensions"
-import { getCoverPhotoPlacement } from "@/lib/card-photo-placement"
 import {
   generationUsesHouseFlags,
   getHouseFlagRenderLayout,
@@ -91,8 +90,6 @@ const escapeXml = (value: string) => value
   .replace(/</g, "&lt;")
   .replace(/>/g, "&gt;")
   .replace(/"/g, "&quot;")
-
-type PhotoFit = "contain" | "cover"
 
 type BatchGeneratorProps = {
   schoolId: string
@@ -463,7 +460,6 @@ async function renderIdCard(
   flagImageUrl?: string,
   cardWidthMm?: number,
   cardHeightMm?: number,
-  photoFit: PhotoFit = "contain",
 ): Promise<string> {
   const templateImg = await getCachedImage(templateImageUrl)
   if (!templateImg) throw new Error("Failed to load template")
@@ -503,22 +499,12 @@ async function renderIdCard(
       if (student.photoUrl) {
         const photoImg = await getCachedImage(student.photoUrl)
         if (photoImg) {
-          // PDF cover-fit intentionally matches JpgCardPreview's placement so
-          // the downloaded PDF looks the same as the on-screen ID preview.
+          // Contain-fit keeps the uploaded portrait intact. Do not auto-zoom
+          // or crop the face to fill the mapped photo box.
           const photoAspect = photoImg.naturalWidth / photoImg.naturalHeight
           const boxAspect = fw / fh
           let dx: number, dy: number, dw: number, dh: number
-          if (photoFit === "cover") {
-            const placement = getCoverPhotoPlacement(
-              photoImg.naturalWidth,
-              photoImg.naturalHeight,
-              fx,
-              fy,
-              fw,
-              fh,
-            )
-            ;({ dx, dy, dw, dh } = placement)
-          } else if (photoAspect > boxAspect) {
+          if (photoAspect > boxAspect) {
             // Photo is wider → fit width, center vertically
             dw = fw
             dh = fw / photoAspect
@@ -697,14 +683,14 @@ async function renderIdCardSvg(
         const borderPx = ((field.photoBorderWidth || 0) / BATCH_EDITOR_REFERENCE_WIDTH) * w
         const radius = Math.max(0, Math.min(radiusPx, Math.min(fw, fh) / 2))
 
-        // clipPath for aspect-ratio crop + border radius
+        // clipPath for rounded corners; meet preserves the whole uploaded photo.
         const clipId = `clip-${field.id}`
         const clipRect = radius > 0
           ? `<rect x="${fx}" y="${fy}" width="${fw}" height="${fh}" rx="${radius}" ry="${radius}" />`
           : `<rect x="${fx}" y="${fy}" width="${fw}" height="${fh}" />`
 
         lines.push(`  <defs><clipPath id="${clipId}">${clipRect}</clipPath></defs>`)
-        lines.push(`  <image href="${photoDataUrl}" x="${fx}" y="${fy}" width="${fw}" height="${fh}" preserveAspectRatio="xMidYMin slice" clip-path="url(#${clipId})" />`)
+        lines.push(`  <image href="${photoDataUrl}" x="${fx}" y="${fy}" width="${fw}" height="${fh}" preserveAspectRatio="xMidYMid meet" clip-path="url(#${clipId})" />`)
 
         if (borderPx > 0) {
           const borderColor = field.photoBorderColor || "#000000"
@@ -1610,7 +1596,6 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
                 getFlagUrl(student),
                 studentTemplate.cardWidthMm,
                 studentTemplate.cardHeightMm,
-                "cover",
               )
               let backDataUrl: string | undefined
               if (studentTemplate.hasBackSide && studentTemplate.backTemplateImageUrl) {
@@ -1622,7 +1607,6 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
                   getFlagUrl(student),
                   studentTemplate.cardWidthMm,
                   studentTemplate.cardHeightMm,
-                  "cover",
                 )
               }
               const scope = getGenerationStudentScope(student.formData)

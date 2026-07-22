@@ -337,12 +337,30 @@ describe("resolveFieldValue", () => {
       expect(resolveTemplateFieldValue(employee, "emergency_contact_number")).toBe("9768673348")
     })
 
+    it("hydrates emergency edit fields from emergency data even when the mapping key is generic mobile", () => {
+      expect(resolveEditFieldValue(employee, "mobile", "Emergency Contact Number")).toBe("9768673348")
+      expect(resolveEditFieldValue(employee, "phone", "Emergency Contact No")).toBe("9768673348")
+      expect(resolveEditFieldValue({ mobile: "8898156694" }, "mobile", "Emergency Contact Number")).toBe("")
+    })
+
     it("never lets an office number borrow employee or emergency contact data", () => {
       expect(resolveTemplateFieldValue(employee, "office_no")).toBe("")
       expect(resolveTemplateFieldValue({
         ...employee,
         officeNumber: "020-12345678",
       }, "office_no")).toBe("020-12345678")
+    })
+
+    it("hydrates manufacturer edit office number aliases without borrowing contacts", () => {
+      expect(resolveEditFieldValue(employee, "officeNo", "Office No")).toBe("")
+      expect(resolveEditFieldValue({
+        ...employee,
+        officeNumber: "020-12345678",
+      }, "officeNo", "Office No")).toBe("020-12345678")
+      expect(resolveEditFieldValue({
+        ...employee,
+        "Office Contact No": "8668388154",
+      }, "officeNo", "Office No")).toBe("8668388154")
     })
 
     it("resolves exact custom fields independently", () => {

@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest"
 
 const schoolPageSource = readFileSync("src/app/(manufacturer)/schools/[id]/page.tsx", "utf8")
 const bulkPhotoRouteSource = readFileSync("src/app/api/schools/[id]/students/bulk-photos/route.ts", "utf8")
+const jpgCardPreviewSource = readFileSync("src/components/JpgCardPreview.tsx", "utf8")
+const jpgTemplateMapperSource = readFileSync("src/components/JpgTemplateMapper.tsx", "utf8")
+const batchGeneratorSource = readFileSync("src/components/BatchGenerator.tsx", "utf8")
 
 describe("reupload all photos wiring", () => {
   it("adds a dedicated replace-by-name photo upload mode in the students tab", () => {
@@ -33,5 +36,20 @@ describe("reupload all photos wiring", () => {
     expect(bulkPhotoRouteSource).toContain('matchedBy = "Employee Code"')
     expect(bulkPhotoRouteSource).toContain("Company photo uploads intentionally avoid roll/contact/office-number")
     expect(schoolPageSource).toContain("Office/contact numbers are never used for matching")
+  })
+
+  it("keeps company contact fields separate in the manufacturer edit form", () => {
+    expect(schoolPageSource).toContain("canonicalEditStudentFieldKey")
+    expect(schoolPageSource).toContain('return "emergencyContact"')
+    expect(schoolPageSource).toContain('return "officeNo"')
+    expect(schoolPageSource).toContain('return "mobile"')
+  })
+
+  it("renders ID card photos without auto-cropping or auto-zooming", () => {
+    expect(jpgCardPreviewSource).toContain("drawImageContain(ctx, photoImg, fx, fy, fw, fh)")
+    expect(jpgTemplateMapperSource).toContain('objectFit: "contain"')
+    expect(batchGeneratorSource).toContain("Contain-fit keeps the uploaded portrait intact")
+    expect(batchGeneratorSource).toContain('preserveAspectRatio="xMidYMid meet"')
+    expect(batchGeneratorSource).not.toContain('preserveAspectRatio="xMidYMin slice"')
   })
 })

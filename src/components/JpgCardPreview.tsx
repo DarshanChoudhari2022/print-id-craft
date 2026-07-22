@@ -11,7 +11,6 @@ import {
   DEFAULT_PRINT_DPI,
   printCanvasSize,
 } from "@/lib/card-dimensions"
-import { getCoverPhotoPlacement } from "@/lib/card-photo-placement"
 import { getHouseFlagRenderLayout } from "@/lib/house-flags"
 import { formatSchoolCardFieldValue } from "@/lib/school-card-display"
 import { getFixedTemplateValue } from "@/lib/fixed-template-values"
@@ -429,18 +428,10 @@ export default function JpgCardPreview({
           if (studentPhoto) {
             try {
               const photoImg = await loadImage(studentPhoto)
-              const { dx, dy, dw, dh } = getCoverPhotoPlacement(
-                photoImg.naturalWidth,
-                photoImg.naturalHeight,
-                fx,
-                fy,
-                fw,
-                fh,
-              )
               ctx.save()
               pathRoundedRect(ctx, fx, fy, fw, fh, radiusPx)
               ctx.clip()
-              ctx.drawImage(photoImg, 0, 0, photoImg.naturalWidth, photoImg.naturalHeight, dx, dy, dw, dh)
+              drawImageContain(ctx, photoImg, fx, fy, fw, fh)
               ctx.restore()
             } catch (err) {
               ctx.save()

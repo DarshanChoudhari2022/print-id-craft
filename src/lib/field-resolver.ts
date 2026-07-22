@@ -412,20 +412,39 @@ export function resolveEditFieldValue(
   label: string = "",
   explicitRole?: string
 ): string {
+  const fdNormalized = getNormalizedFd(fd)
+  const normKey = normalizeKey(fieldKey)
+  const normLabel = normalizeKey(label)
+  const labelContactAliases = normLabel ? COMPANY_CONTACT_TEMPLATE_ALIASES[normLabel] : undefined
+  if (labelContactAliases && normLabel !== normKey && !labelContactAliases.includes(normKey)) {
+    for (const alias of labelContactAliases) {
+      const value = fdNormalized[alias]
+      if (value) return value
+    }
+    return ""
+  }
+
   const directVal = fd[fieldKey]
   if (directVal != null && String(directVal).trim()) return String(directVal).trim()
 
-  const fdNormalized = getNormalizedFd(fd)
-  const normKey = normalizeKey(fieldKey)
   if (fdNormalized[normKey]) return fdNormalized[normKey]
 
-  const normLabel = normalizeKey(label)
   if (normLabel) {
     for (const [k, v] of Object.entries(fd)) {
       if (v != null && String(v).trim() && normalizeKey(k) === normLabel) {
         return String(v).trim()
       }
     }
+  }
+
+  const companyContactAliases = COMPANY_CONTACT_TEMPLATE_ALIASES[normKey]
+    || (normLabel ? COMPANY_CONTACT_TEMPLATE_ALIASES[normLabel] : undefined)
+  if (companyContactAliases) {
+    for (const alias of companyContactAliases) {
+      const value = fdNormalized[alias]
+      if (value) return value
+    }
+    return ""
   }
 
   const role = getFieldRole(fieldKey, label, explicitRole)

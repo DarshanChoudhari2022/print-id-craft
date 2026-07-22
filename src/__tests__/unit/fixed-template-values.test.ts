@@ -84,4 +84,15 @@ describe("optional fixed template field values", () => {
     expect(printBatch).toContain("applyFixedTemplateValuesToFormData")
     expect(mapper).not.toContain("Fixed Office Number")
   })
+
+  it("is applied before manufacturer edit validation and save", () => {
+    const manufacturerPage = readFileSync("src/app/(manufacturer)/schools/[id]/page.tsx", "utf8")
+
+    expect(manufacturerPage).toContain("getEditTemplateMappings")
+    expect(manufacturerPage).toContain("getFixedTemplateFieldKeys(mappings)")
+    expect(manufacturerPage).toContain("!m.useFixedValue")
+    expect(manufacturerPage).toContain("const formDataForSave = applyFixedTemplateValuesToFormData")
+    expect(manufacturerPage).toContain("validatePublicSubmissionDetails(formDataForSave, editFields)")
+    expect(manufacturerPage).toContain("JSON.stringify({ formData: formDataForSave")
+  })
 })
