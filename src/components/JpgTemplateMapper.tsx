@@ -395,6 +395,7 @@ export default function JpgTemplateMapper({
   const [snapToGrid, setSnapToGrid] = useState(false)
   const [gridSize, setGridSize] = useState(5) // percentage
   const [showRulers, setShowRulers] = useState(false)
+
   const [showCoordinates, setShowCoordinates] = useState(true)
 
   // ── Undo/Redo History ──
@@ -528,6 +529,14 @@ export default function JpgTemplateMapper({
   const [bleedMargin, setBleedMargin] = useState(initialCardSettings?.bleedMargin ?? 1) // mm
   const [cardSizeLocked, setCardSizeLocked] = useState(initialCardSettings?.cardSizeLocked || false)
   const [fixedBranch, setFixedBranch] = useState(initialCardSettings?.fixedBranch || "")
+
+  const getPhotoCornerRadiusPx = useCallback((mapping: FieldMapping) => {
+    const editorImgHeight = cardWidth > 0 ? editorImgWidth * (cardHeight / cardWidth) : editorImgWidth
+    const fieldWidthPx = (mapping.width / 100) * editorImgWidth
+    const fieldHeightPx = (mapping.height / 100) * editorImgHeight
+    const strength = Math.max(0, Math.min(mapping.photoBorderRadius || 0, 100)) / 100
+    return (Math.min(fieldWidthPx, fieldHeightPx) / 2) * strength
+  }, [cardHeight, cardWidth, editorImgWidth])
 
   // String-based intermediates for width/height inputs so user can type freely
   const [cardWidthStr, setCardWidthStr] = useState(String(initialCardSettings?.cardWidth || 100))
@@ -1894,7 +1903,7 @@ export default function JpgTemplateMapper({
                           isSelected ? "#3b82f6" : isClassDivField ? "#eab308" : m.type === "flag" ? "#f59e0b" : "rgba(255,255,255,0.6)"
                         }`,
                     borderRadius: (m.type === "photo" || m.type === "flag")
-                      ? `${m.photoBorderRadius || 0}px`
+                      ? `${getPhotoCornerRadiusPx(m)}px`
                       : 2,
                     background: m.type === "photo"
                       ? showPreview ? "transparent" : "rgba(59, 130, 246, 0.15)"
@@ -1935,7 +1944,7 @@ export default function JpgTemplateMapper({
                             height: "100%",
                             objectFit: "contain",
                             objectPosition: "center",
-                            borderRadius: `${m.photoBorderRadius || 0}px`,
+                            borderRadius: `${getPhotoCornerRadiusPx(m)}px`,
                           }}
                         />
                       ) : (
@@ -3542,10 +3551,10 @@ export default function JpgTemplateMapper({
                     </label>
                     <div style={{ display: "flex", gap: 4 }}>
                       {[
-                        { label: "□ Square", radius: 0 },
-                        { label: "▢ Rounded", radius: 8 },
-                        { label: "⬭ Pill", radius: 16 },
-                        { label: "○ Circle", radius: 999 },
+                        { label: "Square", radius: 0 },
+                        { label: "Rounded", radius: 25 },
+                        { label: "Pill", radius: 65 },
+                        { label: "Circle", radius: 100 },
                       ].map((shape) => (
                         <button
                           key={shape.label}
@@ -3585,7 +3594,7 @@ export default function JpgTemplateMapper({
                   {/* Border Radius (custom) */}
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", marginBottom: 4, display: "block" }}>
-                      Corner Radius: {selectedMapping.photoBorderRadius || 0}px
+                      Corner Roundness: {selectedMapping.photoBorderRadius || 0}%
                     </label>
                     <input
                       type="range"
