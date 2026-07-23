@@ -332,9 +332,22 @@ function fitTextToBox(
       : boxH * 0.6
 
   // ── MULTILINE: preserve the user's font size, wrap to as many lines as needed.
-  if (wrapMode === "multiline" || wrapMode === "centeredWrap") {
+  if (wrapMode === "multiline") {
     const lines = wrap(userPx)
-    return { lines, fontSize: userPx, lineHeight: userPx * (wrapMode === "centeredWrap" ? 1.15 : 1.2) }
+    return { lines, fontSize: userPx, lineHeight: userPx * 1.2 }
+  }
+
+  if (wrapMode === "centeredWrap") {
+    const minFont = Math.max(5 * scale, boxH * 0.18)
+    let fontSize = userPx
+    let lines = wrap(fontSize)
+    let lineHeight = fontSize * 1.15
+    while (lines.length * lineHeight > maxH && fontSize > minFont) {
+      fontSize = Math.max(minFont, fontSize - 0.5 * scale)
+      lines = wrap(fontSize)
+      lineHeight = fontSize * 1.15
+    }
+    return { lines, fontSize, lineHeight }
   }
 
   // ── NO WRAP: single line at the user's font size, truncate with "…".

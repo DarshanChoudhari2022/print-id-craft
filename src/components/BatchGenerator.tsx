@@ -413,9 +413,22 @@ export function fitTextToBoxCanvas(
       : boxH * 0.6
 
   // ── MULTILINE → keep the user's font size, wrap to as many lines as needed.
-  if (wrapMode === "multiline" || wrapMode === "centeredWrap") {
+  if (wrapMode === "multiline") {
     const lines = wrap(userPx)
-    return { lines, fontSize: userPx, lineHeight: userPx * (wrapMode === "centeredWrap" ? 1.15 : 1.2) }
+    return { lines, fontSize: userPx, lineHeight: userPx * 1.2 }
+  }
+
+  if (wrapMode === "centeredWrap") {
+    const minFont = Math.max(5, boxH * 0.18)
+    let fontSize = userPx
+    let lines = wrap(fontSize)
+    let lineHeight = fontSize * 1.15
+    while (lines.length * lineHeight > maxH && fontSize > minFont) {
+      fontSize = Math.max(minFont, fontSize - 0.5)
+      lines = wrap(fontSize)
+      lineHeight = fontSize * 1.15
+    }
+    return { lines, fontSize, lineHeight }
   }
 
   // ── NO WRAP → single line at user font size, truncate with "…".
@@ -750,33 +763,49 @@ async function renderIdCardSvg(
         const escape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 
         // ── MULTILINE → keep user font size, wrap onto <tspan> rows.
+        // ── CENTERED WRAP → shrink as needed so long names fit the box.
         if (wrapMode === "multiline" || wrapMode === "centeredWrap") {
           const maxWidth = Math.max(1, fw - padding * 2)
           const mctx = getMeasureCtx()
           const fontPrefix = fontWeight === "bold" ? "bold " : ""
           const wrappedLines: string[] = []
+          let svgFontSize = userPx
           if (mctx) {
-            mctx.font = `${fontPrefix}${userPx}px ${fontFamily}`
-            const words = value.split(/\s+/).filter(Boolean)
-            let current = ""
-            for (const wd of words) {
-              const tentative = current ? current + " " + wd : wd
-              if (mctx.measureText(tentative).width <= maxWidth) current = tentative
-              else { if (current) wrappedLines.push(current); current = wd }
+            const wrapSvgText = (size: number) => {
+              mctx.font = `${fontPrefix}${size}px ${fontFamily}`
+              const linesForSize: string[] = []
+              const words = value.split(/\s+/).filter(Boolean)
+              let current = ""
+              for (const wd of words) {
+                const tentative = current ? current + " " + wd : wd
+                if (mctx.measureText(tentative).width <= maxWidth) current = tentative
+                else { if (current) linesForSize.push(current); current = wd }
+              }
+              if (current) linesForSize.push(current)
+              return linesForSize
             }
-            if (current) wrappedLines.push(current)
+            wrappedLines.push(...wrapSvgText(svgFontSize))
+            if (wrapMode === "centeredWrap") {
+              const minFont = Math.max(5, fh * 0.18)
+              let lineHeightForSize = svgFontSize * 1.15
+              while (wrappedLines.length * lineHeightForSize > Math.max(1, fh - padding * 2) && svgFontSize > minFont) {
+                svgFontSize = Math.max(minFont, svgFontSize - 0.5)
+                wrappedLines.splice(0, wrappedLines.length, ...wrapSvgText(svgFontSize))
+                lineHeightForSize = svgFontSize * 1.15
+              }
+            }
           } else {
             wrappedLines.push(value)
           }
-          const lineHeight = userPx * (wrapMode === "centeredWrap" ? 1.15 : 1.2)
+          const lineHeight = svgFontSize * (wrapMode === "centeredWrap" ? 1.15 : 1.2)
           const firstLineY = wrapMode === "centeredWrap"
-            ? fy + (fh - wrappedLines.length * lineHeight) / 2 + userPx
-            : fy + padding + userPx
+            ? fy + (fh - wrappedLines.length * lineHeight) / 2 + svgFontSize
+            : fy + padding + svgFontSize
           const tspans = wrappedLines
             .map((ln, i) => `<tspan x="${textX.toFixed(1)}" y="${(firstLineY + i * lineHeight).toFixed(1)}">${escape(ln)}</tspan>`)
             .join("")
           const decorAttr = svgTextDecor ? ` text-decoration="${svgTextDecor}"` : ""
-          lines.push(`  <text font-family="${fontFamily}" font-size="${userPx.toFixed(1)}" fill="${fill}" font-weight="${fontWeight}" font-style="${svgFontStyle}"${decorAttr} text-anchor="${textAnchor}">${tspans}</text>`)
+          lines.push(`  <text font-family="${fontFamily}" font-size="${svgFontSize.toFixed(1)}" fill="${fill}" font-weight="${fontWeight}" font-style="${svgFontStyle}"${decorAttr} text-anchor="${textAnchor}">${tspans}</text>`)
         } else {
           // wrap or nowrap: start from the user's chosen font size.
           let fontSize = Math.round(userPx)
