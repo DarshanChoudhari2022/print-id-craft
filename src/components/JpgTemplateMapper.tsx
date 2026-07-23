@@ -371,11 +371,15 @@ export default function JpgTemplateMapper({
   // exactly (and "size 10" in the picker really is 10 pt on print).
   const EDITOR_REFERENCE_WIDTH = 600
   const [editorImgWidth, setEditorImgWidth] = useState(EDITOR_REFERENCE_WIDTH)
+  const [editorImgHeight, setEditorImgHeight] = useState(EDITOR_REFERENCE_WIDTH * 0.58)
   useEffect(() => {
     if (typeof window === "undefined") return
     const update = () => {
-      const w = imageRef.current?.getBoundingClientRect().width
+      const rect = imageRef.current?.getBoundingClientRect()
+      const w = rect?.width
+      const h = rect?.height
       if (w && w > 0) setEditorImgWidth(w)
+      if (h && h > 0) setEditorImgHeight(h)
     }
     update()
     let ro: ResizeObserver | null = null
@@ -531,12 +535,11 @@ export default function JpgTemplateMapper({
   const [fixedBranch, setFixedBranch] = useState(initialCardSettings?.fixedBranch || "")
 
   const getPhotoCornerRadiusPx = useCallback((mapping: FieldMapping) => {
-    const editorImgHeight = cardWidth > 0 ? editorImgWidth * (cardHeight / cardWidth) : editorImgWidth
     const fieldWidthPx = (mapping.width / 100) * editorImgWidth
     const fieldHeightPx = (mapping.height / 100) * editorImgHeight
     const strength = Math.max(0, Math.min(mapping.photoBorderRadius || 0, 100)) / 100
     return (Math.min(fieldWidthPx, fieldHeightPx) / 2) * strength
-  }, [cardHeight, cardWidth, editorImgWidth])
+  }, [editorImgHeight, editorImgWidth])
 
   // String-based intermediates for width/height inputs so user can type freely
   const [cardWidthStr, setCardWidthStr] = useState(String(initialCardSettings?.cardWidth || 100))
