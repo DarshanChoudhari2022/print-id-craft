@@ -76,6 +76,7 @@ const formatMm = (value: number | undefined | null) => {
 
 // Editor reference image width (px). Field.fontSize is stored relative to this.
 const BATCH_EDITOR_REFERENCE_WIDTH = 600
+const PHOTO_RADIUS_REFERENCE_WIDTH = 1000
 
 type StudentRenderData = {
   id: string
@@ -263,6 +264,9 @@ function pathRoundedRect(
   ctx.quadraticCurveTo(x, y, x + radius, y)
   ctx.closePath()
 }
+
+const scalePhotoRadius = (radius: number | undefined, canvasWidth: number) =>
+  ((radius || 0) / PHOTO_RADIUS_REFERENCE_WIDTH) * canvasWidth
 
 function drawImageContain(
   ctx: CanvasRenderingContext2D,
@@ -521,7 +525,7 @@ async function renderIdCard(
     if (field.type === "photo") {
       // Scale saved editor-px values (border radius + width) to the
       // generated canvas so PDFs match the on-screen preview exactly.
-      const radiusPx = ((field.photoBorderRadius || 0) / BATCH_EDITOR_REFERENCE_WIDTH) * printW
+      const radiusPx = scalePhotoRadius(field.photoBorderRadius, printW)
       const borderPx = ((field.photoBorderWidth || 0) / BATCH_EDITOR_REFERENCE_WIDTH) * printW
       if (student.photoUrl) {
         const photoImg = await getCachedImage(student.photoUrl)
@@ -688,7 +692,7 @@ async function renderIdCardSvg(
     if (field.type === "photo") {
       if (student.photoUrl) {
         const photoDataUrl = await imageToDataUrl(student.photoUrl)
-        const radiusPx = ((field.photoBorderRadius || 0) / BATCH_EDITOR_REFERENCE_WIDTH) * w
+        const radiusPx = scalePhotoRadius(field.photoBorderRadius, w)
         const borderPx = ((field.photoBorderWidth || 0) / BATCH_EDITOR_REFERENCE_WIDTH) * w
         const radius = Math.max(0, Math.min(radiusPx, Math.min(fw, fh) / 2))
 

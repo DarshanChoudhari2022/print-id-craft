@@ -182,6 +182,7 @@ type JpgCardPreviewProps = {
 }
 
 const MAPPER_REFERENCE_WIDTH = 600
+const PHOTO_RADIUS_REFERENCE_WIDTH = 1000
 const PREVIEW_DPI = DEFAULT_PRINT_DPI
 
 // Bounded LRU image cache
@@ -215,6 +216,9 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
 }
 
 const normalizeKey = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, "")
+
+const scalePhotoRadius = (radius: number | undefined, canvasWidth: number) =>
+  ((radius || 0) / PHOTO_RADIUS_REFERENCE_WIDTH) * canvasWidth
 
 const FIELD_GROUPS: Record<string, string[]> = {
   name: ["fullname", "studentname", "name", "student_name", "full_name"],
@@ -446,11 +450,9 @@ export default function JpgCardPreview({
 
         if (field.type === "photo") {
           // Honour the template's saved rounded-corner + border settings so the
-          // live student preview matches the editor exactly. Radius is stored
-          // in editor px (relative to a ~600 px reference image); we scale it
-          // to the rendered canvas so circles stay circular at any DPI.
-          const radiusEditorPx = field.photoBorderRadius || 0
-          const radiusPx = (radiusEditorPx / MAPPER_REFERENCE_WIDTH) * w
+          // live student preview matches the editor without exaggerating
+          // small corner-radius values on high-DPI preview canvases.
+          const radiusPx = scalePhotoRadius(field.photoBorderRadius, w)
           const borderPx = ((field.photoBorderWidth || 0) / MAPPER_REFERENCE_WIDTH) * w
           if (studentPhoto) {
             try {
@@ -647,7 +649,7 @@ export async function generateJpgCard(
     if (field.type === "photo") {
       // Scale saved editor-px values (border width + corner radius) to the
       // generated canvas so PDFs match what's shown in the on-screen preview.
-      const radiusPx = ((field.photoBorderRadius || 0) / MAPPER_REFERENCE_WIDTH) * w
+      const radiusPx = scalePhotoRadius(field.photoBorderRadius, w)
       const borderPx = ((field.photoBorderWidth || 0) / MAPPER_REFERENCE_WIDTH) * w
       if (studentPhoto) {
         try {

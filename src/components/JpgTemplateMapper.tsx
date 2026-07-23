@@ -790,6 +790,23 @@ export default function JpgTemplateMapper({
     const anchor = mappings.find((m) => m.id === id)
     if (!anchor || anchor.type !== "text") return
     const nextX = Number(anchor.x.toFixed(1))
+    const textFields = mappings
+      .filter((m) => m.type === "text")
+      .sort((a, b) => (a.y === b.y ? a.x - b.x : a.y - b.y))
+    const anchorIndex = textFields.findIndex((m) => m.id === anchor.id)
+    const sortedGaps = textFields
+      .slice(1)
+      .map((m, index) => Math.abs(m.y - textFields[index].y))
+      .filter((gap) => gap > 0.2)
+      .sort((a, b) => a - b)
+    const rowGap =
+      sortedGaps.length > 0
+        ? sortedGaps[Math.floor(sortedGaps.length / 2)]
+        : Math.max(anchor.height + 1.5, 5)
+    const yById = new Map<string, number>()
+    textFields.forEach((m, index) => {
+      yById.set(m.id, Number((anchor.y + (index - anchorIndex) * rowGap).toFixed(1)))
+    })
 
     pushToHistory(mappings)
     setMappings((prev) =>
@@ -801,6 +818,7 @@ export default function JpgTemplateMapper({
         const updatedMapping = {
           ...m,
           x: nextX,
+          y: Math.max(0, Math.min(95, yById.get(m.id) ?? m.y)),
           width: Number(Math.min(100 - nextX, nextWidth).toFixed(1)),
           textAlign: "left" as const,
         }
@@ -3091,9 +3109,9 @@ export default function JpgTemplateMapper({
                           fontWeight: 700,
                           cursor: "pointer",
                         }}
-                        title="Move every text field on this side to this field's left edge"
+                        title="Move every text field on this side into one aligned X/Y column from this field"
                       >
-                        Align Text Column
+                        Align X/Y Text Column
                       </button>
                     </div>
                   </div>
