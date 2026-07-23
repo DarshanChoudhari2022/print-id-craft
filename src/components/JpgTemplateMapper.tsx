@@ -1882,8 +1882,8 @@ export default function JpgTemplateMapper({
                   {m.type === "photo" ? (
                     showPreview ? (
                       previewStudent?.photoUrl ? (
-                        // Keep the full photo visible so previews do not auto-crop
-                        // heads or shoulders.
+                        // Fit the whole photo to the placeholder bounds without
+                        // cropping, zooming, or leaving side gaps.
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={previewStudent.photoUrl}
@@ -1891,7 +1891,7 @@ export default function JpgTemplateMapper({
                           style={{
                             width: "100%",
                             height: "100%",
-                            objectFit: "contain",
+                            objectFit: "fill",
                             objectPosition: "center",
                             borderRadius: `${m.photoBorderRadius || 0}px`,
                           }}

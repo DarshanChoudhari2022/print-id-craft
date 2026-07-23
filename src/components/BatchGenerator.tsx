@@ -300,7 +300,7 @@ function drawPhotoForFrame(
 ) {
   ctx.fillStyle = "#ffffff"
   ctx.fillRect(x, y, w, h)
-  drawImageContain(ctx, img, x, y, w, h)
+  ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, x, y, w, h)
 }
 
 async function drawHouseFlagCanvas(
