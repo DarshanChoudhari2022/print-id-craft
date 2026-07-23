@@ -786,6 +786,29 @@ export default function JpgTemplateMapper({
     })
   }
 
+  const alignTextFieldsToSelectedLeftEdge = (id: string) => {
+    const anchor = mappings.find((m) => m.id === id)
+    if (!anchor || anchor.type !== "text") return
+    const nextX = Number(anchor.x.toFixed(1))
+
+    pushToHistory(mappings)
+    setMappings((prev) =>
+      prev.map((m) => {
+        if (m.type !== "text" || m.locked) return m
+        const currentRight = m.x + m.width
+        const nextWidth = Math.max(6, Math.min(100 - nextX, currentRight - nextX))
+        const updatedMapping = {
+          ...m,
+          x: nextX,
+          width: Number(nextWidth.toFixed(1)),
+          textAlign: "left" as const,
+        }
+        rememberTextFieldStyle(updatedMapping)
+        return updatedMapping
+      })
+    )
+  }
+
   const rememberSelectedTextFieldStyle = useCallback(() => {
     const mapping = mappings.find((m) => m.id === selectedId)
     if (mapping) rememberTextFieldStyle(mapping)
@@ -3052,6 +3075,24 @@ export default function JpgTemplateMapper({
                         title="Make this field full card width and center the text"
                       >
                         Full Width + Center
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => alignTextFieldsToSelectedLeftEdge(selectedMapping.id)}
+                        style={{
+                          gridColumn: "1 / -1",
+                          padding: "7px 10px",
+                          borderRadius: 6,
+                          border: "1.5px solid #86efac",
+                          background: "#f0fdf4",
+                          color: "#15803d",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                        title="Align every unlocked text field on this side to this field's left edge"
+                      >
+                        Align Text Column
                       </button>
                     </div>
                   </div>
