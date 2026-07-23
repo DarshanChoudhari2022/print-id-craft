@@ -794,13 +794,14 @@ export default function JpgTemplateMapper({
     pushToHistory(mappings)
     setMappings((prev) =>
       prev.map((m) => {
-        if (m.type !== "text" || m.locked) return m
+        if (m.type !== "text") return m
         const currentRight = m.x + m.width
-        const nextWidth = Math.max(6, Math.min(100 - nextX, currentRight - nextX))
+        const shiftedWidth = currentRight - nextX
+        const nextWidth = Math.max(m.width, shiftedWidth, 6)
         const updatedMapping = {
           ...m,
           x: nextX,
-          width: Number(nextWidth.toFixed(1)),
+          width: Number(Math.min(100 - nextX, nextWidth).toFixed(1)),
           textAlign: "left" as const,
         }
         rememberTextFieldStyle(updatedMapping)
@@ -3090,7 +3091,7 @@ export default function JpgTemplateMapper({
                           fontWeight: 700,
                           cursor: "pointer",
                         }}
-                        title="Align every unlocked text field on this side to this field's left edge"
+                        title="Move every text field on this side to this field's left edge"
                       >
                         Align Text Column
                       </button>
