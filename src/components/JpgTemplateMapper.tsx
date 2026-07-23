@@ -399,6 +399,7 @@ export default function JpgTemplateMapper({
   const [snapToGrid, setSnapToGrid] = useState(false)
   const [gridSize, setGridSize] = useState(5) // percentage
   const [showRulers, setShowRulers] = useState(false)
+  const [moveTextFieldsTogether, setMoveTextFieldsTogether] = useState(false)
 
   const [showCoordinates, setShowCoordinates] = useState(true)
 
@@ -770,6 +771,26 @@ export default function JpgTemplateMapper({
   const updateMapping = (id: string, updates: Partial<FieldMapping>, rememberStyle = true) => {
     setMappings((prev) =>
       prev.map((m) => {
+        const target = prev.find((item) => item.id === id)
+        if (
+          moveTextFieldsTogether &&
+          target?.type === "text" &&
+          m.type === "text" &&
+          typeof updates.width !== "number" &&
+          typeof updates.height !== "number" &&
+          (typeof updates.x === "number" || typeof updates.y === "number")
+        ) {
+          const dx = typeof updates.x === "number" ? updates.x - target.x : 0
+          const dy = typeof updates.y === "number" ? updates.y - target.y : 0
+          const shiftedMapping = {
+            ...m,
+            x: Number(Math.max(0, Math.min(95, m.x + dx)).toFixed(1)),
+            y: Number(Math.max(0, Math.min(95, m.y + dy)).toFixed(1)),
+            ...(m.id === id ? updates : {}),
+          }
+          if (rememberStyle && m.id === id) rememberTextFieldStyle(shiftedMapping)
+          return shiftedMapping
+        }
         if (m.id !== id) return m
         const updatedMapping = { ...m, ...updates }
         if (rememberStyle) rememberTextFieldStyle(updatedMapping)
@@ -902,10 +923,30 @@ export default function JpgTemplateMapper({
       dragFrameRef.current = null
       if (!pending) return
       setMappings((prev) =>
-        prev.map((m) => (m.id === pending.id ? { ...m, ...pending.updates } : m))
+        prev.map((m) => {
+          const target = prev.find((item) => item.id === pending.id)
+          if (
+            moveTextFieldsTogether &&
+            target?.type === "text" &&
+            m.type === "text" &&
+            typeof pending.updates.width !== "number" &&
+            typeof pending.updates.height !== "number" &&
+            (typeof pending.updates.x === "number" || typeof pending.updates.y === "number")
+          ) {
+            const dx = typeof pending.updates.x === "number" ? pending.updates.x - target.x : 0
+            const dy = typeof pending.updates.y === "number" ? pending.updates.y - target.y : 0
+            return {
+              ...m,
+              x: Number(Math.max(0, Math.min(95, m.x + dx)).toFixed(1)),
+              y: Number(Math.max(0, Math.min(95, m.y + dy)).toFixed(1)),
+              ...(m.id === pending.id ? pending.updates : {}),
+            }
+          }
+          return m.id === pending.id ? { ...m, ...pending.updates } : m
+        })
       )
     })
-  }, [])
+  }, [moveTextFieldsTogether])
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
@@ -968,7 +1009,27 @@ export default function JpgTemplateMapper({
       const pending = pendingDragUpdateRef.current
       if (pending) {
         setMappings((prev) =>
-          prev.map((m) => (m.id === pending.id ? { ...m, ...pending.updates } : m))
+          prev.map((m) => {
+            const target = prev.find((item) => item.id === pending.id)
+            if (
+              moveTextFieldsTogether &&
+              target?.type === "text" &&
+              m.type === "text" &&
+              typeof pending.updates.width !== "number" &&
+              typeof pending.updates.height !== "number" &&
+              (typeof pending.updates.x === "number" || typeof pending.updates.y === "number")
+            ) {
+              const dx = typeof pending.updates.x === "number" ? pending.updates.x - target.x : 0
+              const dy = typeof pending.updates.y === "number" ? pending.updates.y - target.y : 0
+              return {
+                ...m,
+                x: Number(Math.max(0, Math.min(95, m.x + dx)).toFixed(1)),
+                y: Number(Math.max(0, Math.min(95, m.y + dy)).toFixed(1)),
+                ...(m.id === pending.id ? pending.updates : {}),
+              }
+            }
+            return m.id === pending.id ? { ...m, ...pending.updates } : m
+          })
         )
         pendingDragUpdateRef.current = null
       }
@@ -981,7 +1042,7 @@ export default function JpgTemplateMapper({
       }))
     }
     setDragState(null)
-  }, [dragState, mappings, pushToHistory])
+  }, [dragState, mappings, moveTextFieldsTogether, pushToHistory])
 
   // ── Keyboard Shortcuts ──
   useEffect(() => {
@@ -3124,6 +3185,24 @@ export default function JpgTemplateMapper({
                         title="Move every text field on this side into one aligned X/Y column from this field"
                       >
                         Align X/Y Text Column
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMoveTextFieldsTogether((value) => !value)}
+                        style={{
+                          gridColumn: "1 / -1",
+                          padding: "7px 10px",
+                          borderRadius: 6,
+                          border: `1.5px solid ${moveTextFieldsTogether ? "#22c55e" : "#cbd5e1"}`,
+                          background: moveTextFieldsTogether ? "#dcfce7" : "white",
+                          color: moveTextFieldsTogether ? "#15803d" : "#475569",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                        title="When on, dragging or changing X/Y for one text field moves all text fields together"
+                      >
+                        Move All Text Fields: {moveTextFieldsTogether ? "ON" : "OFF"}
                       </button>
                     </div>
                   </div>
