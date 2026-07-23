@@ -539,7 +539,10 @@ export default function JpgTemplateMapper({
     const fieldWidthPx = (mapping.width / 100) * editorImgWidth
     const fieldHeightPx = (mapping.height / 100) * editorImgHeight
     const strength = Math.max(0, Math.min(mapping.photoBorderRadius || 0, 100)) / 100
-    return (Math.min(fieldWidthPx, fieldHeightPx) / 2) * strength
+    if (strength <= 0) return 0
+    const maxRadius = Math.min(fieldWidthPx, fieldHeightPx) / 2
+    const visibleMinimum = Math.min(maxRadius, Math.max(4, maxRadius * 0.18))
+    return Math.max(visibleMinimum, maxRadius * strength)
   }, [editorImgHeight, editorImgWidth])
 
   // String-based intermediates for width/height inputs so user can type freely

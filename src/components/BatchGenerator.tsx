@@ -266,7 +266,10 @@ function pathRoundedRect(
 
 const scalePhotoRadius = (radius: number | undefined, boxWidth: number, boxHeight: number) => {
   const strength = Math.max(0, Math.min(radius || 0, 100)) / 100
-  return (Math.min(boxWidth, boxHeight) / 2) * strength
+  if (strength <= 0) return 0
+  const maxRadius = Math.min(boxWidth, boxHeight) / 2
+  const visibleMinimum = Math.min(maxRadius, Math.max(4, maxRadius * 0.18))
+  return Math.max(visibleMinimum, maxRadius * strength)
 }
 
 function drawImageContain(
