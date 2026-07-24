@@ -27,10 +27,26 @@ import {
   normalizeAddress,
   normalizeStudentFieldValue,
 } from "@/lib/student-text-normalization"
+import { BRACKETDEX_POWERED_BY, BRACKETDEX_URL } from "@/lib/bracketdex-brand"
 
 const SUPPORT_PHONE_DISPLAY = "+91 98818 77607"
 const SUPPORT_PHONE_E164 = "+919881877607"
 const SUPPORT_PHONE_WA = "919881877607"
+
+function BracketDexFormFooter() {
+  return (
+    <div style={{ padding: '0 24px 24px', textAlign: 'center', fontSize: 11, color: '#64748b', lineHeight: 1.6 }}>
+      <a
+        href={BRACKETDEX_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: '#0f172a', fontWeight: 700, textDecoration: 'none' }}
+      >
+        {BRACKETDEX_POWERED_BY}
+      </a>
+    </div>
+  )
+}
 
 function buildWhatsAppUrl(message: string) {
   return `https://wa.me/${SUPPORT_PHONE_WA}?text=${encodeURIComponent(message)}`
@@ -1057,6 +1073,7 @@ export default function SubmitPage() {
           <div className="login-spinner" style={{ width: 32, height: 32, borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6' }} />
           <p style={{ marginTop: 16, color: '#64748b', fontSize: 14 }}>Loading form...</p>
         </div>
+        <BracketDexFormFooter />
       </div>
     </div>
   )
@@ -1073,6 +1090,7 @@ export default function SubmitPage() {
           </h2>
           <p style={{ fontSize: 14, color: '#64748b' }}>{errorMsg}</p>
         </div>
+        <BracketDexFormFooter />
       </div>
     </div>
   )
@@ -1175,6 +1193,7 @@ export default function SubmitPage() {
             Your photo background has been prepared automatically for the ID card preview.
           </p>
         </div>
+        <BracketDexFormFooter />
       </div>
     </div>
   )
@@ -1251,6 +1270,7 @@ export default function SubmitPage() {
               </p>
             </div>
           </div>
+          <BracketDexFormFooter />
         </div>
       </div>
     )
@@ -1329,6 +1349,7 @@ export default function SubmitPage() {
               </p>
             </div>
           </div>
+          <BracketDexFormFooter />
         </div>
       </div>
     )
@@ -1533,6 +1554,7 @@ export default function SubmitPage() {
             </button>
           </div>
         </div>
+        <BracketDexFormFooter />
       </div>
     </div>
   )
@@ -2247,6 +2269,7 @@ export default function SubmitPage() {
             </div>
           )}
         </div>
+        <BracketDexFormFooter />
       </div>
     </div>
   )

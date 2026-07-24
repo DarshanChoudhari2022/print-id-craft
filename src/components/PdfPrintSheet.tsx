@@ -4,6 +4,7 @@ import {
   CUTTER_HEIGHT_MM,
   CUTTER_WIDTH_MM,
 } from "@/lib/card-dimensions"
+import { BRACKETDEX_NAME, BRACKETDEX_URL } from "@/lib/bracketdex-brand"
 
 /* Mobile tab for Settings vs Preview */
 type MobileTab = "settings" | "preview"
@@ -315,6 +316,20 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
         d.line(x + w, y + h + off, x + w, y + h + off + cm)
       }
 
+      const drawBracketDexFooter = () => {
+        const text = `Powered by ${BRACKETDEX_NAME} - ${BRACKETDEX_URL.replace(/^https?:\/\//, "")}`
+        const x = pageW - 3
+        const y = pageH - 2.2
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(4.2)
+        doc.setTextColor(150, 150, 150)
+        if (typeof (doc as any).textWithLink === "function") {
+          ;(doc as any).textWithLink(text, x, y, { align: "right", url: BRACKETDEX_URL })
+        } else {
+          doc.text(text, x, y, { align: "right" })
+        }
+      }
+
       // Rulers aligned with the first card verify the printer did not use
       // "Fit to page" or any other scaling.
       const drawCalibrationScale = () => {
@@ -397,6 +412,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
               doc.text(`Card ${cards[cardIdx].serialNumber}`, x + cardW / 2, y + cardH / 2, { align: "center" })
             }
           }
+          drawBracketDexFooter()
         }
       }
 
@@ -433,6 +449,7 @@ export default function PdfPrintSheet({ cards, schoolName, onClose, printSetup }
               console.error(`Failed to add back image for card ${cards[cardIdx].serialNumber}`, err)
             }
           }
+          drawBracketDexFooter()
         }
       }
       // Save using Blob-based download to avoid doc.save()'s internal

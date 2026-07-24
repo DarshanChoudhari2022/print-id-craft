@@ -10,6 +10,11 @@ import { reportError } from "@/lib/observability"
 import type { GeneratePrintBatchPayload } from "../types"
 import { EXPORT_BUCKET } from "../types"
 import { applyFixedTemplateValuesToFormData } from "@/lib/fixed-template-values"
+import { BRACKETDEX_NAME, BRACKETDEX_URL } from "@/lib/bracketdex-brand"
+
+function escapePdfText(text: string) {
+  return text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)")
+}
 
 function generateSimplePdf(
   students: any[],
@@ -38,7 +43,7 @@ function generateSimplePdf(
           const fontSize = el.fontSize || 12
           const x = Math.round((el.x * 0.75 + bleedPt) * 100) / 100
           const y = Math.round((pageH - (el.y * 0.75 + bleedPt) - fontSize) * 100) / 100
-          text = text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)")
+          text = escapePdfText(text)
 
           lines.push(`/F1 ${fontSize} Tf`, `${x} ${y} Td`, `(${text}) Tj`, `${-x} ${-y} Td`)
         }
@@ -67,7 +72,7 @@ function generateSimplePdf(
             ]
 
       for (const line of infoLines) {
-        const escaped = line.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)")
+        const escaped = escapePdfText(line)
         lines.push(`/F1 ${fontSize} Tf`, `${x} ${y} Td`, `(${escaped}) Tj`, `${-x} ${-y} Td`)
         y -= fontSize + 4
       }
@@ -75,11 +80,20 @@ function generateSimplePdf(
 
     const serialX = Math.round((pageW - bleedPt - 60) * 100) / 100
     const serialY = Math.round((bleedPt - 2) * 100) / 100
+    const brandText = escapePdfText(`Powered by ${BRACKETDEX_NAME} - ${BRACKETDEX_URL.replace(/^https?:\/\//, "")}`)
+    const brandX = Math.round((pageW - bleedPt - 120) * 100) / 100
+    const brandY = Math.max(4, Math.round((bleedPt - 10) * 100) / 100)
     lines.push(
       "0.6 0.6 0.6 rg",
       "/F1 6 Tf",
       `${serialX} ${serialY > 0 ? serialY : 4} Td`,
-      `(${(student.serialNumber || "").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)")}) Tj`,
+      `(${escapePdfText(student.serialNumber || "")}) Tj`,
+      `${-serialX} ${-(serialY > 0 ? serialY : 4)} Td`,
+      "0.6 0.6 0.6 rg",
+      "/F1 5 Tf",
+      `${brandX} ${brandY} Td`,
+      `(${brandText}) Tj`,
+      `${-brandX} ${-brandY} Td`,
       "0 0 0 rg",
       "ET"
     )

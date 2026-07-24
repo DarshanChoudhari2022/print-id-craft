@@ -9,6 +9,7 @@ import {
   DEFAULT_CARD_HEIGHT_MM,
   DEFAULT_CARD_WIDTH_MM,
 } from "@/lib/card-dimensions"
+import { BRACKETDEX_NAME, BRACKETDEX_URL } from "@/lib/bracketdex-brand"
 
 /* ─── Types ─── */
 export type PageSize = {
@@ -598,6 +599,20 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
     d.line(x + w + off, y + h, x + w + off + cm, y + h); d.line(x + w, y + h + off, x + w, y + h + off + cm)
   }
 
+  const drawBracketDexFooter = (d: typeof doc) => {
+    const text = `Powered by ${BRACKETDEX_NAME} - ${BRACKETDEX_URL.replace(/^https?:\/\//, "")}`
+    const x = pageW - 3
+    const y = pageH - 2.2
+    d.setFont("helvetica", "normal")
+    d.setFontSize(4.2)
+    d.setTextColor(150, 150, 150)
+    if (typeof (d as any).textWithLink === "function") {
+      ;(d as any).textWithLink(text, x, y, { align: "right", url: BRACKETDEX_URL })
+    } else {
+      d.text(text, x, y, { align: "right" })
+    }
+  }
+
   // Dense paired sheets can have edge-to-edge columns. Put their cut guides
   // only in the page edges/header bands so no guide is printed over a card.
   const drawPairedSheetCutGuides = (
@@ -747,6 +762,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
       if (addCutMarks) {
         drawPairedSheetCutGuides(doc, pairedSheetLayout.placements)
       }
+      drawBracketDexFooter(doc)
     }
   } else {
   // Front pages
@@ -776,6 +792,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
         doc.setDrawColor(200, 200, 200); doc.rect(x, y, cardW, cardH)
       }
     }
+    drawBracketDexFooter(doc)
   }
 
   // Back pages (mirrored)
@@ -804,6 +821,7 @@ export async function generateDirectPdf(opts: DirectPdfOptions): Promise<void> {
           console.error(`Failed back image ${cards[cardIdx].serialNumber}`, err)
         }
       }
+      drawBracketDexFooter(doc)
     }
   }
 

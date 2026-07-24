@@ -1,6 +1,22 @@
 "use client"
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
+import { BRACKETDEX_POWERED_BY, BRACKETDEX_URL } from "@/lib/bracketdex-brand"
+
+function BracketDexFormFooter() {
+  return (
+    <div style={{ marginTop: 18, textAlign: "center", fontSize: 11, color: "#64748b", lineHeight: 1.6 }}>
+      <a
+        href={BRACKETDEX_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: "#0f172a", fontWeight: 700, textDecoration: "none" }}
+      >
+        {BRACKETDEX_POWERED_BY}
+      </a>
+    </div>
+  )
+}
 
 type SchoolFormConfig = {
   schoolName: string
@@ -206,6 +222,7 @@ export default function SchoolSubmitPage() {
             </div>
           </div>
         )}
+        <BracketDexFormFooter />
       </div>
     </div>
   )
