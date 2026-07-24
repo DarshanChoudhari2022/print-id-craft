@@ -286,7 +286,7 @@ export default function SchoolDetailPage() {
   const [gradeClassFilter, setGradeClassFilter] = useState("")
   const [showStudentAddSection, setShowStudentAddSection] = useState(false)
   const [studentTabNewSectionName, setStudentTabNewSectionName] = useState("")
-  const [exportingFormat, setExportingFormat] = useState<"csv" | "excel" | "archive" | null>(null)
+  const [exportingFormat, setExportingFormat] = useState<"csv" | "excel" | "approved-excel" | "archive" | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [searchInput, setSearchInput] = useState("")
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -2295,17 +2295,21 @@ export default function SchoolDetailPage() {
     return false
   }
 
-  const handleExport = async (format: "csv" | "excel" | "archive") => {
+  const handleExport = async (format: "csv" | "excel" | "archive", options?: { statusOverride?: string }) => {
     const params = new URLSearchParams()
+    const exportKey = format === "excel" && options?.statusOverride === "APPROVED" ? "approved-excel" : format
     if (classFilter) params.set("classId", classFilter)
-    if (statusFilter) params.set("status", statusFilter)
-    setExportingFormat(format)
+    const effectiveStatus = options?.statusOverride ?? statusFilter
+    if (effectiveStatus) params.set("status", effectiveStatus)
+    setExportingFormat(exportKey)
     if (format === "excel" || format === "archive") {
       try {
         if (format === "excel") params.set("format", "excel")
         const selectedClassName = classFilter ? classes.find((c) => c.id === classFilter)?.name : ""
         const scopeLabel = selectedClassName ? `${selectedClassName} class` : "school"
-        toast.message(format === "excel" ? `Preparing ${scopeLabel} backup with named photos...` : "Preparing archive export...")
+        toast.message(format === "excel"
+          ? `Preparing ${effectiveStatus === "APPROVED" ? "approved " : ""}${scopeLabel} backup with named photos...`
+          : "Preparing archive export...")
         const res = await fetch(`/api/schools/${schoolId}/export/archive?${params}`)
         const data = await res.json()
         if (!res.ok) {
@@ -2322,7 +2326,7 @@ export default function SchoolDetailPage() {
         await pollExportJob(
           jobId,
           format === "excel"
-            ? "Backup ZIP ready — data and named photos downloaded"
+            ? `${effectiveStatus === "APPROVED" ? "Approved students backup" : "Backup"} ZIP ready - data and named photos downloaded`
             : "Archive ready — download started",
           data.data?.totalStudents
         )
@@ -3480,6 +3484,16 @@ export default function SchoolDetailPage() {
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M3 8l9 6 9-6"/><path d="M21 8l-9-5-9 5"/><path d="M12 14v7"/></svg>
                 {exportingFormat === "excel" ? 'Preparing Backup...' : classFilter ? `Download ${companyMode ? "Department" : "Class"} Backup` : 'Download Data + Photos'}
+              </button>
+              <button
+                className="btn btn-outline"
+                onClick={() => handleExport("excel", { statusOverride: "APPROVED" })}
+                disabled={exportingFormat !== null || studentTotal === 0}
+                title={`Download only approved ${companyMode ? "employee" : "student"} data with named photos${classFilter ? " for this class/section" : ""}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#22c55e', color: '#15803d', fontSize: 13, opacity: exportingFormat !== null || studentTotal === 0 ? 0.6 : 1, cursor: exportingFormat !== null || studentTotal === 0 ? 'not-allowed' : 'pointer' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/><path d="m9 18 2 2 4-4"/></svg>
+                {exportingFormat === "approved-excel" ? 'Preparing Approved...' : 'Download Approved Data + Photos'}
               </button>
               {studentTotal > 0 && (
                 <button
