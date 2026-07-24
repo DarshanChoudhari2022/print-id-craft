@@ -35,6 +35,13 @@ import {
 } from "@/lib/fixed-template-values"
 
 const EDIT_ADDRESS_MIN_WORDS = 5
+type DownloadExportStatus = "APPROVED" | "SUBMITTED" | "PRINTED"
+
+const DOWNLOAD_EXPORT_STATUS_LABELS: Record<DownloadExportStatus, string> = {
+  APPROVED: "Approved",
+  SUBMITTED: "Submitted",
+  PRINTED: "Printed",
+}
 
 type EditStudentField = FormField & {
   inputType: "flag" | "mobile" | "address" | "dob" | "text" | "textarea"
@@ -286,10 +293,12 @@ export default function SchoolDetailPage() {
   const [gradeClassFilter, setGradeClassFilter] = useState("")
   const [showStudentAddSection, setShowStudentAddSection] = useState(false)
   const [studentTabNewSectionName, setStudentTabNewSectionName] = useState("")
-  const [exportingFormat, setExportingFormat] = useState<"csv" | "excel" | "approved-excel" | "archive" | null>(null)
-  const [approvedExportJob, setApprovedExportJob] = useState<{
+  const [exportingFormat, setExportingFormat] = useState<"csv" | "excel" | "status-excel" | "archive" | null>(null)
+  const [downloadExportStatus, setDownloadExportStatus] = useState<DownloadExportStatus>("APPROVED")
+  const [statusExportJob, setStatusExportJob] = useState<{
     jobId: string
     status: "running" | "ready" | "failed"
+    exportStatus: DownloadExportStatus
     totalStudents?: number
     error?: string
   } | null>(null)
@@ -2290,7 +2299,12 @@ export default function SchoolDetailPage() {
     document.body.removeChild(link)
   }
 
-  const pollApprovedExportJob = async (jobId: string, totalStudents?: number) => {
+  const pollStatusExportJob = async (
+    jobId: string,
+    exportStatus: DownloadExportStatus,
+    totalStudents?: number
+  ) => {
+    const statusLabel = DOWNLOAD_EXPORT_STATUS_LABELS[exportStatus]
     const maxAttempts = 450
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise((r) => setTimeout(r, 2000))
@@ -2298,23 +2312,23 @@ export default function SchoolDetailPage() {
       const statusData = await statusRes.json()
       const job = statusData.data
       if (job?.status === "COMPLETED") {
-        setApprovedExportJob({ jobId, status: "ready", totalStudents })
-        toast.success("Approved backup ready. Click Download Approved ZIP.")
+        setStatusExportJob({ jobId, status: "ready", exportStatus, totalStudents })
+        toast.success(`${statusLabel} backup ready. Click Download ${statusLabel} ZIP.`)
         return true
       }
       if (job?.status === "FAILED") {
-        const error = job.error || "Approved backup failed"
-        setApprovedExportJob({ jobId, status: "failed", totalStudents, error })
+        const error = job.error || `${statusLabel} backup failed`
+        setStatusExportJob({ jobId, status: "failed", exportStatus, totalStudents, error })
         toast.error(error)
         return false
       }
       if (job?.status === "RUNNING" && attempt > 0 && attempt % 15 === 0) {
         const countLabel = totalStudents ? `${totalStudents.toLocaleString()} ${companyMode ? "employees" : "students"}` : "large export"
-        toast.message(`Still preparing approved ${countLabel}... (${Math.round((attempt * 2) / 60)} min)`)
+        toast.message(`Still preparing ${statusLabel.toLowerCase()} ${countLabel}... (${Math.round((attempt * 2) / 60)} min)`)
       }
     }
-    setApprovedExportJob(null)
-    toast.error("Approved backup is still running. Please try Download Approved again in a few minutes.")
+    setStatusExportJob(null)
+    toast.error(`${statusLabel} backup is still running. Please try again in a few minutes.`)
     return false
   }
 
@@ -2343,9 +2357,12 @@ export default function SchoolDetailPage() {
     return false
   }
 
-  const handleExport = async (format: "csv" | "excel" | "archive", options?: { statusOverride?: string }) => {
+  const handleExport = async (
+    format: "csv" | "excel" | "archive",
+    options?: { statusOverride?: DownloadExportStatus }
+  ) => {
     const params = new URLSearchParams()
-    const exportKey = format === "excel" && options?.statusOverride === "APPROVED" ? "approved-excel" : format
+    const exportKey = format === "excel" && options?.statusOverride ? "status-excel" : format
     if (classFilter) params.set("classId", classFilter)
     const effectiveStatus = options?.statusOverride ?? statusFilter
     if (effectiveStatus) params.set("status", effectiveStatus)
@@ -2355,8 +2372,11 @@ export default function SchoolDetailPage() {
         if (format === "excel") params.set("format", "excel")
         const selectedClassName = classFilter ? classes.find((c) => c.id === classFilter)?.name : ""
         const scopeLabel = selectedClassName ? `${selectedClassName} class` : "school"
+        const exportStatusLabel = options?.statusOverride
+          ? DOWNLOAD_EXPORT_STATUS_LABELS[options.statusOverride]
+          : ""
         toast.message(format === "excel"
-          ? `Preparing ${effectiveStatus === "APPROVED" ? "approved " : ""}${scopeLabel} backup with named photos...`
+          ? `Preparing ${exportStatusLabel ? `${exportStatusLabel.toLowerCase()} ` : ""}${scopeLabel} backup with named photos...`
           : "Preparing archive export...")
         const res = await fetch(`/api/schools/${schoolId}/export/archive?${params}`)
         const data = await res.json()
@@ -2371,18 +2391,23 @@ export default function SchoolDetailPage() {
           setExportingFormat(null)
           return
         }
-        if (exportKey === "approved-excel") {
+        if (exportKey === "status-excel" && options?.statusOverride) {
           const totalStudents = data.data?.totalStudents
-          setApprovedExportJob({ jobId, status: "running", totalStudents })
-          toast.success("Approved backup started. The button will change to Download Approved ZIP when ready.")
+          setStatusExportJob({
+            jobId,
+            status: "running",
+            exportStatus: options.statusOverride,
+            totalStudents,
+          })
+          toast.success(`${exportStatusLabel} backup started. The button will change when the ZIP is ready.`)
           setExportingFormat(null)
-          void pollApprovedExportJob(jobId, totalStudents)
+          void pollStatusExportJob(jobId, options.statusOverride, totalStudents)
           return
         }
         await pollExportJob(
           jobId,
           format === "excel"
-            ? `${effectiveStatus === "APPROVED" ? "Approved students backup" : "Backup"} ZIP ready - data and named photos downloaded`
+            ? "Backup ZIP ready - data and named photos downloaded"
             : "Archive ready — download started",
           data.data?.totalStudents
         )
@@ -2525,26 +2550,37 @@ export default function SchoolDetailPage() {
     )
   }
 
-  const approvedExportReady = approvedExportJob?.status === "ready"
-  const approvedExportRunning = approvedExportJob?.status === "running" || exportingFormat === "approved-excel"
-  const approvedExportDisabled = !approvedExportReady && (exportingFormat !== null || studentTotal === 0 || approvedExportRunning)
-  const approvedExportLabel = approvedExportReady
-    ? "Download Approved ZIP"
-    : approvedExportRunning
-      ? "Preparing Approved ZIP..."
-      : approvedExportJob?.status === "failed"
-        ? "Retry Approved Download"
-        : "Download Approved Data + Photos"
+  const statusExportLabel = DOWNLOAD_EXPORT_STATUS_LABELS[downloadExportStatus]
+  const statusExportReady =
+    statusExportJob?.status === "ready" &&
+    statusExportJob.exportStatus === downloadExportStatus
+  const statusExportRunning =
+    (statusExportJob?.status === "running" &&
+      statusExportJob.exportStatus === downloadExportStatus) ||
+    exportingFormat === "status-excel"
+  const hasStudentsForExport =
+    studentTotal > 0 || classes.some((schoolClass) => schoolClass._count.students > 0)
+  const statusExportDisabled =
+    !statusExportReady &&
+    (exportingFormat !== null || !hasStudentsForExport || statusExportRunning)
+  const statusExportButtonLabel = statusExportReady
+    ? `Download ${statusExportLabel} ZIP`
+    : statusExportRunning
+      ? `Preparing ${statusExportLabel} ZIP...`
+      : statusExportJob?.status === "failed" &&
+          statusExportJob.exportStatus === downloadExportStatus
+        ? `Retry ${statusExportLabel} Download`
+        : `Download ${statusExportLabel} Data + Photos`
 
-  const handleApprovedExportClick = () => {
-    if (approvedExportReady && approvedExportJob?.jobId) {
-      downloadJobFile(approvedExportJob.jobId)
-      setApprovedExportJob(null)
-      toast.success("Approved backup download started.")
+  const handleStatusExportClick = () => {
+    if (statusExportReady && statusExportJob?.jobId) {
+      downloadJobFile(statusExportJob.jobId)
+      setStatusExportJob(null)
+      toast.success(`${statusExportLabel} backup download started.`)
       return
     }
-    setApprovedExportJob(null)
-    void handleExport("excel", { statusOverride: "APPROVED" })
+    setStatusExportJob(null)
+    void handleExport("excel", { statusOverride: downloadExportStatus })
   }
 
   const tabs = ["overview", "classes", "students", "template", "generate", "batches", "export"] as const
@@ -3553,28 +3589,33 @@ export default function SchoolDetailPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                 Download Template
               </a>
-              <button
-                className="btn btn-outline"
-                onClick={() => handleExport("excel")}
-                disabled={exportingFormat !== null || studentTotal === 0}
-                title={classFilter ? `Download this ${companyMode ? "department" : "class"} data with photos named by ${companyMode ? "employee" : "student"} name` : `Download all filtered ${companyMode ? "employee" : "student"} data with named photos`}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#0ea5e9', color: '#0369a1', fontSize: 13, opacity: exportingFormat !== null || studentTotal === 0 ? 0.6 : 1, cursor: exportingFormat !== null || studentTotal === 0 ? 'not-allowed' : 'pointer' }}
+              <select
+                value={downloadExportStatus}
+                onChange={(event) => {
+                  setDownloadExportStatus(event.target.value as DownloadExportStatus)
+                  setStatusExportJob(null)
+                }}
+                disabled={statusExportRunning}
+                aria-label="Data and photos export status"
+                title="Choose which student status to include in the ZIP"
+                style={{ height: 40, padding: '0 12px', border: '1.5px solid #22c55e', borderRadius: 8, color: '#166534', background: '#fff', fontSize: 13, fontWeight: 600, minWidth: 132 }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M3 8l9 6 9-6"/><path d="M21 8l-9-5-9 5"/><path d="M12 14v7"/></svg>
-                {exportingFormat === "excel" ? 'Preparing Backup...' : classFilter ? `Download ${companyMode ? "Department" : "Class"} Backup` : 'Download Data + Photos'}
-              </button>
+                <option value="APPROVED">Approved</option>
+                <option value="SUBMITTED">Submitted</option>
+                <option value="PRINTED">Printed</option>
+              </select>
               <button
                 className="btn btn-outline"
-                onClick={handleApprovedExportClick}
-                disabled={approvedExportDisabled}
-                title={approvedExportReady
-                  ? "Download the prepared approved ZIP now"
-                  : `Download only approved ${companyMode ? "employee" : "student"} data with named photos${classFilter ? " for this class/section" : ""}`
+                onClick={handleStatusExportClick}
+                disabled={statusExportDisabled}
+                title={statusExportReady
+                  ? `Download the prepared ${statusExportLabel.toLowerCase()} ZIP now`
+                  : `Download only ${statusExportLabel.toLowerCase()} ${companyMode ? "employee" : "student"} data with named photos${classFilter ? " for this class/section" : ""}`
                 }
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#22c55e', color: '#15803d', fontSize: 13, opacity: approvedExportDisabled ? 0.6 : 1, cursor: approvedExportDisabled ? 'not-allowed' : 'pointer' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#22c55e', color: '#15803d', fontSize: 13, opacity: statusExportDisabled ? 0.6 : 1, cursor: statusExportDisabled ? 'not-allowed' : 'pointer' }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/><path d="m9 18 2 2 4-4"/></svg>
-                {approvedExportLabel}
+                {statusExportButtonLabel}
               </button>
               {studentTotal > 0 && (
                 <button

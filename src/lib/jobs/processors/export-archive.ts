@@ -350,7 +350,12 @@ export async function processExportArchive(
   const suffix = isExcelExport ? "excel-export" : "archive"
   const fileName = `${safeExportFileName(school.name)}-${suffix}-${new Date().toISOString().slice(0, 10)}.zip`
   const storagePath = `${EXPORT_PREFIX}/${schoolId}/${jobId}/${fileName}`
-  const { bytes, error } = await uploadExportZip(EXPORT_BUCKET, storagePath, zip, jobId)
+  const { bytes, storageParts, error } = await uploadExportZip(
+    EXPORT_BUCKET,
+    storagePath,
+    zip,
+    jobId
+  )
 
   if (error) {
     await reportError(error, {
@@ -365,6 +370,7 @@ export async function processExportArchive(
   return {
     fileName,
     storagePath,
+    storageParts,
     bytes,
     format,
     students: allStudents.length,

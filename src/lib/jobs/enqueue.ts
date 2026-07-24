@@ -26,11 +26,11 @@ export async function kickJobWorker(baseUrl?: string) {
   if (!origin) return
 
   const secret = process.env.WORKER_SECRET || process.env.CRON_SECRET
-  if (!secret) return
+  if (!secret && process.env.NODE_ENV === "production") return
 
   fetch(`${origin.replace(/\/$/, "")}/api/jobs/process`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${secret}` },
+    headers: secret ? { Authorization: `Bearer ${secret}` } : undefined,
   }).catch(() => {
     // Best-effort wake-up; cron will retry.
   })

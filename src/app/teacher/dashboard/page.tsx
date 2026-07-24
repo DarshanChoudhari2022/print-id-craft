@@ -23,6 +23,14 @@ const JpgCardPreview = dynamic(() => import("@/components/JpgCardPreview"), { ss
 const JpgTemplateMapper = dynamic(() => import("@/components/JpgTemplateMapper"), { ssr: false })
 const TeacherPhotoEditor = dynamic(() => import("@/components/TeacherPhotoEditor"), { ssr: false })
 
+type DownloadExportStatus = "APPROVED" | "SUBMITTED" | "PRINTED"
+
+const DOWNLOAD_EXPORT_STATUS_LABELS: Record<DownloadExportStatus, string> = {
+  APPROVED: "Approved",
+  SUBMITTED: "Submitted",
+  PRINTED: "Printed",
+}
+
 type StudentData = {
   id: string
   serialNumber: string
@@ -117,6 +125,7 @@ export default function TeacherDashboard() {
 
   // Download Data + Photos state
   const [exportingFormat, setExportingFormat] = useState<string | null>(null)
+  const [downloadExportStatus, setDownloadExportStatus] = useState<DownloadExportStatus>("APPROVED")
   const [gradeClassFilter, setGradeClassFilter] = useState("")
   const [divisionFilter, setDivisionFilter] = useState("")
 
@@ -524,12 +533,13 @@ export default function TeacherDashboard() {
         const cls = data?.classes.find((c) => c.name === classFilter)
         if (cls) params.set("classId", cls.id)
       }
-      if (statusFilter) params.set("status", statusFilter)
+      params.set("status", downloadExportStatus)
       params.set("format", "excel")
 
       const selectedClassName = classFilter || ""
       const scopeLabel = selectedClassName ? `${selectedClassName} class` : "school"
-      toast.message(`Preparing ${scopeLabel} backup with named photos...`)
+      const statusLabel = DOWNLOAD_EXPORT_STATUS_LABELS[downloadExportStatus]
+      toast.message(`Preparing ${statusLabel.toLowerCase()} ${scopeLabel} backup with named photos...`)
 
       const res = await fetch(`/api/teacher/export/archive?${params}`)
       const responseData = await res.json()
@@ -546,7 +556,7 @@ export default function TeacherDashboard() {
       }
       await pollExportJob(
         jobId,
-        "Backup ZIP ready — data and named photos downloaded",
+        `${statusLabel} backup ZIP ready - data and named photos downloaded`,
         responseData.data?.totalStudents
       )
     } catch {
@@ -565,6 +575,14 @@ export default function TeacherDashboard() {
       search: searchFilter,
     })
   }, [data?.students, classFilter, statusFilter, gradeClassFilter, divisionFilter, searchFilter])
+
+  const downloadExportCount = useMemo(
+    () => (data?.students || []).filter((student) =>
+      student.status === downloadExportStatus &&
+      (!classFilter || student.class?.name === classFilter)
+    ).length,
+    [data?.students, classFilter, downloadExportStatus]
+  )
 
   // Unique grade/class values for the grade dropdown filter
   const uniqueGrades = useMemo(() => {
@@ -801,14 +819,28 @@ export default function TeacherDashboard() {
                     }}>
                       📊 Excel
                     </button>
+                    <select
+                      value={downloadExportStatus}
+                      onChange={(event) => setDownloadExportStatus(event.target.value as DownloadExportStatus)}
+                      disabled={exportingFormat !== null}
+                      aria-label="Data and photos export status"
+                      title="Choose which student status to include in the ZIP"
+                      style={{ height: 34, padding: '0 10px', border: '1.5px solid #22c55e', borderRadius: 8, color: '#166534', background: '#fff', fontSize: 12, fontWeight: 600 }}
+                    >
+                      <option value="APPROVED">Approved</option>
+                      <option value="SUBMITTED">Submitted</option>
+                      <option value="PRINTED">Printed</option>
+                    </select>
                     <button
                       className="btn btn-outline"
                       onClick={() => handleTeacherExport("excel")}
-                      disabled={exportingFormat !== null || (data?.stats.total || 0) === 0}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 14px', borderColor: '#0ea5e9', color: '#0369a1', opacity: exportingFormat !== null || (data?.stats.total || 0) === 0 ? 0.6 : 1, cursor: exportingFormat !== null || (data?.stats.total || 0) === 0 ? 'not-allowed' : 'pointer' }}
+                      disabled={exportingFormat !== null || downloadExportCount === 0}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 14px', borderColor: '#0ea5e9', color: '#0369a1', opacity: exportingFormat !== null || downloadExportCount === 0 ? 0.6 : 1, cursor: exportingFormat !== null || downloadExportCount === 0 ? 'not-allowed' : 'pointer' }}
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M3 8l9 6 9-6"/><path d="M21 8l-9-5-9 5"/><path d="M12 14v7"/></svg>
-                      {exportingFormat === "excel" ? 'Preparing Backup...' : classFilter ? `Download ${companyMode ? "Department" : "Class"} Backup` : 'Download Data + Photos'}
+                      {exportingFormat === "excel"
+                        ? 'Preparing Backup...'
+                        : `Download ${DOWNLOAD_EXPORT_STATUS_LABELS[downloadExportStatus]} Data + Photos`}
                     </button>
                   </div>
                 </div>
@@ -903,17 +935,33 @@ export default function TeacherDashboard() {
                   <option value="PRINTED">Printed</option>
                 </select>
               </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Download status</label>
+                <select
+                  value={downloadExportStatus}
+                  onChange={(event) => setDownloadExportStatus(event.target.value as DownloadExportStatus)}
+                  disabled={exportingFormat !== null}
+                  aria-label="Data and photos export status"
+                  style={{ height: 38, padding: '0 12px', border: '1.5px solid #22c55e', borderRadius: 8, color: '#166534', background: '#fff', fontSize: 13, fontWeight: 600, minWidth: 140 }}
+                >
+                  <option value="APPROVED">Approved</option>
+                  <option value="SUBMITTED">Submitted</option>
+                  <option value="PRINTED">Printed</option>
+                </select>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'flex-end' }}>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'transparent' }}>.</label>
                 <button
                   className="btn btn-outline"
                   onClick={() => handleTeacherExport("excel")}
-                  disabled={exportingFormat !== null || filtered.length === 0}
-                  title={classFilter ? `Download this ${companyMode ? "department" : "class"} data with photos` : `Download all ${companyMode ? "employee" : "student"} data with photos`}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, height: 38, padding: '0 16px', borderColor: '#0ea5e9', color: '#0369a1', fontSize: 13, opacity: exportingFormat !== null || filtered.length === 0 ? 0.6 : 1, cursor: exportingFormat !== null || filtered.length === 0 ? 'not-allowed' : 'pointer' }}
+                  disabled={exportingFormat !== null || downloadExportCount === 0}
+                  title={`Download only ${DOWNLOAD_EXPORT_STATUS_LABELS[downloadExportStatus].toLowerCase()} ${companyMode ? "employee" : "student"} data with photos`}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, height: 38, padding: '0 16px', borderColor: '#0ea5e9', color: '#0369a1', fontSize: 13, opacity: exportingFormat !== null || downloadExportCount === 0 ? 0.6 : 1, cursor: exportingFormat !== null || downloadExportCount === 0 ? 'not-allowed' : 'pointer' }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M3 8l9 6 9-6"/><path d="M21 8l-9-5-9 5"/><path d="M12 14v7"/></svg>
-                  {exportingFormat === "excel" ? 'Preparing Backup...' : classFilter ? `Download ${companyMode ? "Department" : "Class"} Backup` : 'Download Data + Photos'}
+                  {exportingFormat === "excel"
+                    ? 'Preparing Backup...'
+                    : `Download ${DOWNLOAD_EXPORT_STATUS_LABELS[downloadExportStatus]} Data + Photos`}
                 </button>
               </div>
               <span style={{ fontSize: 13, color: '#64748b', padding: '10px 0', marginLeft: 'auto' }}>{filtered.length} {companyMode ? "employees" : "students"}</span>

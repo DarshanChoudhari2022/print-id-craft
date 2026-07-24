@@ -36,22 +36,47 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
     )
   }
 
-  const result = job.result as { storagePath?: string; fileName?: string } | null
+  const result = job.result as {
+    storagePath?: string
+    storageParts?: Array<{ storagePath: string; bytes: number }>
+    fileName?: string
+    bytes?: number
+  } | null
   if (!result?.storagePath) {
     return NextResponse.json({ error: "No downloadable export for this job" }, { status: 404 })
   }
 
-  const { data, error } = await storageDownload(EXPORT_BUCKET, result.storagePath)
-  if (error || !data) {
-    return NextResponse.json({ error: "Export file missing from storage" }, { status: 404 })
-  }
-
   const fileName = result.fileName || "school-archive.zip"
-  return new NextResponse(new Uint8Array(data), {
+  const parts = result.storageParts?.length
+    ? result.storageParts
+    : [{ storagePath: result.storagePath, bytes: result.bytes || 0 }]
+  let partIndex = 0
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (partIndex >= parts.length) {
+        controller.close()
+        return
+      }
+
+      const part = parts[partIndex]
+      const { data, error } = await storageDownload(EXPORT_BUCKET, part.storagePath)
+      if (error || !data) {
+        controller.error(new Error(`Export file part ${partIndex + 1} is missing from storage`))
+        return
+      }
+
+      partIndex += 1
+      controller.enqueue(new Uint8Array(data))
+    },
+  })
+
+  const contentLength = parts.reduce((total, part) => total + part.bytes, 0)
+  return new NextResponse(body, {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${fileName}"`,
       "Cache-Control": "no-store",
+      ...(contentLength > 0 ? { "Content-Length": String(contentLength) } : {}),
     },
   })
 }

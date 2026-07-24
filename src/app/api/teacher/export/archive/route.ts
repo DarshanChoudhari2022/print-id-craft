@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { enqueueJob, kickJobWorker } from "@/lib/jobs/enqueue"
 import type { ExportArchivePayload } from "@/lib/jobs/types"
 import { EXPORT_DEFAULT_MAX_STUDENTS, EXPORT_MAX_STUDENTS } from "@/lib/export/constants"
+import { findActiveExportJob } from "@/lib/export/find-active-export-job"
 
 export const dynamic = "force-dynamic"
 
@@ -64,12 +65,13 @@ export async function GET(req: Request) {
     totalStudents,
   }
 
-  const job = await enqueueJob({
-    type: "EXPORT_SCHOOL_ARCHIVE",
-    schoolId,
-    createdById: session.user.id,
-    payload,
-  })
+  const activeJob = await findActiveExportJob(schoolId, session.user.id, payload)
+  const job = activeJob || await enqueueJob({
+      type: "EXPORT_SCHOOL_ARCHIVE",
+      schoolId,
+      createdById: session.user.id,
+      payload,
+    })
 
   await kickJobWorker(new URL(req.url).origin)
 
@@ -78,6 +80,7 @@ export async function GET(req: Request) {
     data: {
       jobId: job.id,
       status: job.status,
+      reused: Boolean(activeJob),
       totalStudents,
       maxStudents,
       message: "Export queued. Large schools may take several minutes.",
