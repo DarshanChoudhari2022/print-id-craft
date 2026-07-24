@@ -252,6 +252,16 @@ export default function TeacherDashboard() {
     }
   }
 
+  const confirmBulkStatusWord = (status: "SUBMITTED" | "APPROVED" | "PRINTED", targetLabel: string) => {
+    const typed = window.prompt(
+      `This will change ${targetLabel} to ${status}.\n\nType ${status} to confirm.`
+    )
+    if (typed === null) return false
+    if (typed.trim().toUpperCase() === status) return true
+    toast.error(`Status change cancelled. Please type ${status} exactly to confirm.`)
+    return false
+  }
+
   const handleBulkStatusChange = async (status: "SUBMITTED" | "APPROVED" | "PRINTED") => {
     if (bulkUpdatingStatus || filtered.length === 0) return
     const targetIds = filtered
@@ -261,7 +271,8 @@ export default function TeacherDashboard() {
       toast.info(`All visible ${companyMode ? "employees" : "students"} are already ${status}.`)
       return
     }
-    if (!confirm(`Change ${targetIds.length} visible ${companyMode ? "employee" : "student"} record(s) to ${status}?`)) return
+    const targetLabel = `${targetIds.length} visible ${companyMode ? "employee" : "student"} record(s)`
+    if (!confirmBulkStatusWord(status, targetLabel)) return
 
     setBulkUpdatingStatus(status)
     try {

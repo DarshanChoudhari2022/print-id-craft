@@ -1214,6 +1214,16 @@ export default function SchoolDetailPage() {
     }
   }
 
+  const confirmBulkStatusWord = (status: "SUBMITTED" | "APPROVED" | "PRINTED", targetLabel: string) => {
+    const typed = window.prompt(
+      `This will change ${targetLabel} matching the current filters to ${status}.\n\nType ${status} to confirm.`
+    )
+    if (typed === null) return false
+    if (typed.trim().toUpperCase() === status) return true
+    toast.error(`Status change cancelled. Please type ${status} exactly to confirm.`)
+    return false
+  }
+
   const handleBulkStatusUpdate = async (status: "SUBMITTED" | "APPROVED" | "PRINTED") => {
     if (bulkUpdatingStatus || studentTotal === 0) return
 
@@ -1221,7 +1231,7 @@ export default function SchoolDetailPage() {
     const targetLabel = studentTotal === 1
       ? `1 ${companyMode ? "employee" : "student"}`
       : `${studentTotal} ${companyMode ? "employees" : "students"}`
-    if (!confirm(`Change ${targetLabel} matching the current filters to ${status}?`)) return
+    if (!confirmBulkStatusWord(status, targetLabel)) return
 
     setBulkUpdatingStatus(status)
     try {
