@@ -281,6 +281,7 @@ export default function SchoolDetailPage() {
   const [studentPage, setStudentPage] = useState(1)
   const [studentTotal, setStudentTotal] = useState(0)
   const [statusFilter, setStatusFilter] = useState("")
+  const [bulkUpdatingStatus, setBulkUpdatingStatus] = useState<string | null>(null)
   const [classFilter, setClassFilter] = useState("")
   const [gradeClassFilter, setGradeClassFilter] = useState("")
   const [showStudentAddSection, setShowStudentAddSection] = useState(false)
@@ -1204,6 +1205,46 @@ export default function SchoolDetailPage() {
     } catch {
       toast.error("Failed to update status — reverting")
       fetchStudents(studentPage)
+    }
+  }
+
+  const handleBulkStatusUpdate = async (status: "SUBMITTED" | "APPROVED" | "PRINTED") => {
+    if (bulkUpdatingStatus || studentTotal === 0) return
+
+    const [classGrade = "", division = ""] = gradeClassFilter ? gradeClassFilter.split("|") : ["", ""]
+    const targetLabel = studentTotal === 1
+      ? `1 ${companyMode ? "employee" : "student"}`
+      : `${studentTotal} ${companyMode ? "employees" : "students"}`
+    if (!confirm(`Change ${targetLabel} matching the current filters to ${status}?`)) return
+
+    setBulkUpdatingStatus(status)
+    try {
+      const res = await fetch(`/api/schools/${schoolId}/students`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "bulkStatus",
+          status,
+          filters: {
+            status: statusFilter || undefined,
+            classId: classFilter || undefined,
+            classGrade: classGrade || undefined,
+            division: division || undefined,
+            search: searchQuery || undefined,
+          },
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Bulk status update failed")
+      toast.success(`${data.updated ?? 0} ${companyMode ? "employee" : "student"} record(s) changed to ${status}.`)
+      await fetchStudents(studentPage)
+      fetchSchool()
+      fetchClasses(false)
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err?.message || "Failed to update statuses")
+    } finally {
+      setBulkUpdatingStatus(null)
     }
   }
 
@@ -3565,6 +3606,34 @@ export default function SchoolDetailPage() {
                   </span>
                 ) : null; })()}
               </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Bulk status:</span>
+              <button
+                className="btn btn-outline"
+                disabled={studentTotal === 0 || bulkUpdatingStatus !== null}
+                onClick={() => handleBulkStatusUpdate("APPROVED")}
+                style={{ fontSize: 12, padding: '7px 12px', borderColor: '#22c55e', color: '#16a34a', opacity: studentTotal === 0 || bulkUpdatingStatus !== null ? 0.6 : 1 }}
+              >
+                {bulkUpdatingStatus === "APPROVED" ? "Approving..." : "Approve All"}
+              </button>
+              <button
+                className="btn btn-outline"
+                disabled={studentTotal === 0 || bulkUpdatingStatus !== null}
+                onClick={() => handleBulkStatusUpdate("SUBMITTED")}
+                style={{ fontSize: 12, padding: '7px 12px', borderColor: '#f59e0b', color: '#b45309', opacity: studentTotal === 0 || bulkUpdatingStatus !== null ? 0.6 : 1 }}
+              >
+                {bulkUpdatingStatus === "SUBMITTED" ? "Submitting..." : "Submitted All"}
+              </button>
+              <button
+                className="btn btn-outline"
+                disabled={studentTotal === 0 || bulkUpdatingStatus !== null}
+                onClick={() => handleBulkStatusUpdate("PRINTED")}
+                style={{ fontSize: 12, padding: '7px 12px', borderColor: '#0ea5e9', color: '#0369a1', opacity: studentTotal === 0 || bulkUpdatingStatus !== null ? 0.6 : 1 }}
+              >
+                {bulkUpdatingStatus === "PRINTED" ? "Marking printed..." : "Printed All"}
+              </button>
             </div>
 
             <div className="data-table-wrapper" style={{ overflowX: 'auto', position: 'relative', opacity: tabLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>

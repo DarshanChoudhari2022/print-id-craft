@@ -109,6 +109,7 @@ export default function TeacherDashboard() {
   const [showEditPhotoWorkflow, setShowEditPhotoWorkflow] = useState(false)
   const [editPhotoMode, setEditPhotoMode] = useState<TeacherPhotoMode>("replace")
   const [updatingStatusIds, setUpdatingStatusIds] = useState<Set<string>>(new Set())
+  const [bulkUpdatingStatus, setBulkUpdatingStatus] = useState<string | null>(null)
 
   // Add class state
   const [newClassName, setNewClassName] = useState("")
@@ -248,6 +249,40 @@ export default function TeacherDashboard() {
         next.delete(sid)
         return next
       })
+    }
+  }
+
+  const handleBulkStatusChange = async (status: "SUBMITTED" | "APPROVED" | "PRINTED") => {
+    if (bulkUpdatingStatus || filtered.length === 0) return
+    const targetIds = filtered
+      .filter((student) => student.status !== status)
+      .map((student) => student.id)
+    if (targetIds.length === 0) {
+      toast.info(`All visible ${companyMode ? "employees" : "students"} are already ${status}.`)
+      return
+    }
+    if (!confirm(`Change ${targetIds.length} visible ${companyMode ? "employee" : "student"} record(s) to ${status}?`)) return
+
+    setBulkUpdatingStatus(status)
+    try {
+      const res = await fetch(`/api/schools/${getSchoolId()}/students`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "bulkStatus",
+          status,
+          studentIds: targetIds,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.error || "Bulk status update failed")
+      toast.success(`${json.updated ?? targetIds.length} ${companyMode ? "employee" : "student"} record(s) changed to ${status}.`)
+      await fetchData(1)
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err?.message || "Could not update statuses. Please try again.")
+    } finally {
+      setBulkUpdatingStatus(null)
     }
   }
 
@@ -871,6 +906,34 @@ export default function TeacherDashboard() {
                 </button>
               </div>
               <span style={{ fontSize: 13, color: '#64748b', padding: '10px 0', marginLeft: 'auto' }}>{filtered.length} {companyMode ? "employees" : "students"}</span>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Bulk status:</span>
+              <button
+                className="btn btn-outline"
+                disabled={filtered.length === 0 || bulkUpdatingStatus !== null}
+                onClick={() => handleBulkStatusChange("APPROVED")}
+                style={{ fontSize: 12, padding: '7px 12px', borderColor: '#22c55e', color: '#16a34a', opacity: filtered.length === 0 || bulkUpdatingStatus !== null ? 0.6 : 1 }}
+              >
+                {bulkUpdatingStatus === "APPROVED" ? "Approving..." : "Approve All"}
+              </button>
+              <button
+                className="btn btn-outline"
+                disabled={filtered.length === 0 || bulkUpdatingStatus !== null}
+                onClick={() => handleBulkStatusChange("SUBMITTED")}
+                style={{ fontSize: 12, padding: '7px 12px', borderColor: '#f59e0b', color: '#b45309', opacity: filtered.length === 0 || bulkUpdatingStatus !== null ? 0.6 : 1 }}
+              >
+                {bulkUpdatingStatus === "SUBMITTED" ? "Submitting..." : "Submitted All"}
+              </button>
+              <button
+                className="btn btn-outline"
+                disabled={filtered.length === 0 || bulkUpdatingStatus !== null}
+                onClick={() => handleBulkStatusChange("PRINTED")}
+                style={{ fontSize: 12, padding: '7px 12px', borderColor: '#0ea5e9', color: '#0369a1', opacity: filtered.length === 0 || bulkUpdatingStatus !== null ? 0.6 : 1 }}
+              >
+                {bulkUpdatingStatus === "PRINTED" ? "Marking printed..." : "Printed All"}
+              </button>
             </div>
 
             {/* Student Table */}

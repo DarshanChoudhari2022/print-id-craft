@@ -9,6 +9,7 @@ import { normalizeFormValue } from "@/lib/field-resolver"
 import { reportSlowOperation } from "@/lib/observability"
 import { formatClassSection } from "@/lib/section-class"
 import { normalizeStudentStringFormData } from "@/lib/student-text-normalization"
+import { z } from "zod"
 
 // Optimize: prefer longer-running function for connection reuse
 export const maxDuration = 10
@@ -23,6 +24,88 @@ function uniqueValues(...values: Array<string | undefined | null>) {
 
 function jsonEqualsAny(path: string, values: string[]) {
   return values.map((value) => ({ formData: { path: [path], equals: value } }))
+}
+
+const bulkStatusSchema = z.object({
+  action: z.literal("bulkStatus"),
+  status: z.enum(["PENDING", "SUBMITTED", "FLAGGED", "APPROVED", "PRINTED"]),
+  studentIds: z.array(z.string().min(1)).optional(),
+  filters: z.object({
+    status: z.string().optional(),
+    classId: z.string().optional(),
+    classGrade: z.string().optional(),
+    division: z.string().optional(),
+    search: z.string().optional(),
+  }).optional(),
+})
+
+function applyStudentListFilters(where: any, filters: NonNullable<z.infer<typeof bulkStatusSchema>["filters"]>) {
+  const status = filters.status?.trim()
+  const classId = filters.classId?.trim()
+  const classGrade = filters.classGrade?.trim()
+  const division = filters.division?.trim()
+  const search = filters.search?.trim()
+
+  if (status) where.status = status
+  if (classId) where.classId = classId
+
+  const andFilters: any[] = []
+
+  if (classGrade && division) {
+    const gradeValues = uniqueValues(classGrade, classGrade.toUpperCase(), classGrade.toLowerCase())
+    const divisionValues = uniqueValues(division, division.toUpperCase(), division.toLowerCase())
+    const classValues = uniqueValues(
+      formatClassSection(classGrade, division),
+      `${classGrade}-${division}`,
+      `${classGrade} ${division}`,
+      `${classGrade.toUpperCase()} - ${division.toUpperCase()}`
+    )
+    andFilters.push({
+      OR: [
+        {
+          AND: [
+            { OR: [...jsonEqualsAny("classGrade", gradeValues), ...jsonEqualsAny("CLASSGRADE", gradeValues)] },
+            { OR: [...jsonEqualsAny("division", divisionValues), ...jsonEqualsAny("DIVISION", divisionValues), ...jsonEqualsAny("section", divisionValues)] },
+          ],
+        },
+        { OR: [...jsonEqualsAny("class", classValues), ...jsonEqualsAny("classSection", classValues), ...jsonEqualsAny("CLASS", classValues)] },
+      ],
+    })
+  } else if (classGrade) {
+    const gradeValues = uniqueValues(classGrade, classGrade.toUpperCase(), classGrade.toLowerCase())
+    andFilters.push({
+      OR: [
+        ...jsonEqualsAny("classGrade", gradeValues),
+        ...jsonEqualsAny("CLASSGRADE", gradeValues),
+        ...jsonEqualsAny("class", gradeValues),
+        ...jsonEqualsAny("classSection", gradeValues),
+      ],
+    })
+  } else if (division) {
+    const divisionValues = uniqueValues(division, division.toUpperCase(), division.toLowerCase())
+    andFilters.push({
+      OR: [
+        ...jsonEqualsAny("division", divisionValues),
+        ...jsonEqualsAny("DIVISION", divisionValues),
+        ...jsonEqualsAny("section", divisionValues),
+      ],
+    })
+  }
+
+  if (search) {
+    const nq = normalizeFormValue(search)
+    andFilters.push({
+      OR: [
+        { serialNumber: { contains: search, mode: "insensitive" } },
+        { fullName: { contains: search, mode: "insensitive" } },
+        ...(nq ? [{ normalizedSearchText: { contains: nq } }] : []),
+      ],
+    })
+  }
+
+  if (andFilters.length > 0) {
+    where.AND = [...(Array.isArray(where.AND) ? where.AND : []), ...andFilters]
+  }
 }
 
 export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
@@ -213,14 +296,58 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
 }
 
 /**
- * DELETE — wipe ALL students for this school. Used by the "Delete All & Re-import"
- * flow so admins can swap in a fresh Excel without leaving stale records behind.
- *
- * Safety:
- *  - MANUFACTURER role only.
- *  - Caller must POST a JSON body with `{ confirm: "DELETE_ALL" }` to avoid
- *    accidental wipes from a misrouted request.
- *  - Returns the count of deleted rows so the UI can show a toast.
+ * PUT - bulk status update for the filtered student list or explicit student IDs.
+ * Teachers remain scoped to their school and assigned class.
+ * Returns the count of updated rows so the UI can show a toast.
+ */
+export async function PUT(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session || (session.user?.role !== "MANUFACTURER" && session.user?.role !== "TEACHER")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    if (session.user?.role === "TEACHER" && session.user.schoolId !== params.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    const validated = bulkStatusSchema.parse(await req.json())
+    const where: any = { schoolId: params.id }
+
+    if (validated.studentIds?.length) {
+      where.id = { in: Array.from(new Set(validated.studentIds)) }
+    } else if (validated.filters) {
+      applyStudentListFilters(where, validated.filters)
+    }
+
+    if (session.user?.role === "TEACHER" && !session.user.isMainTeacher) {
+      if (!session.user.classId) {
+        return NextResponse.json({ error: "No class assigned" }, { status: 403 })
+      }
+      where.classId = session.user.classId
+    }
+
+    const result = await prisma.student.updateMany({
+      where,
+      data: { status: validated.status },
+    })
+
+    return NextResponse.json({
+      success: true,
+      updated: result.count,
+      status: validated.status,
+    })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.issues }, { status: 400 })
+    }
+    console.error("Bulk update students error:", error)
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE - wipe all students for this school after explicit confirmation.
  */
 export async function DELETE(req: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
