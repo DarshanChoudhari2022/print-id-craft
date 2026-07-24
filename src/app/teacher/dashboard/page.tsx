@@ -908,6 +908,36 @@ export default function TeacherDashboard() {
               <span style={{ fontSize: 13, color: '#64748b', padding: '10px 0', marginLeft: 'auto' }}>{filtered.length} {companyMode ? "employees" : "students"}</span>
             </div>
 
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Status filter:</span>
+              {[
+                { label: "All", value: "" },
+                { label: "Submitted", value: "SUBMITTED" },
+                { label: "Approved", value: "APPROVED" },
+                { label: "Printed", value: "PRINTED" },
+                { label: "Flagged", value: "FLAGGED" },
+              ].map((option) => {
+                const active = statusFilter === option.value
+                return (
+                  <button
+                    key={option.value || "ALL"}
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => setStatusFilter(option.value)}
+                    style={{
+                      fontSize: 12,
+                      padding: '7px 12px',
+                      borderColor: active ? '#2563eb' : '#cbd5e1',
+                      color: active ? '#1d4ed8' : '#475569',
+                      background: active ? '#eff6ff' : 'white',
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Bulk status:</span>
               <button

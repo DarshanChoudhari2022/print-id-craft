@@ -2323,6 +2323,16 @@ export default function SchoolDetailPage() {
           setExportingFormat(null)
           return
         }
+        if (exportKey === "approved-excel") {
+          toast.success("Approved backup started. It will download automatically when ready.")
+          setExportingFormat(null)
+          void pollExportJob(
+            jobId,
+            "Approved students backup ZIP ready - data and named photos downloaded",
+            data.data?.totalStudents
+          )
+          return
+        }
         await pollExportJob(
           jobId,
           format === "excel"
@@ -3620,6 +3630,36 @@ export default function SchoolDetailPage() {
                   </span>
                 ) : null; })()}
               </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Status filter:</span>
+              {[
+                { label: "All", value: "" },
+                { label: "Submitted", value: "SUBMITTED" },
+                { label: "Approved", value: "APPROVED" },
+                { label: "Printed", value: "PRINTED" },
+                { label: "Flagged", value: "FLAGGED" },
+              ].map((option) => {
+                const active = statusFilter === option.value
+                return (
+                  <button
+                    key={option.value || "ALL"}
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => { setStatusFilter(option.value); setStudentPage(1) }}
+                    style={{
+                      fontSize: 12,
+                      padding: '7px 12px',
+                      borderColor: active ? '#2563eb' : '#cbd5e1',
+                      color: active ? '#1d4ed8' : '#475569',
+                      background: active ? '#eff6ff' : 'white',
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                )
+              })}
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
