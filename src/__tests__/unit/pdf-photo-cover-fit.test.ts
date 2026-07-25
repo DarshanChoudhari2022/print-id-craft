@@ -8,13 +8,14 @@ describe("PDF card photo fit wiring", () => {
     "utf8",
   )
 
-  it("keeps contain-fit as the raster renderer behavior", () => {
-    expect(source).toMatch(/function drawPhotoForFrame[\s\S]*?fillStyle = "#ffffff"[\s\S]*?drawImageContain\(ctx, img, x, y, w, h\)/)
+  it("keeps cover-fit as the raster renderer behavior", () => {
+    expect(source).toMatch(/function drawPhotoForFrame[\s\S]*?drawImageCover\(ctx, img, img\.naturalWidth, img\.naturalHeight, x, y, w, h\)/)
+    expect(source).toContain("getCoverPhotoPlacement")
+    expect(source).toContain("recolorEdgeConnectedPhotoBackground")
   })
 
-  it("keeps SVG/PDF embedded photos in meet mode instead of slice mode", () => {
-    expect(source).toContain('preserveAspectRatio="xMidYMid meet"')
-    expect(source).not.toContain("xMidYMid slice")
-    expect(source).not.toContain("xMidYMin slice")
+  it("keeps SVG/PDF embedded photos in slice mode so mapped frames are filled", () => {
+    expect(source).toContain('preserveAspectRatio = "xMidYMin slice"')
+    expect(source).not.toContain('preserveAspectRatio = "xMidYMid meet"')
   })
 })

@@ -100,6 +100,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
                 hasBackSide: true,
                 cardWidthMm: true,
                 cardHeightMm: true,
+                photoBgColor: true,
                 printConfig: true,
               },
             },
@@ -150,6 +151,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
           hasBackSide: assignedTemplate.hasBackSide || false,
           cardWidthMm: assignedTemplate.cardWidthMm || DEFAULT_CARD_WIDTH_MM,
           cardHeightMm: assignedTemplate.cardHeightMm || DEFAULT_CARD_HEIGHT_MM,
+          photoBgColor: assignedTemplate.photoBgColor || "#FFFFFF",
         },
       }
     })
@@ -164,6 +166,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
         hasBackSide: template.hasBackSide || false,
         cardWidthMm: template.cardWidthMm || DEFAULT_CARD_WIDTH_MM,
         cardHeightMm: template.cardHeightMm || DEFAULT_CARD_HEIGHT_MM,
+        photoBgColor: template.photoBgColor || "#FFFFFF",
         orientation: template.orientation || "PORTRAIT",
         students: renderData,
         totalCount: renderData.length,

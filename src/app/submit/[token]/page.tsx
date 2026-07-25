@@ -1124,6 +1124,7 @@ export default function SubmitPage() {
                       watermark="Wise Melon"
                       cardWidthMm={(config as any).cardWidthMm}
                       cardHeightMm={(config as any).cardHeightMm}
+                      photoBgColor={config.photoBgColor || "#FFFFFF"}
                     />
                   </div>
                   {config.hasBackSide && config.backTemplateImageUrl && (
@@ -1139,6 +1140,7 @@ export default function SubmitPage() {
                         watermark="Wise Melon"
                         cardWidthMm={(config as any).cardWidthMm}
                         cardHeightMm={(config as any).cardHeightMm}
+                        photoBgColor={config.photoBgColor || "#FFFFFF"}
                       />
                     </div>
                   )}
@@ -1386,6 +1388,7 @@ export default function SubmitPage() {
                         watermark="Wise Melon"
                         cardWidthMm={(config as any).cardWidthMm}
                         cardHeightMm={(config as any).cardHeightMm}
+                        photoBgColor={config.photoBgColor || "#FFFFFF"}
                       />
                     </div>
                     {config.hasBackSide && config.backTemplateImageUrl && (
@@ -1401,6 +1404,7 @@ export default function SubmitPage() {
                           watermark="Wise Melon"
                           cardWidthMm={(config as any).cardWidthMm}
                           cardHeightMm={(config as any).cardHeightMm}
+                          photoBgColor={config.photoBgColor || "#FFFFFF"}
                         />
                       </div>
                     )}

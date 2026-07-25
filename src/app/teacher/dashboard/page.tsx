@@ -1414,6 +1414,7 @@ export default function TeacherDashboard() {
                                 watermark="PREVIEW ONLY"
                                 cardWidthMm={(studentTemplate as any).cardWidthMm}
                                 cardHeightMm={(studentTemplate as any).cardHeightMm}
+                                photoBgColor={(studentTemplate as any).photoBgColor || "#FFFFFF"}
                               />
                             </div>
                             {studentTemplate.hasBackSide && studentTemplate.backTemplateImageUrl && (
@@ -1428,6 +1429,7 @@ export default function TeacherDashboard() {
                                   watermark="PREVIEW ONLY"
                                   cardWidthMm={(studentTemplate as any).cardWidthMm}
                                   cardHeightMm={(studentTemplate as any).cardHeightMm}
+                                  photoBgColor={(studentTemplate as any).photoBgColor || "#FFFFFF"}
                                 />
                               </div>
                             )}

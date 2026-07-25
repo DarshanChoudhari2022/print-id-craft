@@ -31,6 +31,10 @@ import {
 } from "@/lib/generation-scope"
 import { formatSchoolCardFieldValue } from "@/lib/school-card-display"
 import { getFixedTemplateValue } from "@/lib/fixed-template-values"
+import {
+  getCoverPhotoPlacement,
+  recolorEdgeConnectedPhotoBackground,
+} from "@/lib/card-photo-placement"
 
 type FieldMapping = {
   id: string
@@ -174,12 +178,13 @@ async function prefetchImageUrls<T>(
 }
 
 /** Convert an image URL to a base64 data URL (needed for SVG embedding) */
-async function imageToDataUrl(url: string): Promise<string> {
+async function imageToDataUrl(url: string, photoBgColor?: string): Promise<string> {
   if (url.startsWith("data:")) return url
-  const cached = dataUrlCache.get(url)
+  const cacheKey = photoBgColor ? `${url}::bg:${photoBgColor}` : url
+  const cached = dataUrlCache.get(cacheKey)
   if (cached) {
-    dataUrlCache.delete(url)
-    dataUrlCache.set(url, cached)
+    dataUrlCache.delete(cacheKey)
+    dataUrlCache.set(cacheKey, cached)
     return cached
   }
   const img = await getCachedImage(url)
@@ -191,8 +196,11 @@ async function imageToDataUrl(url: string): Promise<string> {
   const ctx = canvas.getContext("2d")
   if (!ctx) return url
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+  if (photoBgColor) {
+    recolorEdgeConnectedPhotoBackground(ctx, canvas.width, canvas.height, photoBgColor)
+  }
   const dataUrl = canvas.toDataURL("image/jpeg", DATA_URL_JPEG_QUALITY)
-  lruSet(dataUrlCache, url, dataUrl, DATA_URL_CACHE_MAX)
+  lruSet(dataUrlCache, cacheKey, dataUrl, DATA_URL_CACHE_MAX)
   return dataUrl
 }
 
@@ -297,6 +305,30 @@ function drawImageContain(
   ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, dw, dh)
 }
 
+function drawImageCover(
+  ctx: CanvasRenderingContext2D,
+  img: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  const placement = getCoverPhotoPlacement(sourceWidth, sourceHeight, x, y, w, h)
+  ctx.drawImage(
+    img,
+    0,
+    0,
+    sourceWidth,
+    sourceHeight,
+    placement.dx,
+    placement.dy,
+    placement.dw,
+    placement.dh,
+  )
+}
+
 function drawPhotoForFrame(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
@@ -305,10 +337,20 @@ function drawPhotoForFrame(
   w: number,
   h: number,
   _radiusPx: number,
+  photoBgColor?: string,
 ) {
-  ctx.fillStyle = "#ffffff"
-  ctx.fillRect(x, y, w, h)
-  drawImageContain(ctx, img, x, y, w, h)
+  const sourceCanvas = document.createElement("canvas")
+  sourceCanvas.width = img.naturalWidth
+  sourceCanvas.height = img.naturalHeight
+  const sourceCtx = sourceCanvas.getContext("2d")
+  if (sourceCtx && photoBgColor) {
+    sourceCtx.drawImage(img, 0, 0)
+    recolorEdgeConnectedPhotoBackground(sourceCtx, sourceCanvas.width, sourceCanvas.height, photoBgColor)
+    drawImageCover(ctx, sourceCanvas, sourceCanvas.width, sourceCanvas.height, x, y, w, h)
+    return
+  }
+
+  drawImageCover(ctx, img, img.naturalWidth, img.naturalHeight, x, y, w, h)
 }
 
 async function drawHouseFlagCanvas(
@@ -495,6 +537,7 @@ async function renderIdCard(
   flagImageUrl?: string,
   cardWidthMm?: number,
   cardHeightMm?: number,
+  photoBgColor?: string,
 ): Promise<string> {
   const templateImg = await getCachedImage(templateImageUrl)
   if (!templateImg) throw new Error("Failed to load template")
@@ -537,7 +580,7 @@ async function renderIdCard(
           ctx.save()
           pathRoundedRect(ctx, fx, fy, fw, fh, radiusPx)
           ctx.clip()
-          drawPhotoForFrame(ctx, photoImg, fx, fy, fw, fh, radiusPx)
+          drawPhotoForFrame(ctx, photoImg, fx, fy, fw, fh, radiusPx, photoBgColor)
           ctx.restore()
         }
       }
@@ -661,6 +704,7 @@ async function renderIdCardSvg(
   flagImageUrl?: string,
   cardWidthMm?: number,
   cardHeightMm?: number,
+  photoBgColor?: string,
 ): Promise<string> {
   const templateImg = await getCachedImage(templateImageUrl)
   if (!templateImg) throw new Error("Failed to load template")
@@ -695,14 +739,14 @@ async function renderIdCardSvg(
 
     if (field.type === "photo") {
       if (student.photoUrl) {
-        const photoDataUrl = await imageToDataUrl(student.photoUrl)
+        const photoDataUrl = await imageToDataUrl(student.photoUrl, photoBgColor)
         const radiusPx = scalePhotoRadius(field.photoBorderRadius, fw, fh)
         const borderPx = ((field.photoBorderWidth || 0) / BATCH_EDITOR_REFERENCE_WIDTH) * w
         const radius = Math.max(0, Math.min(radiusPx, Math.min(fw, fh) / 2))
 
-        const preserveAspectRatio = "xMidYMid meet"
+        const preserveAspectRatio = "xMidYMin slice"
 
-        // clipPath for rounded corners; meet preserves the whole uploaded photo.
+        // clipPath for rounded corners; slice fills the mapped photo frame.
         const clipId = `clip-${field.id}`
         const clipRect = radius > 0
           ? `<rect x="${fx}" y="${fy}" width="${fw}" height="${fh}" rx="${radius}" ry="${radius}" />`
@@ -1551,7 +1595,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
         return
       }
 
-      const { templateImageUrl, fieldMappings, backTemplateImageUrl, backFieldMappings, hasBackSide, students, totalCount, cardWidthMm, cardHeightMm } = data.data
+      const { templateImageUrl, fieldMappings, backTemplateImageUrl, backFieldMappings, hasBackSide, students, totalCount, cardWidthMm, cardHeightMm, photoBgColor } = data.data
       
       if (!templateImageUrl) {
         toast.error("No template image configured. Please upload a template first.")
@@ -1590,7 +1634,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
       for (const student of students as any[]) {
         const studentTemplate = student.template || {
           templateImageUrl, fieldMappings, backTemplateImageUrl, backFieldMappings,
-          hasBackSide, cardWidthMm, cardHeightMm,
+          hasBackSide, cardWidthMm, cardHeightMm, photoBgColor,
         }
         templatesInUse.set(studentTemplate.templateImageUrl, studentTemplate)
       }
@@ -1620,7 +1664,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
             try {
               const studentTemplate = student.template || {
                 templateImageUrl, fieldMappings, backTemplateImageUrl, backFieldMappings,
-                hasBackSide, cardWidthMm, cardHeightMm,
+                hasBackSide, cardWidthMm, cardHeightMm, photoBgColor,
               }
               // Renders at 685×1181 px (300 DPI, 58×100 mm cutter) as PNG
               const frontDataUrl = await renderIdCard(
@@ -1631,6 +1675,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
                 getFlagUrl(student),
                 studentTemplate.cardWidthMm,
                 studentTemplate.cardHeightMm,
+                studentTemplate.photoBgColor,
               )
               let backDataUrl: string | undefined
               if (studentTemplate.hasBackSide && studentTemplate.backTemplateImageUrl) {
@@ -1642,6 +1687,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
                   getFlagUrl(student),
                   studentTemplate.cardWidthMm,
                   studentTemplate.cardHeightMm,
+                  studentTemplate.photoBgColor,
                 )
               }
               const scope = getGenerationStudentScope(student.formData)
@@ -1763,14 +1809,14 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
           const chunk = students.slice(i, i + CHUNK_SIZE)
           const promises = chunk.map(async (student: any) => {
             try {
-              const frontSvg = await renderIdCardSvg(templateImageUrl, fieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
+              const frontSvg = await renderIdCardSvg(templateImageUrl, fieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm, photoBgColor)
               const result: { front: { name: string; svgContent: string }; back?: { name: string; svgContent: string }; id: string } = {
                 front: { name: `${student.serialNumber}_front.svg`, svgContent: frontSvg },
                 id: student.id,
               }
 
               if (hasBackSide && backTemplateImageUrl) {
-                const backSvg = await renderIdCardSvg(backTemplateImageUrl, backFieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
+                const backSvg = await renderIdCardSvg(backTemplateImageUrl, backFieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm, photoBgColor)
                 result.back = { name: `${student.serialNumber}_back.svg`, svgContent: backSvg }
               }
               return result
@@ -1792,10 +1838,10 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
             for (const student of chunk) {
               if (previewData.length >= 8) break
               try {
-                const previewFront = await renderIdCard(templateImageUrl, fieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
+                const previewFront = await renderIdCard(templateImageUrl, fieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm, photoBgColor)
                 let previewBack: string | undefined
                 if (hasBackSide && backTemplateImageUrl) {
-                  previewBack = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
+                  previewBack = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm, photoBgColor)
                 }
                 previewData.push({ serialNumber: student.serialNumber, frontDataUrl: previewFront, backDataUrl: previewBack })
               } catch {}
@@ -1843,10 +1889,10 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
           const chunk = students.slice(i, i + CHUNK_SIZE)
           const promises = chunk.map(async (student: any) => {
             try {
-              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
+              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm, photoBgColor)
               let backDataUrl: string | undefined
               if (hasBackSide && backTemplateImageUrl) {
-                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
+                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm, photoBgColor)
               }
               return { serialNumber: student.serialNumber, frontDataUrl, backDataUrl, id: student.id }
             } catch (err) {
@@ -1949,10 +1995,10 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
           const chunk = students.slice(i, i + CHUNK_SIZE)
           const promises = chunk.map(async (student: any) => {
             try {
-              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
+              const frontDataUrl = await renderIdCard(templateImageUrl, fieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm, photoBgColor)
               let backDataUrl: string | undefined
               if (hasBackSide && backTemplateImageUrl) {
-                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm)
+                backDataUrl = await renderIdCard(backTemplateImageUrl, backFieldMappings, student, schoolName, getFlagUrl(student), cardWidthMm, cardHeightMm, photoBgColor)
               }
               return {
                 name: `${student.serialNumber}_front.jpg`,

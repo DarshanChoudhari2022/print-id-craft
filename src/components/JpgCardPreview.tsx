@@ -14,6 +14,10 @@ import {
 import { getHouseFlagRenderLayout } from "@/lib/house-flags"
 import { formatSchoolCardFieldValue } from "@/lib/school-card-display"
 import { getFixedTemplateValue } from "@/lib/fixed-template-values"
+import {
+  getCoverPhotoPlacement,
+  recolorEdgeConnectedPhotoBackground,
+} from "@/lib/card-photo-placement"
 
 type FieldMapping = {
   id: string
@@ -105,6 +109,30 @@ function drawImageContain(
   ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, dw, dh)
 }
 
+function drawImageCover(
+  ctx: CanvasRenderingContext2D,
+  img: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  const placement = getCoverPhotoPlacement(sourceWidth, sourceHeight, x, y, w, h)
+  ctx.drawImage(
+    img,
+    0,
+    0,
+    sourceWidth,
+    sourceHeight,
+    placement.dx,
+    placement.dy,
+    placement.dw,
+    placement.dh,
+  )
+}
+
 function drawPhotoForFrame(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
@@ -113,10 +141,20 @@ function drawPhotoForFrame(
   w: number,
   h: number,
   _radiusPx: number,
+  photoBgColor?: string,
 ) {
-  ctx.fillStyle = "#ffffff"
-  ctx.fillRect(x, y, w, h)
-  drawImageContain(ctx, img, x, y, w, h)
+  const sourceCanvas = document.createElement("canvas")
+  sourceCanvas.width = img.naturalWidth
+  sourceCanvas.height = img.naturalHeight
+  const sourceCtx = sourceCanvas.getContext("2d")
+  if (sourceCtx && photoBgColor) {
+    sourceCtx.drawImage(img, 0, 0)
+    recolorEdgeConnectedPhotoBackground(sourceCtx, sourceCanvas.width, sourceCanvas.height, photoBgColor)
+    drawImageCover(ctx, sourceCanvas, sourceCanvas.width, sourceCanvas.height, x, y, w, h)
+    return
+  }
+
+  drawImageCover(ctx, img, img.naturalWidth, img.naturalHeight, x, y, w, h)
 }
 
 async function drawHouseFlag(
@@ -179,6 +217,7 @@ type JpgCardPreviewProps = {
    */
   cardWidthMm?: number
   cardHeightMm?: number
+  photoBgColor?: string
 }
 
 const MAPPER_REFERENCE_WIDTH = 600
@@ -410,6 +449,7 @@ export default function JpgCardPreview({
   schoolName,
   cardWidthMm,
   cardHeightMm,
+  photoBgColor,
 }: JpgCardPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [dimensions, setDimensions] = useState({ width: 600, height: 380 })
@@ -464,7 +504,7 @@ export default function JpgCardPreview({
               ctx.save()
               pathRoundedRect(ctx, fx, fy, fw, fh, radiusPx)
               ctx.clip()
-              drawPhotoForFrame(ctx, photoImg, fx, fy, fw, fh, radiusPx)
+              drawPhotoForFrame(ctx, photoImg, fx, fy, fw, fh, radiusPx, photoBgColor)
               ctx.restore()
             } catch (err) {
               ctx.save()
@@ -591,7 +631,7 @@ export default function JpgCardPreview({
     } catch (err) {
       console.error("Render failed", err)
     }
-  }, [templateImageUrl, fieldMappings, formData, studentPhoto, flagImageUrl, scale, watermark, schoolName, cardWidthMm, cardHeightMm])
+  }, [templateImageUrl, fieldMappings, formData, studentPhoto, flagImageUrl, scale, watermark, schoolName, cardWidthMm, cardHeightMm, photoBgColor])
 
   const renderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -631,6 +671,7 @@ export async function generateJpgCard(
   flagImageUrl?: string,
   cardWidthMm: number = DEFAULT_CARD_WIDTH_MM,
   schoolName?: string,
+  photoBgColor?: string,
 ): Promise<string> {
   const canvas = document.createElement("canvas")
   const ctx = canvas.getContext("2d")
@@ -661,7 +702,7 @@ export async function generateJpgCard(
           ctx.save()
           pathRoundedRect(ctx, fx, fy, fw, fh, radiusPx)
           ctx.clip()
-          drawPhotoForFrame(ctx, photoImg, fx, fy, fw, fh, radiusPx)
+          drawPhotoForFrame(ctx, photoImg, fx, fy, fw, fh, radiusPx, photoBgColor)
           ctx.restore()
         } catch {}
       }

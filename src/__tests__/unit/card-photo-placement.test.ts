@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { getCoverPhotoPlacement } from "@/lib/card-photo-placement"
+import {
+  getCoverPhotoPlacement,
+  recolorEdgeConnectedPhotoBackground,
+} from "@/lib/card-photo-placement"
 
 describe("getCoverPhotoPlacement", () => {
   it("fills a wider box with a tall photo and aligns overflow to the top", () => {
@@ -27,5 +30,44 @@ describe("getCoverPhotoPlacement", () => {
       dw: 200,
       dh: 100,
     })
+  })
+})
+
+describe("recolorEdgeConnectedPhotoBackground", () => {
+  it("turns edge-connected plain photo background red while preserving portrait core", () => {
+    const width = 10
+    const height = 10
+    const bytes = new Uint8ClampedArray(width * height * 4)
+    for (let i = 0; i < bytes.length; i += 4) {
+      bytes[i] = 255
+      bytes[i + 1] = 255
+      bytes[i + 2] = 255
+      bytes[i + 3] = 255
+    }
+    for (let y = 5; y < 9; y++) {
+      for (let x = 4; x < 6; x++) {
+        const i = (y * width + x) * 4
+        bytes[i] = 248
+        bytes[i + 1] = 248
+        bytes[i + 2] = 248
+      }
+    }
+    const ctx = {
+      getImageData: () => ({ data: bytes, width, height }),
+      putImageData: (next: { data: Uint8ClampedArray }) => {
+        bytes.set(next.data)
+      },
+    } as unknown as CanvasRenderingContext2D
+
+    const changed = recolorEdgeConnectedPhotoBackground(ctx, width, height, "#FF0000")
+    expect(changed).toBe(true)
+
+    const pixel = (x: number, y: number) => {
+      const i = (y * width + x) * 4
+      return [bytes[i], bytes[i + 1], bytes[i + 2]]
+    }
+
+    expect(pixel(0, 0)).toEqual([255, 0, 0])
+    expect(pixel(5, 6)).toEqual([248, 248, 248])
   })
 })

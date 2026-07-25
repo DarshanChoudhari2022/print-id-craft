@@ -45,12 +45,15 @@ describe("reupload all photos wiring", () => {
     expect(schoolPageSource).toContain('return "mobile"')
   })
 
-  it("renders ID card photos without auto-cropping or auto-zooming", () => {
-    expect(jpgCardPreviewSource).toMatch(/function drawPhotoForFrame[\s\S]*?fillStyle = "#ffffff"[\s\S]*?drawImageContain\(ctx, img, x, y, w, h\)/)
-    expect(jpgTemplateMapperSource).toContain('objectFit: "contain"')
-    expect(batchGeneratorSource).toMatch(/function drawPhotoForFrame[\s\S]*?fillStyle = "#ffffff"[\s\S]*?drawImageContain\(ctx, img, x, y, w, h\)/)
-    expect(batchGeneratorSource).toContain('preserveAspectRatio="xMidYMid meet"')
-    expect(batchGeneratorSource).not.toContain("xMidYMid slice")
-    expect(batchGeneratorSource).not.toContain("xMidYMin slice")
+  it("renders ID card photos as cover-fit inside the mapped frame", () => {
+    expect(jpgCardPreviewSource).toMatch(/function drawPhotoForFrame[\s\S]*?drawImageCover\(ctx, img, img\.naturalWidth, img\.naturalHeight, x, y, w, h\)/)
+    expect(jpgCardPreviewSource).toContain("getCoverPhotoPlacement")
+    expect(jpgCardPreviewSource).toContain("recolorEdgeConnectedPhotoBackground")
+    expect(jpgTemplateMapperSource).toContain('objectFit: "cover"')
+    expect(jpgTemplateMapperSource).toContain('objectPosition: "center top"')
+    expect(batchGeneratorSource).toMatch(/function drawPhotoForFrame[\s\S]*?drawImageCover\(ctx, img, img\.naturalWidth, img\.naturalHeight, x, y, w, h\)/)
+    expect(batchGeneratorSource).toContain("getCoverPhotoPlacement")
+    expect(batchGeneratorSource).toContain("recolorEdgeConnectedPhotoBackground")
+    expect(batchGeneratorSource).toContain('preserveAspectRatio = "xMidYMin slice"')
   })
 })
