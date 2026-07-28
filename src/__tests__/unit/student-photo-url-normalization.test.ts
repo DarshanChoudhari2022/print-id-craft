@@ -19,7 +19,7 @@ describe("withStudentPhotoUrl text compatibility", () => {
     expect(response.fullName).toBe("Iqra Banu Raveen")
     expect(response.formData).toEqual({
       fullName: "Iqra Banu Raveen",
-      address: "Flat no. 307, hosing Residency, pune-411048",
+      address: "Flat No. 307, Hosing Residency, Pune-411048",
       class: "III",
     })
     expect(stored.formData.fullName).toBe("IQRA BANU RAVEEN")

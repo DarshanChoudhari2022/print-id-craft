@@ -14,18 +14,20 @@ describe("school PDF grid", () => {
     expect(layout.totalPages).toBe(1)
   })
 
-  it("only enables paired FRONT/BACK sheets when cards have a back side", () => {
+  it("only enables paired FRONT/BACK sheets when cards have a back side and the workspace allows pairing", () => {
     const source = readFileSync(
       resolve("src/components/BatchGenerator.tsx"),
       "utf8",
     )
 
     expect(source).toContain(
-      "pairSidesPerEmployee: chunk.some(card => Boolean(card.backDataUrl))",
+      "pairSidesPerEmployee: !usesFrontThenBackPdfOrder(schoolName) && chunk.some(card => Boolean(card.backDataUrl))",
     )
-    expect(source).toContain("const pairedLayout = hasBackSide")
+    expect(source).toContain("const usesFrontThenBackPdfOrder")
+    expect(source).toContain('normalized.includes("ahura") && normalized.includes("ktech")')
+    expect(source).toContain("const pairedLayout = hasBackSide && !usesFrontThenBackPdfOrder(schoolName)")
     expect(source).toContain(
-      'const pairedLayout = fmt === "PDF_PRINT" && hasBackSide',
+      'const pairedLayout = fmt === "PDF_PRINT" && hasBackSide && !usesFrontThenBackPdfOrder(schoolName)',
     )
     expect(source).toContain("pairedSides: Boolean(pairedLayout)")
   })

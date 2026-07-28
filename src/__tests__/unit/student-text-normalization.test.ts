@@ -21,14 +21,14 @@ describe("student text normalization", () => {
     expect(normalizePersonName("  ARUHI   PREETAM ARDE  ")).toBe("  Aruhi   Preetam Arde  ")
   })
 
-  it("capitalizes the first address letter and inserts exactly one comma space", () => {
+  it("title-cases address words and inserts exactly one comma space", () => {
     expect(normalizeAddress("403,supreme Savera,  lane no.3,\nPune-411048"))
-      .toBe("403, Supreme Savera, lane no.3, Pune-411048")
+      .toBe("403, Supreme Savera, Lane No.3, Pune-411048")
   })
 
-  it("preserves address casing, numbers, punctuation, and spacing otherwise", () => {
+  it("preserves numbers, punctuation, and spacing otherwise", () => {
     expect(normalizeAddress("  flat No. 7/A,MG Road  Pune-411001."))
-      .toBe("  Flat No. 7/A, MG Road  Pune-411001.")
+      .toBe("  Flat No. 7/A, Mg Road  Pune-411001.")
   })
 
   it("normalizes student, father, mother, and address aliases only", () => {
@@ -43,7 +43,7 @@ describe("student text normalization", () => {
       "Student Name": "Iqra Banu",
       fatherName: "Mohammad Raveen",
       "Mother Name": "Sara Raveen",
-      homeAddress: "Flat 1, pune",
+      homeAddress: "Flat 1, Pune",
       class: "UKG",
       bloodGroup: "AB+",
     })
@@ -51,7 +51,7 @@ describe("student text normalization", () => {
 
   it("uses configured roles for school-specific field keys", () => {
     expect(normalizeStudentFieldValue("residence", "flat 2,pune", "Residence", "address"))
-      .toBe("Flat 2, pune")
+      .toBe("Flat 2, Pune")
   })
 
   it("returns a new record and does not mutate existing data", () => {

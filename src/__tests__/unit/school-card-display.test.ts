@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest"
 import { formatSchoolCardFieldValue } from "@/lib/school-card-display"
 
 describe("formatSchoolCardFieldValue", () => {
-  it("adds one space after each comma and capitalizes an address", () => {
+  it("adds one space after each comma and title-cases address words", () => {
     expect(formatSchoolCardFieldValue(
       "Nikos Public School",
       "address",
       "403,supreme Savera,lane no.3,sr.no.53/3/3,Shivneri nagar, Kondhwa",
-    )).toBe("403, Supreme Savera, lane no.3, sr.no.53/3/3, Shivneri nagar, Kondhwa")
+    )).toBe("403, Supreme Savera, Lane No.3, Sr.No.53/3/3, Shivneri Nagar, Kondhwa")
   })
 
   it("collapses comma-adjacent whitespace without changing other punctuation", () => {
@@ -15,7 +15,7 @@ describe("formatSchoolCardFieldValue", () => {
       "  nIkOs PuBlIc ScHoOl  ",
       "Address",
       "403,  Supreme Savera,\tlane no.3,\nsr.no.53/3/3, Pune-411048.",
-    )).toBe("403, Supreme Savera, lane no.3, sr.no.53/3/3, Pune-411048.")
+    )).toBe("403, Supreme Savera, Lane No.3, Sr.No.53/3/3, Pune-411048.")
   })
 
   it("proper-cases student names", () => {

@@ -102,6 +102,14 @@ type BatchGeneratorProps = {
   companyMode?: boolean
 }
 
+const normalizeWorkspaceNameForPrint = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]/g, "")
+
+const usesFrontThenBackPdfOrder = (workspaceName: string) => {
+  const normalized = normalizeWorkspaceNameForPrint(workspaceName)
+  return normalized.includes("ahura") && normalized.includes("ktech")
+}
+
 // normalizeKey, FIELD_GROUPS, resolveDisplayFieldValue imported from @/lib/field-resolver
 
 // ─── Bounded LRU caches (scale-safe for 2000+ students) ───
@@ -1562,7 +1570,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
         marginMm: 0,
         gapMm: 0,
         filenameSuffix: suffix,
-        pairSidesPerEmployee: chunk.some(card => Boolean(card.backDataUrl)),
+        pairSidesPerEmployee: !usesFrontThenBackPdfOrder(schoolName) && chunk.some(card => Boolean(card.backDataUrl)),
       })
 
       if (totalFiles > 1 && chunkIndex < chunks.length - 1) {
@@ -1571,7 +1579,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
     }
 
     return totalFiles
-  }, [generationScopeName, getPdfFileCount, pdfChunkSize])
+  }, [generationScopeName, getPdfFileCount, pdfChunkSize, schoolName])
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true)
@@ -1732,7 +1740,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
         const cols = Math.max(1, Math.floor((availW + (hPitch - cw)) / hPitch))
         const rows = Math.max(1, Math.floor((availH + (vPitch - ch)) / vPitch))
         const hasBackSide = allCards.some(card => Boolean(card.backDataUrl))
-        const pairedLayout = hasBackSide
+        const pairedLayout = hasBackSide && !usesFrontThenBackPdfOrder(schoolName)
           ? calculatePairedEmployeeSheetLayout(
               printConfig.paperWidth,
               printConfig.paperHeight,
@@ -2067,7 +2075,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
       // Release student photo cache to prevent memory build-up across runs
       clearStudentImageCache()
     }
-  }, [downloadPdfInChunks, generationScopeName, getPdfFileCount, outputFormat, pdfChunkSize, printConfig, schoolId, selectedClassGrade, selectedClassId, selectedDivision, statusFilter])
+  }, [downloadPdfInChunks, generationScopeName, getPdfFileCount, outputFormat, pdfChunkSize, printConfig, schoolId, schoolName, selectedClassGrade, selectedClassId, selectedDivision, statusFilter])
 
   const handleConfirmDownload = useCallback(async () => {
     if (!pendingSave) return
@@ -2158,7 +2166,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
     const cols = Math.max(1, Math.floor((availW + (hPitch - cw)) / hPitch))
     const rows = Math.max(1, Math.floor((availH + (vPitch - ch)) / vPitch))
     const hasBackSide = cards.some(card => Boolean(card.backDataUrl))
-    const pairedLayout = fmt === "PDF_PRINT" && hasBackSide
+    const pairedLayout = fmt === "PDF_PRINT" && hasBackSide && !usesFrontThenBackPdfOrder(schoolName)
       ? calculatePairedEmployeeSheetLayout(
         cfg.paperWidth,
         cfg.paperHeight,
@@ -2232,7 +2240,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
         ? `Layout updated! ${pairedLayout.pairsPerPage} employees per paired FRONT/BACK sheet · ${totalPages} pages.`
         : `Layout updated! (${cols}×${rows} = ${cols * rows} per page · ${totalPages} pages)`,
     })
-  }, [downloadPdfInChunks, generationScopeName, pdfChunkSize, pendingSave])
+  }, [downloadPdfInChunks, generationScopeName, pdfChunkSize, pendingSave, schoolName])
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

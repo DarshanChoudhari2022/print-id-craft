@@ -22,12 +22,11 @@ export function normalizePersonName(value: string): string {
 }
 
 /**
- * Preserve an address verbatim except for the two requested corrections:
- * capitalize its first alphabetic character and enforce one space after commas.
+ * Keep comma spacing tidy and title-case address words for card printing.
  */
 export function normalizeAddress(value: string): string {
   const commaSpaced = String(value ?? "").replace(/,\s*/g, ", ")
-  return commaSpaced.replace(/\p{L}/u, letter => letter.toLocaleUpperCase())
+  return normalizePersonName(commaSpaced)
 }
 
 export function normalizeStudentFieldValue(

@@ -102,7 +102,7 @@ describe('POST /api/schools/[id]/students/import', () => {
       expect(res.status).toBe(200)
       const createManyCall = (prisma.student.createMany as any).mock.calls[0][0]
       expect(createManyCall.data[0].formData.fullName).toBe('Iqra Banu Raveen')
-      expect(createManyCall.data[0].formData.address).toBe('Flat no. 307, hosing Residency, pune')
+      expect(createManyCall.data[0].formData.address).toBe('Flat No. 307, Hosing Residency, Pune')
     })
 
     it('does not create duplicate employees when the same ID Code is uploaded again', async () => {
