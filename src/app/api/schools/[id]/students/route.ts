@@ -108,6 +108,47 @@ function applyStudentListFilters(where: any, filters: NonNullable<z.infer<typeof
   }
 }
 
+const INDIA_OFFSET_MINUTES = 330
+
+const studentListSelect = {
+  id: true,
+  serialNumber: true,
+  photoUrl: true,
+  photoPath: true,
+  originalPhotoUrl: true,
+  originalPhotoPath: true,
+  photoBgStatus: true,
+  photoAiRunCount: true,
+  formData: true,
+  status: true,
+  flagNote: true,
+  teacherComment: true,
+  submittedAt: true,
+  updatedAt: true,
+  classId: true,
+  class: { select: { id: true, name: true } },
+} as const
+
+function indiaDateKey(value: Date | string) {
+  const date = new Date(value)
+  const shifted = new Date(date.getTime() + INDIA_OFFSET_MINUTES * 60_000)
+  return shifted.toISOString().slice(0, 10)
+}
+
+function indiaDayRange(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number)
+  const startMs = Date.UTC(year, month - 1, day) - INDIA_OFFSET_MINUTES * 60_000
+  const endMs = Date.UTC(year, month - 1, day + 1) - INDIA_OFFSET_MINUTES * 60_000
+  return { start: new Date(startMs), end: new Date(endMs) }
+}
+
+function indiaMonthRange(monthKey: string) {
+  const [year, month] = monthKey.split("-").map(Number)
+  const startMs = Date.UTC(year, month - 1, 1) - INDIA_OFFSET_MINUTES * 60_000
+  const endMs = Date.UTC(year, month, 1) - INDIA_OFFSET_MINUTES * 60_000
+  return { start: new Date(startMs), end: new Date(endMs) }
+}
+
 export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
   const startedAt = Date.now()
@@ -125,10 +166,74 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     const classGrade = url.searchParams.get("classGrade")?.trim()
     const division = url.searchParams.get("division")?.trim()
     const search = url.searchParams.get("search")
+    const mode = url.searchParams.get("mode")
+    const submittedDate = url.searchParams.get("submittedDate")
+
+    if (mode === "submission-calendar") {
+      const todayKey = indiaDateKey(new Date())
+      const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("date") || "")
+        ? url.searchParams.get("date")!
+        : todayKey
+      const month = /^\d{4}-\d{2}$/.test(url.searchParams.get("month") || "")
+        ? url.searchParams.get("month")!
+        : selectedDate.slice(0, 7)
+      const baseWhere: any = { schoolId: params.id }
+      applyStudentListFilters(baseWhere, {
+        status: status || undefined,
+        classId: classId || undefined,
+        classGrade: classGrade || undefined,
+        division: division || undefined,
+        search: search || undefined,
+      })
+
+      const monthRange = indiaMonthRange(month)
+      const dayRange = indiaDayRange(selectedDate)
+      const [monthSubmissions, selectedStudents] = await Promise.all([
+        prisma.student.findMany({
+          where: {
+            ...baseWhere,
+            submittedAt: { gte: monthRange.start, lt: monthRange.end },
+          },
+          select: { id: true, submittedAt: true },
+          orderBy: { submittedAt: "asc" },
+        }),
+        prisma.student.findMany({
+          where: {
+            ...baseWhere,
+            submittedAt: { gte: dayRange.start, lt: dayRange.end },
+          },
+          select: studentListSelect,
+          orderBy: { submittedAt: "desc" },
+        }),
+      ])
+
+      const countsByDate = new Map<string, number>()
+      for (const student of monthSubmissions) {
+        const dateKey = indiaDateKey(student.submittedAt)
+        countsByDate.set(dateKey, (countsByDate.get(dateKey) || 0) + 1)
+      }
+
+      const response = NextResponse.json({
+        success: true,
+        data: {
+          month,
+          selectedDate,
+          counts: Array.from(countsByDate.entries()).map(([date, count]) => ({ date, count })),
+          selectedCount: selectedStudents.length,
+          students: selectedStudents.map(withStudentPhotoUrl),
+        },
+      })
+      response.headers.set("Cache-Control", "no-store")
+      return response
+    }
 
     const where: any = { schoolId: params.id }
     if (status) where.status = status
     if (classId) where.classId = classId
+    if (submittedDate && /^\d{4}-\d{2}-\d{2}$/.test(submittedDate)) {
+      const dayRange = indiaDayRange(submittedDate)
+      where.submittedAt = { gte: dayRange.start, lt: dayRange.end }
+    }
 
     const andFilters: any[] = []
 
@@ -193,24 +298,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     const [students, total] = await Promise.all([
       prisma.student.findMany({
         where,
-        select: {
-          id: true,
-          serialNumber: true,
-          photoUrl: true,
-          photoPath: true,
-          originalPhotoUrl: true,
-          originalPhotoPath: true,
-          photoBgStatus: true,
-          photoAiRunCount: true,
-          formData: true,
-          status: true,
-          flagNote: true,
-          teacherComment: true,
-          submittedAt: true,
-          updatedAt: true,
-          classId: true,
-          class: { select: { id: true, name: true } },
-        },
+        select: studentListSelect,
         orderBy: { submittedAt: "desc" },
         skip: (page - 1) * limit,
         take: limit,
@@ -236,7 +324,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
       thresholdMs: 1_500,
       schoolId: params.id,
       userId: session.user?.id,
-      metadata: { page, limit, status, classId, classGrade, division, hasSearch: Boolean(search?.trim()), total },
+      metadata: { page, limit, status, classId, classGrade, division, submittedDate, hasSearch: Boolean(search?.trim()), total },
     })
     return response
   } catch (error) {

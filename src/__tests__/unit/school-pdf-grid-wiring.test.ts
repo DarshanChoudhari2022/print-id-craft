@@ -31,4 +31,19 @@ describe("school PDF grid", () => {
     )
     expect(source).toContain("pairedSides: Boolean(pairedLayout)")
   })
+
+  it("shows generated previews as all fronts first, then backs with serial numbers above", () => {
+    const source = readFileSync(
+      resolve("src/components/BatchGenerator.tsx"),
+      "utf8",
+    )
+
+    expect(source).toContain('key={`front-${card.serialNumber}`}')
+    expect(source).toContain("BACK SIDE PREVIEW")
+    expect(source).toContain(".filter((card) => Boolean(card.backDataUrl))")
+    expect(source).toContain('key={`back-${card.serialNumber}`}')
+    expect(source.indexOf('key={`front-${card.serialNumber}`}')).toBeLessThan(
+      source.indexOf('key={`back-${card.serialNumber}`}')
+    )
+  })
 })

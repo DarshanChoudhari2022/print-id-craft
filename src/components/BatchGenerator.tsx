@@ -3011,7 +3011,7 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
             }}
           >
             {previewCards.map((card) => (
-              <div key={card.serialNumber}>
+              <div key={`front-${card.serialNumber}`}>
                 <div style={{ textAlign: "center", fontSize: 12, fontWeight: 700, color: "#334155", fontFamily: "monospace" }}>
                   {card.serialNumber}
                 </div>
@@ -3026,27 +3026,55 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
                     boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
                   }}
                 />
-                {card.backDataUrl && (
-                  <>
-                    <div style={{ textAlign: "center", fontSize: 12, fontWeight: 700, color: "#334155", marginTop: 12, fontFamily: "monospace" }}>
-                      {card.serialNumber}
-                    </div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textAlign: "center" }}>BACK</div>
-                    <img
-                      src={card.backDataUrl}
-                      alt={`ID Card Back ${card.serialNumber}`}
-                      style={{
-                        width: "100%",
-                        borderRadius: 8,
-                        border: "1px solid #e2e8f0",
-                        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                      }}
-                    />
-                  </>
-                )}
               </div>
             ))}
           </div>
+          {previewCards.some((card) => Boolean(card.backDataUrl)) && (
+            <>
+              <div
+                style={{
+                  margin: "22px 0 12px",
+                  paddingTop: 18,
+                  borderTop: "1px solid #e2e8f0",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  color: "#475569",
+                  letterSpacing: 0.4,
+                  textAlign: "center",
+                }}
+              >
+                BACK SIDE PREVIEW
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+                  gap: 16,
+                }}
+              >
+                {previewCards
+                  .filter((card) => Boolean(card.backDataUrl))
+                  .map((card) => (
+                    <div key={`back-${card.serialNumber}`}>
+                      <div style={{ textAlign: "center", fontSize: 12, fontWeight: 700, color: "#334155", fontFamily: "monospace" }}>
+                        {card.serialNumber}
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, textAlign: "center" }}>BACK</div>
+                      <img
+                        src={card.backDataUrl}
+                        alt={`ID Card Back ${card.serialNumber}`}
+                        style={{
+                          width: "100%",
+                          borderRadius: 8,
+                          border: "1px solid #e2e8f0",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                        }}
+                      />
+                    </div>
+                  ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 

@@ -225,6 +225,74 @@ type StudentData = {
   class: { id: string; name: string }
 }
 
+type SubmissionCalendarDay = {
+  date: string
+  count: number
+}
+
+const INDIA_OFFSET_MINUTES = 330
+
+function indiaDateKey(date = new Date()): string {
+  const shifted = new Date(date.getTime() + INDIA_OFFSET_MINUTES * 60_000)
+  return shifted.toISOString().slice(0, 10)
+}
+
+function addMonthsToMonthKey(monthKey: string, delta: number): string {
+  const [year, month] = monthKey.split("-").map(Number)
+  return new Date(Date.UTC(year, month - 1 + delta, 1)).toISOString().slice(0, 7)
+}
+
+function buildMonthCalendarCells(monthKey: string): Array<string | null> {
+  const [year, month] = monthKey.split("-").map(Number)
+  const firstDay = new Date(Date.UTC(year, month - 1, 1))
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const cells: Array<string | null> = Array.from({ length: firstDay.getUTCDay() }, () => null)
+  for (let day = 1; day <= daysInMonth; day++) {
+    cells.push(`${monthKey}-${String(day).padStart(2, "0")}`)
+  }
+  while (cells.length % 7 !== 0) cells.push(null)
+  return cells
+}
+
+function formatSubmissionDate(dateKey: string): string {
+  const [year, month, day] = dateKey.split("-").map(Number)
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  })
+}
+
+function formatSubmissionMonth(monthKey: string): string {
+  const [year, month] = monthKey.split("-").map(Number)
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+  })
+}
+
+function getStudentFormText(student: StudentData, keys: string[]): string {
+  const formData = (student.formData || {}) as Record<string, unknown>
+  for (const key of keys) {
+    const value = formData[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+    if (typeof value === "number") return String(value)
+  }
+  return ""
+}
+
+function getCalendarStudentName(student: StudentData): string {
+  return getStudentFormText(student, ["fullName", "name", "studentName", "Name", "STUDENT NAME"]) || student.serialNumber
+}
+
+function getCalendarStudentPhone(student: StudentData): string {
+  return getStudentFormText(student, ["phone", "mobile", "fatherMobile", "fatherPhone", "Mobile", "Father's Mobile No.", "FATHER'S MOBILE NO."])
+}
+
+function getCalendarStudentAddress(student: StudentData): string {
+  return getStudentFormText(student, ["address", "Address", "ADDRESS", "residentialAddress"])
+}
+
 function getStudentPhotoUrl(s: Pick<StudentData, "id" | "photoUrl" | "photoPath" | "formData" | "updatedAt" | "photoUpdatedAt">): string {
   const fromMedia = buildStudentPhotoUrl(s)
   if (fromMedia) return fromMedia
@@ -304,6 +372,14 @@ export default function SchoolDetailPage() {
   } | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [searchInput, setSearchInput] = useState("")
+  const initialSubmissionDate = useMemo(() => indiaDateKey(), [])
+  const [studentSubmittedDateFilter, setStudentSubmittedDateFilter] = useState("")
+  const [submissionCalendarDate, setSubmissionCalendarDate] = useState(initialSubmissionDate)
+  const [submissionCalendarMonth, setSubmissionCalendarMonth] = useState(initialSubmissionDate.slice(0, 7))
+  const [submissionCalendarCounts, setSubmissionCalendarCounts] = useState<SubmissionCalendarDay[]>([])
+  const [submissionCalendarStudents, setSubmissionCalendarStudents] = useState<StudentData[]>([])
+  const [submissionCalendarLoading, setSubmissionCalendarLoading] = useState(false)
+  const [submissionCalendarError, setSubmissionCalendarError] = useState("")
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [tabLoading, setTabLoading] = useState(false)
   const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(new Set())
@@ -529,7 +605,7 @@ export default function SchoolDetailPage() {
 
   const fetchStudents = async (
     page = 1,
-    overrides?: { status?: string; classId?: string; classGrade?: string; division?: string; search?: string }
+    overrides?: { status?: string; classId?: string; classGrade?: string; division?: string; search?: string; submittedDate?: string }
   ) => {
     try {
       const params = new URLSearchParams({ page: String(page), limit: "50" })
@@ -538,11 +614,13 @@ export default function SchoolDetailPage() {
       const classGrade = overrides?.classGrade ?? (gradeClassFilter ? gradeClassFilter.split("|")[0] : "")
       const division = overrides?.division ?? (gradeClassFilter ? gradeClassFilter.split("|")[1] || "" : "")
       const search = overrides?.search ?? searchQuery
+      const submittedDate = overrides?.submittedDate ?? studentSubmittedDateFilter
       if (status) params.set("status", status)
       if (classId) params.set("classId", classId)
       if (classGrade) params.set("classGrade", classGrade)
       if (division) params.set("division", division)
       if (search) params.set("search", search)
+      if (submittedDate) params.set("submittedDate", submittedDate)
       const res = await fetch(`/api/schools/${schoolId}/students?${params}`, { cache: 'no-store' })
       const data = await res.json()
       if (data.success) {
@@ -560,6 +638,39 @@ export default function SchoolDetailPage() {
     } catch (err) {
       console.error(err)
       toast.error("Failed to load students")
+    }
+  }
+
+  const fetchSubmissionCalendar = async () => {
+    try {
+      setSubmissionCalendarLoading(true)
+      setSubmissionCalendarError("")
+      const params = new URLSearchParams({
+        mode: "submission-calendar",
+        month: submissionCalendarMonth,
+        date: submissionCalendarDate,
+      })
+      if (statusFilter) params.set("status", statusFilter)
+      if (classFilter) params.set("classId", classFilter)
+      if (gradeClassFilter) {
+        const [classGrade, division = ""] = gradeClassFilter.split("|")
+        if (classGrade) params.set("classGrade", classGrade)
+        if (division) params.set("division", division)
+      }
+      if (searchQuery) params.set("search", searchQuery)
+
+      const res = await fetch(`/api/schools/${schoolId}/students?${params}`, { cache: 'no-store' })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to load submission calendar")
+      setSubmissionCalendarCounts(data.data?.counts || [])
+      setSubmissionCalendarStudents(data.data?.students || [])
+    } catch (err) {
+      console.error(err)
+      setSubmissionCalendarError("Could not load submissions for this date")
+      setSubmissionCalendarCounts([])
+      setSubmissionCalendarStudents([])
+    } finally {
+      setSubmissionCalendarLoading(false)
     }
   }
 
@@ -591,6 +702,7 @@ export default function SchoolDetailPage() {
     setGradeClassFilter("")
     setSearchQuery("")
     setSearchInput("")
+    setStudentSubmittedDateFilter("")
     setStudentPage(1)
     setStudents([])
     setStudentTotal(0)
@@ -613,7 +725,13 @@ export default function SchoolDetailPage() {
       setTabLoading(true)
       fetchStudents().finally(() => setTabLoading(false))
     }
-  }, [statusFilter, classFilter, gradeClassFilter, searchQuery])
+  }, [statusFilter, classFilter, gradeClassFilter, searchQuery, studentSubmittedDateFilter])
+
+  useEffect(() => {
+    if (tab === "students" && !loading) {
+      fetchSubmissionCalendar()
+    }
+  }, [tab, loading, schoolId, submissionCalendarDate, submissionCalendarMonth, statusFilter, classFilter, gradeClassFilter, searchQuery])
 
   useEffect(() => {
     setGradeClassFilter("")
@@ -2571,6 +2689,9 @@ export default function SchoolDetailPage() {
           statusExportJob.exportStatus === downloadExportStatus
         ? `Retry ${statusExportLabel} Download`
         : `Download ${statusExportLabel} Data + Photos`
+  const submissionCountsByDate = new Map(submissionCalendarCounts.map((day) => [day.date, day.count]))
+  const selectedSubmissionCount = submissionCountsByDate.get(submissionCalendarDate) || submissionCalendarStudents.length
+  const submissionCalendarCells = buildMonthCalendarCells(submissionCalendarMonth)
 
   const handleStatusExportClick = () => {
     if (statusExportReady && statusExportJob?.jobId) {
@@ -3725,6 +3846,203 @@ export default function SchoolDetailPage() {
               </form>
             )}
 
+            <div
+              style={{
+                border: '1px solid #dbeafe',
+                background: '#ffffff',
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 16,
+                boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Submission Calendar</div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                    {selectedSubmissionCount} {companyMode ? "employees" : "students"} submitted on {formatSubmissionDate(submissionCalendarDate)}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => {
+                      const nextMonth = addMonthsToMonthKey(submissionCalendarMonth, -1)
+                      const nextDate = `${nextMonth}-01`
+                      setSubmissionCalendarMonth(nextMonth)
+                      setSubmissionCalendarDate(nextDate)
+                      setStudentSubmittedDateFilter(nextDate)
+                      setStudentPage(1)
+                    }}
+                    title="Previous month"
+                    style={{ width: 38, height: 38, padding: 0, fontSize: 18 }}
+                  >
+                    ‹
+                  </button>
+                  <input
+                    type="month"
+                    value={submissionCalendarMonth}
+                    onChange={(e) => {
+                      const nextMonth = e.target.value || indiaDateKey().slice(0, 7)
+                      const nextDate = `${nextMonth}-01`
+                      setSubmissionCalendarMonth(nextMonth)
+                      setSubmissionCalendarDate(nextDate)
+                      setStudentSubmittedDateFilter(nextDate)
+                      setStudentPage(1)
+                    }}
+                    aria-label="Submission month"
+                    style={{ height: 38, padding: '0 10px', border: '1.5px solid #bfdbfe', borderRadius: 8, fontSize: 13, fontWeight: 700, color: '#1e3a8a' }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => {
+                      const nextMonth = addMonthsToMonthKey(submissionCalendarMonth, 1)
+                      const nextDate = `${nextMonth}-01`
+                      setSubmissionCalendarMonth(nextMonth)
+                      setSubmissionCalendarDate(nextDate)
+                      setStudentSubmittedDateFilter(nextDate)
+                      setStudentPage(1)
+                    }}
+                    title="Next month"
+                    style={{ width: 38, height: 38, padding: 0, fontSize: 18 }}
+                  >
+                    ›
+                  </button>
+                  <input
+                    type="date"
+                    value={submissionCalendarDate}
+                    onChange={(e) => {
+                      const nextDate = e.target.value || indiaDateKey()
+                      setSubmissionCalendarDate(nextDate)
+                      setSubmissionCalendarMonth(nextDate.slice(0, 7))
+                      setStudentSubmittedDateFilter(nextDate)
+                      setStudentPage(1)
+                    }}
+                    aria-label="Submission date"
+                    style={{ height: 38, padding: '0 10px', border: '1.5px solid #cbd5e1', borderRadius: 8, fontSize: 13 }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, alignItems: 'start' }}>
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 6, marginBottom: 6 }}>
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                      <div key={day} style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#64748b' }}>{day}</div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 6 }}>
+                    {submissionCalendarCells.map((dateKey, index) => {
+                      const count = dateKey ? submissionCountsByDate.get(dateKey) || 0 : 0
+                      const selected = dateKey === submissionCalendarDate
+                      return (
+                        <button
+                          key={dateKey || `blank-${index}`}
+                          type="button"
+                          disabled={!dateKey}
+                          onClick={() => {
+                            if (!dateKey) return
+                            setSubmissionCalendarDate(dateKey)
+                            setStudentSubmittedDateFilter(dateKey)
+                            setStudentPage(1)
+                          }}
+                          style={{
+                            minHeight: 48,
+                            border: selected ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                            borderRadius: 8,
+                            background: !dateKey ? '#f8fafc' : selected ? '#eff6ff' : count > 0 ? '#f0fdf4' : '#ffffff',
+                            color: dateKey ? '#0f172a' : 'transparent',
+                            cursor: dateKey ? 'pointer' : 'default',
+                            padding: 4,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 3,
+                          }}
+                        >
+                          <span style={{ fontSize: 13, fontWeight: 800 }}>{dateKey ? Number(dateKey.slice(8, 10)) : ""}</span>
+                          {count > 0 && (
+                            <span style={{ minWidth: 22, padding: '1px 6px', borderRadius: 999, background: '#16a34a', color: 'white', fontSize: 10, fontWeight: 800 }}>
+                              {count}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
+                    Showing {formatSubmissionMonth(submissionCalendarMonth)} with current filters.
+                  </div>
+                </div>
+
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+                  <div style={{ padding: '10px 12px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: '#334155' }}>{formatSubmissionDate(submissionCalendarDate)} Details</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#2563eb' }}>{selectedSubmissionCount} total</div>
+                  </div>
+                  <div style={{ maxHeight: 292, overflow: 'auto' }}>
+                    {submissionCalendarLoading ? (
+                      <div style={{ padding: 18, color: '#64748b', fontSize: 13 }}>Loading submissions...</div>
+                    ) : submissionCalendarError ? (
+                      <div style={{ padding: 18, color: '#dc2626', fontSize: 13 }}>{submissionCalendarError}</div>
+                    ) : submissionCalendarStudents.length === 0 ? (
+                      <div style={{ padding: 18, color: '#64748b', fontSize: 13 }}>No submissions on this date.</div>
+                    ) : (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                        <thead>
+                          <tr style={{ background: '#ffffff', color: '#64748b', textAlign: 'left' }}>
+                            <th style={{ padding: '9px 10px', borderBottom: '1px solid #e2e8f0', width: 52 }}>Photo</th>
+                            <th style={{ padding: '9px 10px', borderBottom: '1px solid #e2e8f0' }}>Student</th>
+                            <th style={{ padding: '9px 10px', borderBottom: '1px solid #e2e8f0' }}>Class</th>
+                            <th style={{ padding: '9px 10px', borderBottom: '1px solid #e2e8f0' }}>Mobile</th>
+                            <th style={{ padding: '9px 10px', borderBottom: '1px solid #e2e8f0' }}>Submitted</th>
+                            <th style={{ padding: '9px 10px', borderBottom: '1px solid #e2e8f0' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {submissionCalendarStudents.map((student) => (
+                            <tr key={student.id}>
+                              <td style={{ padding: '9px 10px', borderBottom: '1px solid #eef2f7' }}>
+                                {studentHasPhoto(student) ? (
+                                  <img
+                                    src={getStudentPhotoUrl(student)}
+                                    alt=""
+                                    style={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 6, border: '1px solid #e2e8f0' }}
+                                  />
+                                ) : (
+                                  <div style={{ width: 34, height: 34, borderRadius: 6, background: '#f1f5f9', border: '1px solid #e2e8f0' }} />
+                                )}
+                              </td>
+                              <td style={{ padding: '9px 10px', borderBottom: '1px solid #eef2f7', color: '#0f172a', fontWeight: 700 }}>
+                                <div>{getCalendarStudentName(student)}</div>
+                                <div style={{ color: '#64748b', fontWeight: 700, fontSize: 11 }}>{student.serialNumber}</div>
+                                {getCalendarStudentAddress(student) && (
+                                  <div style={{ color: '#64748b', fontWeight: 500, fontSize: 11, maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {getCalendarStudentAddress(student)}
+                                  </div>
+                                )}
+                              </td>
+                              <td style={{ padding: '9px 10px', borderBottom: '1px solid #eef2f7', color: '#334155' }}>{student.class?.name || "-"}</td>
+                              <td style={{ padding: '9px 10px', borderBottom: '1px solid #eef2f7', color: '#334155' }}>{getCalendarStudentPhone(student) || "-"}</td>
+                              <td style={{ padding: '9px 10px', borderBottom: '1px solid #eef2f7', color: '#334155' }}>{mounted ? new Date(student.submittedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : ""}</td>
+                              <td style={{ padding: '9px 10px', borderBottom: '1px solid #eef2f7' }}>
+                                <span style={{ fontSize: 10, fontWeight: 800, color: '#166534', background: '#dcfce7', borderRadius: 999, padding: '3px 7px' }}>
+                                  {student.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ fontSize: 13, color: '#64748b' }}>
                 {studentTotal} {companyMode ? "employees" : "students"} found
@@ -3736,12 +4054,27 @@ export default function SchoolDetailPage() {
                       : ""}
                   </span>
                 )}
+                {studentSubmittedDateFilter && (
+                  <span style={{ marginLeft: 8, color: '#2563eb', fontWeight: 700 }}>
+                    · Submitted on {formatSubmissionDate(studentSubmittedDateFilter)}
+                  </span>
+                )}
                 {(() => { const missing = students.filter(s => !studentHasPhoto(s)).length; return missing > 0 ? (
                   <span style={{ marginLeft: 12, fontSize: 12, fontWeight: 600, color: '#ef4444', background: '#fef2f2', padding: '3px 10px', borderRadius: 6 }}>
                     📷 {missing} missing photos
                   </span>
                 ) : null; })()}
               </div>
+              {studentSubmittedDateFilter && (
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => { setStudentSubmittedDateFilter(""); setStudentPage(1) }}
+                  style={{ fontSize: 12, padding: '7px 12px', color: '#475569' }}
+                >
+                  Clear date filter
+                </button>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
