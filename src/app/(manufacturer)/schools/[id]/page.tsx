@@ -484,6 +484,7 @@ export default function SchoolDetailPage() {
 
   // Batch AI background (local, runs in browser on manufacturer PC)
   const [reprocessOpen, setReprocessOpen] = useState(false)
+  const [reprocessMode, setReprocessMode] = useState<"all" | "unprocessed">("all")
   const [reprocessBgColor, setReprocessBgColor] = useState("#FFFFFF")
   const [reprocessLoading, setReprocessLoading] = useState(false)
   const [reprocessInfo, setReprocessInfo] = useState<{
@@ -2112,7 +2113,7 @@ export default function SchoolDetailPage() {
     setAllStudentsList([])
   }
 
-  const fetchReprocessInfo = async () => {
+  const fetchReprocessInfo = async (mode: "all" | "unprocessed" = reprocessMode) => {
     setReprocessLoading(true)
     try {
       const params = new URLSearchParams()
@@ -2122,7 +2123,7 @@ export default function SchoolDetailPage() {
         if (classGrade) params.set("classGrade", classGrade)
         if (division) params.set("division", division)
       }
-      params.set("mode", "all")
+      params.set("mode", mode)
       const res = await fetch(`/api/schools/${schoolId}/students/reprocess-photos?${params.toString()}`)
       const data = await res.json()
       if (data.success) {
@@ -2240,13 +2241,14 @@ export default function SchoolDetailPage() {
     })
   }, [])
 
-  const openReprocessModal = async () => {
-    if (!classFilter) {
+  const openReprocessModal = async (mode: "all" | "unprocessed" = "all") => {
+    if (mode === "all" && !classFilter) {
       toast.error(`Select a ${companyMode ? "department" : "section/class"} first, then process photos for that ${companyMode ? "department" : "class"}.`)
       return
     }
+    setReprocessMode(mode)
     setReprocessOpen(true)
-    await fetchReprocessInfo()
+    await fetchReprocessInfo(mode)
   }
 
   const handleBatchBgComplete = (stats: { processed: number; failed: number }) => {
@@ -2259,6 +2261,9 @@ export default function SchoolDetailPage() {
     selectedStudentSection?.name,
     gradeClassFilter && sectionClassPickerOptions.find((o) => o.value === gradeClassFilter)?.label,
   ].filter(Boolean).join(" / ") || `Selected ${isCompanyRoute ? "department" : "class"}`
+  const reprocessScopeLabel = classFilter
+    ? selectedBatchClassLabel
+    : `All ${isCompanyRoute ? "departments" : "sections"}`
 
   // Flag management handlers
   const fetchFlags = async () => {
@@ -3688,6 +3693,10 @@ export default function SchoolDetailPage() {
               <button className="btn btn-outline" onClick={() => openReprocessModal()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#8b5cf6', color: '#7c3aed' }} title={companyMode ? "Select a department, then process and save every employee photo" : "Select a section/class, then run local AI background removal and auto-save every processed photo"}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
                 Process {companyMode ? "Department" : "Class"} Photos (AI Background)
+              </button>
+              <button className="btn btn-outline" onClick={() => openReprocessModal("unprocessed")} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#a855f7', color: '#9333ea' }} title={`Run AI only on ${companyMode ? "employee" : "student"} photos where AI has not run yet. Uses the selected section/class filters, or the whole ${companyMode ? "company" : "school"} when no section is selected.`}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 13a8 8 0 0 1 13.66-5.66"/><path d="M20 11a8 8 0 0 1-13.66 5.66"/><path d="M18 4v4h-4"/><path d="M6 20v-4h4"/><path d="m12 7 1.1 3.4h3.6l-2.9 2.1 1.1 3.4-2.9-2.1-2.9 2.1 1.1-3.4-2.9-2.1h3.6L12 7Z"/></svg>
+                Run AI On Unprocessed Photos
               </button>
               <button className="btn btn-outline" onClick={openAddStudent} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderColor: '#22c55e', color: '#16a34a' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
@@ -5368,10 +5377,14 @@ export default function SchoolDetailPage() {
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
-                      Process {companyMode ? "Department" : "Class"} Photos - AI Background
+                      {reprocessMode === "unprocessed"
+                        ? "Run AI On Unprocessed Photos"
+                        : `Process ${companyMode ? "Department" : "Class"} Photos - AI Background`}
                     </h2>
                     <p style={{ fontSize: 13, color: '#64748b' }}>
-                      {selectedBatchClassLabel}: remove backgrounds, apply the selected plain colour, and automatically save each processed photo.
+                      {reprocessScopeLabel}: {reprocessMode === "unprocessed"
+                        ? "only photos where AI has not run yet will be processed and saved."
+                        : "remove backgrounds, apply the selected plain colour, and automatically save each processed photo."}
                     </p>
                   </div>
                   <button onClick={() => setReprocessOpen(false)} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#f1f5f9', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -5385,7 +5398,7 @@ export default function SchoolDetailPage() {
                         <div style={{ padding: 16, background: '#eef2ff', borderRadius: 12, textAlign: 'center' }}>
                           <div style={{ fontSize: 28, fontWeight: 700, color: '#4f46e5' }}>{reprocessInfo.skippedCount}</div>
                           <div style={{ fontSize: 12, color: '#6366f1' }}>
-                            Photos in {selectedBatchClassLabel}
+                            {reprocessMode === "unprocessed" ? "Unprocessed photos" : `Photos in ${reprocessScopeLabel}`}
                           </div>
                         </div>
                         <div style={{ padding: 16, background: '#f0fdf4', borderRadius: 12, textAlign: 'center' }}>

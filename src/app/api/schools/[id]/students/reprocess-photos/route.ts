@@ -10,7 +10,6 @@ import { formatClassSection } from "@/lib/section-class"
 export const maxDuration = 30
 
 const PHOTO_BG_MODES = new Set(["skipped", "unprocessed", "all"])
-const MAX_STUDENTS_LIST = 5000
 
 function uniqueValues(...values: Array<string | undefined | null>) {
   return Array.from(new Set(
@@ -92,7 +91,10 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     }
 
     const skippedWhere = { ...baseWhere, photoBgStatus: PHOTO_BG_STATUS.SKIPPED }
-    const unprocessedWhere = { ...baseWhere, photoBgStatus: { in: ["", PHOTO_BG_STATUS.SKIPPED] } }
+    const unprocessedWhere = {
+      ...baseWhere,
+      photoBgStatus: { in: ["", PHOTO_BG_STATUS.SKIPPED] },
+    }
     const filterWhere = mode === "all" ? baseWhere : mode === "unprocessed" ? unprocessedWhere : skippedWhere
 
     const [filteredCount, template, students] = await Promise.all([
@@ -111,7 +113,6 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
           formData: true,
         },
         orderBy: { submittedAt: "asc" },
-        take: MAX_STUDENTS_LIST,
       }),
     ])
 
