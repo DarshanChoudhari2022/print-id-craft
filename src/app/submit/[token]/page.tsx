@@ -28,6 +28,7 @@ import {
   normalizeStudentFieldValue,
 } from "@/lib/student-text-normalization"
 import { BRACKETDEX_POWERED_BY, BRACKETDEX_URL } from "@/lib/bracketdex-brand"
+import { isValidIndianMobile, stripIndianPrefix } from "@/lib/indian-mobile"
 
 const SUPPORT_PHONE_DISPLAY = "+91 98818 77607"
 const SUPPORT_PHONE_E164 = "+919881877607"
@@ -186,25 +187,6 @@ const getCleanLabel = (label: string): string => {
     return "Father's Mobile No."
   }
   return label
-}
-
-// Strip the +91 prefix (with optional spaces / 0 / hyphens) so we can show
-// only the local 10-digit portion in the input while storing the full
-// E.164-ish string in formData. Used ONLY for the initial seed value (e.g.
-// when a draft is restored from localStorage) — live typing uses the
-// separate mobileLocals state instead, so the prefix never round-trips
-// through this function during a keystroke.
-const stripIndianPrefix = (raw: string): string => {
-  if (!raw) return ""
-  // Recognize a stored value that was clearly written by our own input
-  // ("+91 XXXXXXXXXX" / "+91XXXXXXXXXX") — strip the prefix verbatim.
-  const explicit = raw.match(/^\+\s*91[\s-]*(\d{10})\s*$/)
-  if (explicit) return explicit[1]
-  const digits = raw.replace(/\D/g, "")
-  // 12-digit string starting with 91 → country code + 10 local digits
-  if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2)
-  // Otherwise assume the string is already local. Truncate to 10 digits.
-  return digits.slice(0, 10)
 }
 
 // Count whitespace-delimited words in a string (used for address minimum check).
@@ -864,8 +846,8 @@ export default function SubmitPage() {
       if (role === "address" && f.required && wordCount(value) < ADDRESS_MIN_WORDS) {
         return `Please write the full address - at least ${ADDRESS_MIN_WORDS} words (house no, street, area, city, pincode).`
       }
-      if (role === "mobile" && f.required && stripIndianPrefix(value).length !== 10) {
-        return "Mobile number must be exactly 10 digits (after +91)."
+      if (role === "mobile" && value && !isValidIndianMobile(value)) {
+        return "Please enter a valid 10-digit Indian mobile number."
       }
       if (role === "dob" && f.required && !/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
         return "Please select date of birth in DD/MM/YYYY format."
@@ -909,10 +891,9 @@ export default function SubmitPage() {
             return
           }
         }
-        if (role === "mobile" && f.required) {
-          const local = stripIndianPrefix(value)
-          if (local.length !== 10) {
-            showMissingField(f.key, "Mobile number must be exactly 10 digits (after +91).")
+        if (role === "mobile" && value) {
+          if (!isValidIndianMobile(value)) {
+            showMissingField(f.key, "Please enter a valid 10-digit Indian mobile number.")
             return
           }
         }

@@ -1,5 +1,8 @@
 ﻿import { getFieldRole } from "@/lib/field-resolver"
 import { applyFixedBranchToFormData } from "@/lib/fixed-branch"
+import { isValidIndianMobile } from "@/lib/indian-mobile"
+
+export { isValidIndianMobile, stripIndianPrefix } from "@/lib/indian-mobile"
 
 export type FormField = {
   key: string
@@ -10,15 +13,6 @@ export type FormField = {
 }
 
 const ADDRESS_MIN_WORDS = 5
-
-export function stripIndianPrefix(raw: string): string {
-  if (!raw) return ""
-  const explicit = raw.match(/^\+\s*91[\s-]*(\d{10})\s*$/)
-  if (explicit) return explicit[1]
-  const digits = raw.replace(/\D/g, "")
-  if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2)
-  return digits.slice(0, 10)
-}
 
 function wordCount(value: string): number {
   return (value || "").trim().split(/\s+/).filter(Boolean).length
@@ -55,8 +49,8 @@ export function validatePublicSubmissionDetails(
     if (role === "address" && field.required && wordCount(value) < ADDRESS_MIN_WORDS) {
       return { ok: false, error: `Please write the full address with at least ${ADDRESS_MIN_WORDS} words.` }
     }
-    if (role === "mobile" && field.required && stripIndianPrefix(value).length !== 10) {
-      return { ok: false, error: "Mobile number must be exactly 10 digits." }
+    if (role === "mobile" && !isValidIndianMobile(value)) {
+      return { ok: false, error: "Please enter a valid 10-digit Indian mobile number." }
     }
     if (role === "branch" && field.required && value.length < 2) {
       return { ok: false, error: "Please enter the branch name." }
