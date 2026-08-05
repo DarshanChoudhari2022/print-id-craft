@@ -11,10 +11,6 @@ import {
   sortStudentsForGeneration,
 } from "@/lib/generation-scope"
 import { applyFixedTemplateValuesToFormData } from "@/lib/fixed-template-values"
-import {
-  effectiveMobileFieldConfig,
-  findInvalidMobileFields,
-} from "@/lib/student-mobile-validation"
 
 export const maxDuration = 60; // Vercel function timeout config
 
@@ -62,10 +58,9 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
       })
     }
 
-    const defaultTemplate = await getDefaultTemplate(params.id)
     const template = classId
       ? await getTemplateForClass(classId)
-      : defaultTemplate
+      : await getDefaultTemplate(params.id)
 
     if (!template?.templateImageUrl || !template?.fieldMappings) {
       return NextResponse.json(
@@ -89,7 +84,6 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
       select: {
         id: true,
         serialNumber: true,
-        fullName: true,
         photoUrl: true,
         photoPath: true,
         formData: true,
@@ -108,7 +102,6 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
                 cardHeightMm: true,
                 photoBgColor: true,
                 printConfig: true,
-                fieldConfig: true,
               },
             },
           },
@@ -125,41 +118,6 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
       return NextResponse.json(
         { error: `No ${statusFilter.toLowerCase()} students found${scopeLabel ? ` in ${scopeLabel}` : classId ? " in this section" : ""}.` },
         { status: 404 }
-      )
-    }
-
-    const invalidStudents = scopedStudents.flatMap((student) => {
-      const assignedTemplate = student.class.template || template
-      const fields = effectiveMobileFieldConfig(
-        assignedTemplate?.fieldConfig,
-        defaultTemplate?.fieldConfig,
-      )
-      const issues = findInvalidMobileFields(
-        (student.formData || {}) as Record<string, unknown>,
-        fields,
-      )
-      if (issues.length === 0) return []
-      return [{
-        id: student.id,
-        serialNumber: student.serialNumber,
-        studentName: student.fullName || "Unknown student",
-        issues,
-      }]
-    })
-
-    if (invalidStudents.length > 0) {
-      const affected = invalidStudents
-        .slice(0, 10)
-        .map(student => `${student.serialNumber} (${student.studentName})`)
-        .join(", ")
-      return NextResponse.json(
-        {
-          error: `Printing blocked: ${invalidStudents.length} student${invalidStudents.length === 1 ? " has" : "s have"} missing or invalid mobile data. Correct the records and generate again. Affected: ${affected}${invalidStudents.length > 10 ? ", ..." : ""}`,
-          code: "INVALID_MOBILE_DATA",
-          invalidCount: invalidStudents.length,
-          invalidStudents: invalidStudents.slice(0, 100),
-        },
-        { status: 422 },
       )
     }
 
