@@ -11,6 +11,10 @@ import type { GeneratePrintBatchPayload } from "../types"
 import { EXPORT_BUCKET } from "../types"
 import { applyFixedTemplateValuesToFormData } from "@/lib/fixed-template-values"
 import { BRACKETDEX_NAME, BRACKETDEX_URL } from "@/lib/bracketdex-brand"
+import {
+  effectiveMobileFieldConfig,
+  findInvalidMobileFields,
+} from "@/lib/student-mobile-validation"
 
 function escapePdfText(text: string) {
   return text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)")
@@ -162,7 +166,14 @@ export async function processGeneratePrintBatch(schoolId: string, payload: Gener
   const students = await prisma.student.findMany({
     where: { id: { in: studentIds }, schoolId },
     orderBy: { serialNumber: "asc" },
-    include: { class: { select: { name: true } } },
+    include: {
+      class: {
+        select: {
+          name: true,
+          template: { select: { fieldConfig: true } },
+        },
+      },
+    },
   })
 
   if (students.length === 0) {
@@ -173,6 +184,33 @@ export async function processGeneratePrintBatch(schoolId: string, payload: Gener
     where: { id: schoolId },
     select: { name: true },
   })
+
+  const template = await getDefaultTemplate(schoolId)
+  const invalidStudents = students.flatMap((student) => {
+    const fields = effectiveMobileFieldConfig(
+      student.class?.template?.fieldConfig,
+      template?.fieldConfig,
+    )
+    const issues = findInvalidMobileFields(
+      (student.formData || {}) as Record<string, unknown>,
+      fields,
+    )
+    if (issues.length === 0) return []
+    return [{
+      serialNumber: student.serialNumber,
+      studentName: student.fullName || "Unknown student",
+      issues,
+    }]
+  })
+  if (invalidStudents.length > 0) {
+    const sample = invalidStudents
+      .slice(0, 10)
+      .map(student => `${student.serialNumber} (${student.studentName})`)
+      .join(", ")
+    throw new Error(
+      `Print batch blocked by missing or invalid mobile data for ${invalidStudents.length} student(s): ${sample}`,
+    )
+  }
 
   const csvHeaders = "Serial Number,Full Name,Class,Roll No.,DOB,Blood Group,Status"
   const csvRows = students.map((s) => {
@@ -196,7 +234,6 @@ export async function processGeneratePrintBatch(schoolId: string, payload: Gener
     upsert: true,
   })
 
-  const template = await getDefaultTemplate(schoolId)
   const templateFields = [
     ...(((template?.fieldMappings as any[]) || [])),
     ...(((template?.backFieldMappings as any[]) || [])),

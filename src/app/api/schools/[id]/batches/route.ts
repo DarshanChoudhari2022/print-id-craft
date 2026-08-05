@@ -5,6 +5,11 @@ import { prisma } from "@/lib/prisma"
 import { enqueueJob, kickJobWorker } from "@/lib/jobs/enqueue"
 import { MAX_PRINT_BATCH_STUDENTS } from "@/lib/jobs/types"
 import { StudentStatus } from "@prisma/client"
+import { getDefaultTemplate } from "@/lib/template-resolver"
+import {
+  effectiveMobileFieldConfig,
+  findInvalidMobileFields,
+} from "@/lib/student-mobile-validation"
 
 export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -75,18 +80,65 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       )
     }
 
-    const students = await prisma.student.findMany({
+    const [students, defaultTemplate] = await Promise.all([
+      prisma.student.findMany({
       where: {
         ...printableWhere,
       },
       orderBy: { serialNumber: "asc" },
-      select: { id: true },
-    })
+      select: {
+        id: true,
+        serialNumber: true,
+        fullName: true,
+        formData: true,
+        class: {
+          select: {
+            template: { select: { fieldConfig: true } },
+          },
+        },
+      },
+      }),
+      getDefaultTemplate(params.id),
+    ])
 
     if (students.length === 0) {
       return NextResponse.json(
         { error: "No students available for printing. Students must be in SUBMITTED or APPROVED status." },
         { status: 400 }
+      )
+    }
+
+    const invalidStudents = students.flatMap((student) => {
+      const fields = effectiveMobileFieldConfig(
+        student.class.template?.fieldConfig,
+        defaultTemplate?.fieldConfig,
+      )
+      const issues = findInvalidMobileFields(
+        (student.formData || {}) as Record<string, unknown>,
+        fields,
+      )
+      if (issues.length === 0) return []
+      return [{
+        id: student.id,
+        serialNumber: student.serialNumber,
+        studentName: student.fullName || "Unknown student",
+        issues,
+      }]
+    })
+
+    if (invalidStudents.length > 0) {
+      const affected = invalidStudents
+        .slice(0, 10)
+        .map(student => `${student.serialNumber} (${student.studentName})`)
+        .join(", ")
+      return NextResponse.json(
+        {
+          error: `Print batch blocked: ${invalidStudents.length} student${invalidStudents.length === 1 ? " has" : "s have"} missing or invalid mobile data. Correct the records first. Affected: ${affected}${invalidStudents.length > 10 ? ", ..." : ""}`,
+          code: "INVALID_MOBILE_DATA",
+          invalidCount: invalidStudents.length,
+          invalidStudents: invalidStudents.slice(0, 100),
+        },
+        { status: 422 },
       )
     }
 
