@@ -63,6 +63,33 @@ describe("Shining Light sibling duplicate detection", () => {
     })
   })
 
+  it("does not block a different student using the same name alone", async () => {
+    ;(prisma.student.findFirst as any).mockImplementation(
+      ({ where }: { where: Record<string, unknown> }) =>
+        where.normalizedName && !where.normalizedFatherName
+          ? Promise.resolve(existingStudent)
+          : Promise.resolve(null)
+    )
+
+    const result = await checkDuplicateSubmission(SHINING_LIGHT_CLASS_ID, {
+      name: existingStudent.formData.name,
+      mobile_no: "+91 9123456780",
+      class: "I - A",
+      division: "A",
+      dateOfBirth: "08/08/2021",
+    })
+
+    expect(result).toEqual({ isDuplicate: false })
+    expect(prisma.student.findFirst).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          normalizedName: expect.any(String),
+          normalizedFatherName: undefined,
+        }),
+      })
+    )
+  })
+
   it("still blocks a genuine Shining Light roll number distinct from mobile", async () => {
     ;(prisma.student.findFirst as any).mockImplementation(
       ({ where }: { where: Record<string, unknown> }) =>
