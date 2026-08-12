@@ -307,13 +307,18 @@ function identityMatches(
   name: string,
   father: string,
   dob: string,
-  requireDob: boolean
+  requireDob: boolean,
+  classGrade: string,
 ): boolean {
   const n = normalizeFormValue(resolveFieldValue(fd, "name"))
   const f = normalizeFormValue(resolveFieldValue(fd, "father"))
   const d = normalizeFormValue(resolveFieldValue(fd, "dateofbirth"))
+  const existingClassGrade = normalizeFormValue(
+    fd.classGrade || fd.classgrade || resolveFieldValue(fd, "class")
+  )
   if (!n || n !== normalizeFormValue(name)) return false
   if (!f || f !== normalizeFormValue(father)) return false
+  if (classGrade && existingClassGrade !== classGrade) return false
   if (requireDob && dob) return !!d && d === normalizeFormValue(dob)
   return true
 }
@@ -361,6 +366,9 @@ export async function checkDuplicateSubmission(
   formData: Record<string, string>
 ): Promise<DuplicateCheckResult> {
   const { name, father, dob, roll: resolvedRoll } = extractIdentityFields(formData)
+  const classGrade = normalizeFormValue(
+    formData.classGrade || formData.classgrade || resolveFieldValue(formData, "class")
+  )
   const indexData = buildStudentIndexData(formData, classId)
   const ignoreResolvedRoll = isResolvedRollMisreadAsMobile(formData, resolvedRoll)
   const roll = ignoreResolvedRoll ? "" : resolvedRoll
@@ -407,28 +415,6 @@ export async function checkDuplicateSubmission(
     }
   }
 
-  if (indexData.normalizedName && indexData.normalizedFatherName) {
-    const byIdentity = await prisma.student.findFirst({
-      where: {
-        classId,
-        normalizedName: indexData.normalizedName,
-        normalizedFatherName: indexData.normalizedFatherName,
-        ...(indexData.normalizedDob ? { normalizedDob: indexData.normalizedDob } : {}),
-        status: { not: "FLAGGED" },
-      },
-      select: { serialNumber: true, submittedAt: true, formData: true },
-    })
-    if (byIdentity) {
-      return toDuplicateResult(
-        "identity",
-        "DUPLICATE_NAME",
-        "This student is already registered in this class. Contact the school for changes.",
-        byIdentity,
-        name
-      )
-    }
-  }
-
   if (roll || (name && father)) {
     const normRoll = indexData.normalizedRollNo || normalizeFormValue(roll)
     const requireDob = !!dob
@@ -453,7 +439,7 @@ export async function checkDuplicateSubmission(
         }
       }
 
-      if (name && father && identityMatches(fd, name, father, dob, requireDob)) {
+      if (name && father && identityMatches(fd, name, father, dob, requireDob, classGrade)) {
         return toDuplicateResult(
           "identity",
           "DUPLICATE_NAME",

@@ -49,7 +49,7 @@ describe("Shining Light sibling duplicate detection", () => {
   it("still blocks the same full student name in Shining Light", async () => {
     ;(prisma.student.findFirst as any).mockImplementation(
       ({ where }: { where: Record<string, unknown> }) =>
-        where.normalizedName ? Promise.resolve(existingStudent) : Promise.resolve(null)
+        where.duplicateFingerprint ? Promise.resolve(existingStudent) : Promise.resolve(null)
     )
 
     const result = await checkDuplicateSubmission(SHINING_LIGHT_CLASS_ID, {
@@ -186,5 +186,63 @@ describe("Shining Light sibling duplicate detection", () => {
       kind: "roll",
       error: "DUPLICATE_ROLL",
     })
+  })
+
+  it("allows the same student identity in a different selected class grade", async () => {
+    ;(prisma.student.findFirst as any).mockResolvedValue(null)
+    ;(prisma.student.findMany as any).mockResolvedValue([
+      {
+        serialNumber: "KTECHH-0113",
+        submittedAt: new Date("2026-07-30T00:00:00.000Z"),
+        formData: {
+          name: "Usman Yusuf Shaikh",
+          father: "+91 9545840825",
+          dateOfBirth: "22/08/2016",
+          class: "IV - A",
+          classGrade: "IV",
+          division: "A",
+        },
+      },
+    ])
+
+    const result = await checkDuplicateSubmission("shivneri-section", {
+      name: "Usman Yusuf Shaikh",
+      father: "+91 9545840825",
+      dateOfBirth: "22/08/2016",
+      class: "V - A",
+      classGrade: "V",
+      division: "A",
+    })
+
+    expect(result).toEqual({ isDuplicate: false })
+  })
+
+  it("still blocks the same student identity in the same selected class grade", async () => {
+    ;(prisma.student.findFirst as any).mockResolvedValue(null)
+    ;(prisma.student.findMany as any).mockResolvedValue([
+      {
+        serialNumber: "KTECHH-0113",
+        submittedAt: new Date("2026-07-30T00:00:00.000Z"),
+        formData: {
+          name: "Usman Yusuf Shaikh",
+          father: "+91 9545840825",
+          dateOfBirth: "22/08/2016",
+          class: "IV - A",
+          classGrade: "IV",
+          division: "A",
+        },
+      },
+    ])
+
+    const result = await checkDuplicateSubmission("shivneri-section", {
+      name: "Usman Yusuf Shaikh",
+      father: "+91 9545840825",
+      dateOfBirth: "22/08/2016",
+      class: "IV - B",
+      classGrade: "IV",
+      division: "B",
+    })
+
+    expect(result).toMatchObject({ isDuplicate: true, error: "DUPLICATE_NAME" })
   })
 })

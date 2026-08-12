@@ -210,7 +210,9 @@ export function normalizeFormValue(value: string): string {
 }
 
 /**
- * Stable fingerprint for duplicate detection: class + name + father + DOB.
+ * Stable fingerprint for duplicate detection: section + selected class grade
+ * + name + father + DOB. A single section can serve several class grades, so
+ * classId alone must not make a Class IV student collide with Class V.
  * Returns empty string when name or father is missing.
  */
 export function computeDuplicateFingerprint(
@@ -220,10 +222,13 @@ export function computeDuplicateFingerprint(
   const name = normalizeFormValue(resolveFieldValue(formData, "name"))
   const father = normalizeFormValue(resolveFieldValue(formData, "father"))
   const dob = normalizeFormValue(resolveFieldValue(formData, "dateofbirth"))
+  const classGrade = normalizeFormValue(
+    formData.classGrade || formData.classgrade || resolveFieldValue(formData, "class")
+  )
   if (!name || !father) return ""
   const payload = dob
-    ? `${classId}|${name}|${father}|${dob}`
-    : `${classId}|${name}|${father}`
+    ? `${classId}|${classGrade}|${name}|${father}|${dob}`
+    : `${classId}|${classGrade}|${name}|${father}`
   return createHash("sha256").update(payload).digest("hex")
 }
 

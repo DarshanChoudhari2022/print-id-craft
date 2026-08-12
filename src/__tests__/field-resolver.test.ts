@@ -302,6 +302,13 @@ describe("resolveFieldValue", () => {
         computeDuplicateFingerprint(fd, "class-2")
       )
     })
+
+    it("differs across selected class grades inside one section", () => {
+      const base = { name: "Usman Yusuf Shaikh", father: "Parent", dob: "2016-08-22" }
+      expect(computeDuplicateFingerprint({ ...base, classGrade: "IV" }, "shivneri-section")).not.toBe(
+        computeDuplicateFingerprint({ ...base, classGrade: "V" }, "shivneri-section")
+      )
+    })
   })
 
   describe("normalizeFormValue", () => {
