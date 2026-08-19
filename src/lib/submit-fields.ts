@@ -133,7 +133,7 @@ export function buildTemplateFallbackFields(template: any): FormField[] {
   const fallback: FormField[] = []
   const fixedMappingKeys = getFixedTemplateFieldKeys([...rawMappings, ...backMappings])
   const optionalMappingKeys = new Set(
-    rawMappings
+    [...rawMappings, ...backMappings]
       .filter((m) => m.type !== "photo" && m.required === false)
       .map((m) => normalizeKey(m.fieldKey || ""))
       .filter(Boolean)
@@ -151,11 +151,16 @@ export function buildTemplateFallbackFields(template: any): FormField[] {
       const optionalFromMapping = optionalMappingKeys.has(normalizeKey(f.key || ""))
       fallback.push({ key: f.key, label: f.label, type: formType, required: !optionalFromMapping && f.required !== false, role: f.role })
     }
-  } else if (rawMappings.length > 0) {
-    for (const m of rawMappings) {
+  } else if (rawMappings.length > 0 || backMappings.length > 0) {
+    const seenKeys = new Set<string>()
+    for (const m of [...rawMappings, ...backMappings]) {
       if (m.type === "photo") continue
       if (m.useFixedValue) continue
-      const k = (m.fieldKey || "").toLowerCase()
+      const fieldKey = m.fieldKey || ""
+      const norm = normalizeKey(fieldKey)
+      if (!norm || seenKeys.has(norm)) continue
+      seenKeys.add(norm)
+      const k = fieldKey.toLowerCase()
       let formType = "text"
       if (k.includes("phone") || k.includes("mob") || k === "mob_father" || k === "mother_phone") formType = "tel"
       fallback.push({ key: m.fieldKey, label: m.label, type: formType, required: m.required !== false })
@@ -496,6 +501,8 @@ async function normalizeSubmitPhoto(buffer: Buffer): Promise<Buffer> {
   }
 }
 
+import { isBlackBoxCorruptedPhoto } from "@/lib/photo-corruption-detector"
+
 async function persistStudentPhotoFromDataUrl(
   dataUrl: string,
   schoolId: string
@@ -528,9 +535,70 @@ export async function resolveSubmitPhotoFields(options: {
   photoUrl: string
   photoPath: string
   photoDataUrl: string
+  originalPhotoDataUrl?: string
   schoolId: string
 }): Promise<{ photoUrl: string; photoPath: string; originalPhotoUrl: string; originalPhotoPath: string; photoBgStatus: string }> {
   const pathOk = options.photoPath?.startsWith(`students/${options.schoolId}/`)
+
+  // 1. If explicit originalPhotoDataUrl is provided (Option B payload from client), save raw original first
+  let originalPersisted: { photoUrl: string; photoPath: string } | null = null
+  if (options.originalPhotoDataUrl?.startsWith("data:image/")) {
+    const rawSaved = await persistStudentPhotoFromDataUrl(options.originalPhotoDataUrl, options.schoolId)
+    if (rawSaved.photoUrl) {
+      originalPersisted = { photoUrl: rawSaved.photoUrl, photoPath: rawSaved.photoPath }
+    }
+  }
+
+  // 2. Persist processed photo if data URL passed
+  let processedPersisted: { photoUrl: string; photoPath: string } | null = null
+  if (options.photoDataUrl?.startsWith("data:image/")) {
+    const rawBuffer = parsePhotoDataUrl(options.photoDataUrl)
+
+    // Detect if AI output generated a black box / blackout block
+    let isCorrupted = false
+    if (rawBuffer) {
+      isCorrupted = await isBlackBoxCorruptedPhoto(rawBuffer)
+    }
+
+    if (isCorrupted) {
+      console.warn("[resolveSubmitPhotoFields] AI photo generated a black box block — rejecting AI output and saving raw photo.")
+      if (originalPersisted) {
+        return {
+          photoUrl: originalPersisted.photoUrl,
+          photoPath: originalPersisted.photoPath,
+          originalPhotoUrl: originalPersisted.photoUrl,
+          originalPhotoPath: originalPersisted.photoPath,
+          photoBgStatus: "SKIPPED",
+        }
+      }
+    } else {
+      const pSaved = await persistStudentPhotoFromDataUrl(options.photoDataUrl, options.schoolId)
+      if (pSaved.photoUrl) {
+        processedPersisted = { photoUrl: pSaved.photoUrl, photoPath: pSaved.photoPath }
+      }
+    }
+  }
+
+  if (processedPersisted) {
+    return {
+      photoUrl: processedPersisted.photoUrl,
+      photoPath: processedPersisted.photoPath,
+      originalPhotoUrl: originalPersisted?.photoUrl || processedPersisted.photoUrl,
+      originalPhotoPath: originalPersisted?.photoPath || processedPersisted.photoPath,
+      photoBgStatus: "",
+    }
+  }
+
+  if (originalPersisted) {
+    return {
+      photoUrl: originalPersisted.photoUrl,
+      photoPath: originalPersisted.photoPath,
+      originalPhotoUrl: originalPersisted.photoUrl,
+      originalPhotoPath: originalPersisted.photoPath,
+      photoBgStatus: "SKIPPED",
+    }
+  }
+
   if (options.photoUrl && pathOk) {
     return {
       photoUrl: options.photoUrl,
@@ -540,10 +608,7 @@ export async function resolveSubmitPhotoFields(options: {
       photoBgStatus: "",
     }
   }
-  if (options.photoDataUrl) {
-    const persisted = await persistStudentPhotoFromDataUrl(options.photoDataUrl, options.schoolId)
-    if (persisted.photoUrl) return { ...persisted, photoBgStatus: "" }
-  }
+
   return {
     photoUrl: options.photoUrl || "",
     photoPath: pathOk ? options.photoPath : "",
@@ -557,6 +622,7 @@ export async function requireValidSubmitPhotoFields(options: {
   photoUrl: string
   photoPath: string
   photoDataUrl: string
+  originalPhotoDataUrl?: string
   schoolId: string
 }): Promise<{ photoUrl: string; photoPath: string; originalPhotoUrl: string; originalPhotoPath: string; photoBgStatus: string }> {
   const photoFields = await resolveSubmitPhotoFields(options)

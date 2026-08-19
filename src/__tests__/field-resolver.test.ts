@@ -407,6 +407,72 @@ describe("resolveFieldValue", () => {
         expect.objectContaining({ key: "PEN", required: false }),
       ])
     })
+
+    it("includes backFieldMappings when no fieldConfig exists", () => {
+      const fields = buildTemplateFallbackFields({
+        fieldMappings: [
+          { fieldKey: "Name", label: "Student Name", type: "text" },
+        ],
+        backFieldMappings: [
+          { fieldKey: "DOJ", label: "Date of Joining", type: "text" },
+          { fieldKey: "Emergency", label: "Emergency No.", type: "text" },
+          { fieldKey: "BloodGroup", label: "Blood Group", type: "text" },
+          { fieldKey: "Address", label: "Address", type: "text" },
+        ],
+      })
+
+      const keys = fields.map(f => f.key)
+      expect(keys).toContain("Name")
+      expect(keys).toContain("DOJ")
+      expect(keys).toContain("Emergency")
+      expect(keys).toContain("BloodGroup")
+      expect(keys).toContain("Address")
+      expect(keys).toHaveLength(5)
+    })
+
+    it("deduplicates fields that appear in both front and back mappings", () => {
+      const fields = buildTemplateFallbackFields({
+        fieldMappings: [
+          { fieldKey: "Name", label: "Name", type: "text" },
+          { fieldKey: "Address", label: "Address", type: "text" },
+        ],
+        backFieldMappings: [
+          { fieldKey: "Address", label: "Address", type: "text" },
+          { fieldKey: "DOJ", label: "Date of Joining", type: "text" },
+        ],
+      })
+
+      const keys = fields.map(f => f.key)
+      expect(keys).toEqual(["Name", "Address", "DOJ"])
+    })
+
+    it("includes back-side fields even when there are no front-side mappings", () => {
+      const fields = buildTemplateFallbackFields({
+        fieldMappings: [],
+        backFieldMappings: [
+          { fieldKey: "DOJ", label: "Date of Joining", type: "text" },
+          { fieldKey: "Emergency", label: "Emergency No.", type: "text" },
+        ],
+      })
+
+      expect(fields.map(f => f.key)).toEqual(["DOJ", "Emergency"])
+    })
+
+    it("respects optional marking from backFieldMappings in fieldConfig path", () => {
+      const fields = buildTemplateFallbackFields({
+        fieldConfig: [
+          { key: "DOJ", label: "Date of Joining", type: "text", required: true },
+        ],
+        fieldMappings: [],
+        backFieldMappings: [
+          { fieldKey: "DOJ", label: "Date of Joining", type: "text", required: false },
+        ],
+      })
+
+      expect(fields).toEqual([
+        expect.objectContaining({ key: "DOJ", required: false }),
+      ])
+    })
   })
 
   describe("sortFieldsByRole", () => {
