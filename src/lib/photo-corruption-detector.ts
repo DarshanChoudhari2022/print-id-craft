@@ -1,5 +1,3 @@
-import sharp from "sharp"
-
 /**
  * Inspect an image buffer to detect if it contains a large black box / blackout block.
  *
@@ -14,6 +12,7 @@ export async function isBlackBoxCorruptedPhoto(imageBuffer: Buffer): Promise<boo
   if (!imageBuffer || imageBuffer.length < 100) return false
 
   try {
+    const sharp = (await import("sharp")).default
     const image = sharp(imageBuffer)
     const metadata = await image.metadata()
     const width = metadata.width || 0
