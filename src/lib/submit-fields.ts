@@ -139,32 +139,47 @@ export function buildTemplateFallbackFields(template: any): FormField[] {
       .filter(Boolean)
   )
 
+  const seenKeys = new Set<string>()
+
   if (rawFieldConf.length > 0) {
     for (const f of rawFieldConf) {
-      if (fixedMappingKeys.has(normalizeKey(f.key || ""))) continue
+      const norm = normalizeKey(f.key || "")
+      if (!norm || seenKeys.has(norm)) continue
+      if (fixedMappingKeys.has(norm)) continue
       if (FORM_SKIP_KEYS.has(f.key)) continue
       if (FORM_SKIP_LABELS.has((f.label || "").toLowerCase().trim())) continue
+      seenKeys.add(norm)
+
       const k = (f.key || "").toLowerCase()
       const l = (f.label || "").toLowerCase()
       let formType: string = f.type || "text"
       if (k === "phone" || k.includes("mob") || l.includes("mobile") || l.includes("phone")) formType = "tel"
-      const optionalFromMapping = optionalMappingKeys.has(normalizeKey(f.key || ""))
-      fallback.push({ key: f.key, label: f.label, type: formType, required: !optionalFromMapping && f.required !== false, role: f.role })
+      const optionalFromMapping = optionalMappingKeys.has(norm)
+      fallback.push({
+        key: f.key,
+        label: f.label,
+        type: formType,
+        required: !optionalFromMapping && f.required !== false,
+        ...(f.role ? { role: f.role } : {}),
+      })
     }
-  } else if (rawMappings.length > 0 || backMappings.length > 0) {
-    const seenKeys = new Set<string>()
-    for (const m of [...rawMappings, ...backMappings]) {
-      if (m.type === "photo") continue
-      if (m.useFixedValue) continue
-      const fieldKey = m.fieldKey || ""
-      const norm = normalizeKey(fieldKey)
-      if (!norm || seenKeys.has(norm)) continue
-      seenKeys.add(norm)
-      const k = fieldKey.toLowerCase()
-      let formType = "text"
-      if (k.includes("phone") || k.includes("mob") || k === "mob_father" || k === "mother_phone") formType = "tel"
-      fallback.push({ key: m.fieldKey, label: m.label, type: formType, required: m.required !== false })
-    }
+  }
+
+  // Also include any mapped fields from front or back that weren't in fieldConfig
+  for (const m of [...rawMappings, ...backMappings]) {
+    if (!m || m.type === "photo" || m.type === "flag" || m.useFixedValue) continue
+    const fieldKey = m.fieldKey || ""
+    const norm = normalizeKey(fieldKey)
+    if (!norm || seenKeys.has(norm)) continue
+    if (fixedMappingKeys.has(norm)) continue
+    if (FORM_SKIP_KEYS.has(fieldKey)) continue
+    if (FORM_SKIP_LABELS.has((m.label || "").toLowerCase().trim())) continue
+    seenKeys.add(norm)
+
+    const k = fieldKey.toLowerCase()
+    let formType = "text"
+    if (k.includes("phone") || k.includes("mob") || k === "mob_father" || k === "mother_phone") formType = "tel"
+    fallback.push({ key: m.fieldKey, label: m.label, type: formType, required: m.required !== false })
   }
 
   const hasFlagMapping = [...rawMappings, ...backMappings].some(m => m.type === "flag")

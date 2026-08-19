@@ -25,30 +25,46 @@ const templateSchema = z.object({
   printConfig: z.any().optional(),
 })
 
-function deriveFieldConfigFromMappings(fieldMappings: any[]): any[] {
-  if (!Array.isArray(fieldMappings) || fieldMappings.length === 0) return []
+function deriveFieldConfigFromMappings(
+  fieldMappings: any[] = [],
+  backFieldMappings: any[] = []
+): any[] {
+  const combined = [
+    ...(Array.isArray(fieldMappings) ? fieldMappings : []),
+    ...(Array.isArray(backFieldMappings) ? backFieldMappings : []),
+  ]
+  if (combined.length === 0) return []
 
-  return fieldMappings
-    .filter((m) => m.type !== "photo")
-    .map((m) => {
-      let formType = "text"
-      if (
-        m.fieldKey === "mob_father" ||
-        m.fieldKey === "mother_phone" ||
-        m.fieldKey?.includes("phone") ||
-        m.fieldKey?.includes("mob")
-      ) {
-        formType = "tel"
-      }
-      const role = inferFieldRole(m.fieldKey, m.label)
-      return {
-        key: m.fieldKey,
-        label: m.label,
-        type: formType,
-        required: m.required !== false,
-        ...(role ? { role } : {}),
-      }
+  const seenKeys = new Set<string>()
+  const result: any[] = []
+
+  for (const m of combined) {
+    if (!m || m.type === "photo" || m.useFixedValue) continue
+    const fieldKey = (m.fieldKey || "").trim()
+    const norm = fieldKey.toLowerCase().replace(/[^a-z0-9]/g, "")
+    if (!norm || seenKeys.has(norm)) continue
+    seenKeys.add(norm)
+
+    let formType = "text"
+    if (
+      m.fieldKey === "mob_father" ||
+      m.fieldKey === "mother_phone" ||
+      m.fieldKey?.includes("phone") ||
+      m.fieldKey?.includes("mob")
+    ) {
+      formType = "tel"
+    }
+    const role = inferFieldRole(m.fieldKey, m.label)
+    result.push({
+      key: m.fieldKey,
+      label: m.label,
+      type: formType,
+      required: m.required !== false,
+      ...(role ? { role } : {}),
     })
+  }
+
+  return result
 }
 
 function canAccessSchoolTemplate(session: any, schoolId: string): boolean {
@@ -122,14 +138,13 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string; t
     const validated = templateSchema.parse(body)
 
     let fieldConfig = validated.fieldConfig
-    if (
-      validated.fieldMappings &&
-      Array.isArray(validated.fieldMappings) &&
-      validated.fieldMappings.length > 0
-    ) {
+    const hasMappings =
+      (validated.fieldMappings && Array.isArray(validated.fieldMappings) && validated.fieldMappings.length > 0) ||
+      (validated.backFieldMappings && Array.isArray(validated.backFieldMappings) && validated.backFieldMappings.length > 0)
+    if (hasMappings) {
       const studentCount = await prisma.student.count({ where: { schoolId: params.id } })
       if (studentCount === 0) {
-        fieldConfig = deriveFieldConfigFromMappings(validated.fieldMappings)
+        fieldConfig = deriveFieldConfigFromMappings(validated.fieldMappings, validated.backFieldMappings)
       }
     }
 

@@ -473,6 +473,30 @@ describe("resolveFieldValue", () => {
         expect.objectContaining({ key: "DOJ", required: false }),
       ])
     })
+
+    it("includes back-side fields when fieldConfig only contains front-side fields", () => {
+      const fields = buildTemplateFallbackFields({
+        fieldConfig: [
+          { key: "name", label: "Staff Name", type: "text", required: true },
+          { key: "mobile", label: "Mobile No", type: "tel", required: true },
+          { key: "designation", label: "Designation", type: "text", required: true },
+        ],
+        fieldMappings: [
+          { fieldKey: "name", label: "Staff Name", type: "text" },
+          { fieldKey: "mobile", label: "Mobile No", type: "text" },
+          { fieldKey: "designation", label: "Designation", type: "text" },
+        ],
+        backFieldMappings: [
+          { fieldKey: "DOJ", label: "Date of Joining", type: "text" },
+          { fieldKey: "Emergency", label: "Emergency no", type: "text" },
+          { fieldKey: "BloodGroup", label: "Bld.Grp.", type: "text" },
+          { fieldKey: "Address", label: "Address", type: "text" },
+        ],
+      })
+
+      const keys = fields.map(f => f.key)
+      expect(keys).toEqual(["name", "mobile", "designation", "DOJ", "Emergency", "BloodGroup", "Address"])
+    })
   })
 
   describe("sortFieldsByRole", () => {
