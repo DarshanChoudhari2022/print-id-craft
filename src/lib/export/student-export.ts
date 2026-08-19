@@ -97,6 +97,7 @@ export const STUDENT_EXPORT_HEADERS = [
   "Mother Name",
   "Phone",
   "Address",
+  "Original Photo",
   "Photo File",
   "Photo URL",
   "Status",
@@ -181,6 +182,7 @@ export function collectExportDataColumns(
 
 export const DYNAMIC_EXPORT_TAIL_HEADERS = [
   "Class",
+  "Original Photo",
   "Photo File",
   "Photo URL",
   "Status",
@@ -202,11 +204,13 @@ export function buildDynamicStudentExportRow(
   photoFile: string
 ): unknown[] {
   const fd = student.formData || {}
+  const origPhoto = student.originalPhotoUrl || student.photoUrl || ""
   return [
     student.schoolName,
     student.serialNumber,
     ...dataColumns.map((col) => fd[col.key] || ""),
     student.className,
+    origPhoto,
     photoFile ? `photos/${photoFile}` : "",
     student.photoUrl || "",
     student.status,
@@ -223,6 +227,8 @@ export type StudentExportRecord = {
   schoolName: string
   photoPath?: string | null
   photoUrl?: string | null
+  originalPhotoPath?: string | null
+  originalPhotoUrl?: string | null
   submittedAt?: Date | string | null
 }
 
@@ -237,6 +243,7 @@ export type StudentPhotoMapping = {
 
 export function buildStudentExportRow(student: StudentExportRecord, photoFile: string): unknown[] {
   const fd = student.formData || {}
+  const origPhoto = student.originalPhotoUrl || student.photoUrl || ""
   return [
     student.schoolName,
     student.serialNumber,
@@ -249,6 +256,7 @@ export function buildStudentExportRow(student: StudentExportRecord, photoFile: s
     resolveFieldValue(fd, "mother") || getStudentField(fd, "motherName", "Mother Name", "Mother"),
     resolveFieldValue(fd, "phone") || resolveFieldValue(fd, "mobile") || getStudentField(fd, "phone", "Phone", "Mobile"),
     resolveFieldValue(fd, "address") || getStudentField(fd, "address", "Address"),
+    origPhoto,
     photoFile ? `photos/${photoFile}` : "",
     student.photoUrl || "",
     student.status,
@@ -258,7 +266,7 @@ export function buildStudentExportRow(student: StudentExportRecord, photoFile: s
 
 export async function buildStudentExcelBuffer(
   schoolName: string,
-  students: Array<{ row: unknown[]; photoUrl?: string | null }>,
+  students: Array<{ row: unknown[]; photoUrl?: string | null; originalPhotoUrl?: string | null }>,
   meta?: {
     exportDate?: string
     totalStudents?: number
@@ -280,16 +288,31 @@ export async function buildStudentExcelBuffer(
   const headerRowIndex = sheet.rowCount + 1
   sheet.addRow(headers)
 
+  const origPhotoCol = headers.indexOf("Original Photo") + 1
   const photoUrlCol = headers.indexOf("Photo URL") + 1
 
   for (const student of students) {
     const row = sheet.addRow(sanitizeWorksheetData([student.row])[0])
-    if (student.photoUrl && photoUrlCol > 0) {
-      const cell = row.getCell(photoUrlCol)
-      cell.value = { text: student.photoUrl, hyperlink: student.photoUrl }
-      cell.font = { color: { argb: "FF0563C1" }, underline: true }
+
+    if (origPhotoCol > 0) {
+      const origValue = String(row.getCell(origPhotoCol).value || student.originalPhotoUrl || "")
+      if (origValue && /^https?:\/\//i.test(origValue)) {
+        const cell = row.getCell(origPhotoCol)
+        cell.value = { text: origValue, hyperlink: origValue }
+        cell.font = { color: { argb: "FF0563C1" }, underline: true }
+      }
+    }
+
+    if (photoUrlCol > 0) {
+      const mainValue = String(row.getCell(photoUrlCol).value || student.photoUrl || "")
+      if (mainValue && /^https?:\/\//i.test(mainValue)) {
+        const cell = row.getCell(photoUrlCol)
+        cell.value = { text: mainValue, hyperlink: mainValue }
+        cell.font = { color: { argb: "FF0563C1" }, underline: true }
+      }
     }
   }
+
 
   const widths = columnWidthsFromRows(
     [

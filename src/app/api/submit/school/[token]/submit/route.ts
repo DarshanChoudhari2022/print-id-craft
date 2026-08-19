@@ -36,6 +36,7 @@ const publicSchoolSubmitSchema = z.object({
     .refine((url) => !url || photoUrlRefine(url), { message: "Invalid photo URL origin" }),
   photoPath: z.string().optional().default(""),
   photoDataUrl: z.string().optional().default(""),
+  originalPhotoDataUrl: z.string().optional().default(""),
   photoBgStatus: z
     .enum(["", "PLAIN", "PROCESSED", "SKIPPED", "REPROCESSED"])
     .optional()
@@ -182,6 +183,7 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
       photoUrl: validated.photoUrl,
       photoPath: validated.photoPath,
       photoDataUrl: validated.photoDataUrl,
+      originalPhotoDataUrl: validated.originalPhotoDataUrl,
       schoolId: school.id,
     })
 

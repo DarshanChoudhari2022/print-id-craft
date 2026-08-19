@@ -52,7 +52,7 @@ describe("buildStudentExportEntry", () => {
 
     expect(getStudentFullName(entry.exportRecord.formData)).toBe("Rahul Kumar")
     expect(entry.photoFile).toBe("Rahul Kumar.jpg")
-    expect(entry.row[11]).toBe("photos/Rahul Kumar.jpg")
+    expect(entry.row[12]).toBe("photos/Rahul Kumar.jpg")
     expect(entry.mapping.fullName).toBe("Rahul Kumar")
     expect(entry.mapping.photoFile).toBe("Rahul Kumar.jpg")
   })

@@ -39,6 +39,8 @@ const STUDENT_SELECT = {
   formData: true,
   photoPath: true,
   photoUrl: true,
+  originalPhotoPath: true,
+  originalPhotoUrl: true,
   qrCodeUrl: true,
   submittedAt: true,
   updatedAt: true,
@@ -246,6 +248,7 @@ export async function processExportArchive(
     const excelRows = exportEntries.map((entry) => ({
       row: buildDynamicStudentExportRow(entry.exportRecord, dataColumns, entry.photoFile),
       photoUrl: entry.photoUrl,
+      originalPhotoUrl: entry.exportRecord.originalPhotoUrl || entry.photoUrl,
     }))
 
     const excelBuffer = await buildStudentExcelBuffer(school.name, excelRows, {

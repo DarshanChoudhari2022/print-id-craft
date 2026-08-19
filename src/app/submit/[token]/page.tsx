@@ -471,6 +471,8 @@ export default function SubmitPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState("") // Data URL of the accepted photo
   const [croppedPhoto, setCroppedPhoto] = useState("")
+  const [rawCroppedPhoto, setRawCroppedPhoto] = useState("")
+
   const [cardSide, setCardSide] = useState<"front" | "back">("front")
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ serialNumber: string; studentId: string } | null>(null)
@@ -991,7 +993,9 @@ export default function SubmitPage() {
             photoUrl: photoResult.photoUrl,
             photoPath: photoResult.photoPath,
             photoDataUrl: photoResult.photoDataUrl,
+            originalPhotoDataUrl: rawCroppedPhoto || undefined,
             photoBgStatus: photoBgStatus || "",
+
           }),
         })
       } catch (networkErr) {
@@ -2198,6 +2202,7 @@ export default function SubmitPage() {
                 photoUrl={photoPreview}
                 aspectRatio={3 / 4}
                 onCropped={(croppedDataUrl) => {
+                  setRawCroppedPhoto(croppedDataUrl)
                   setCroppedPhoto(croppedDataUrl)
                   const blockReason = getPreviewBlockReason()
                   if (blockReason) {
@@ -2209,9 +2214,11 @@ export default function SubmitPage() {
                   goToBgProcessing()
                 }}
                 onCancel={() => {
+                  setRawCroppedPhoto(photoPreview)
                   setCroppedPhoto(photoPreview)
                   handleReview()
                 }}
+
               />
 
               <div style={{ marginTop: 16 }}>

@@ -73,6 +73,7 @@ export async function GET(req: Request) {
       className: string
       submittedAt: Date | null
       photoUrl: string | null
+      originalPhotoUrl: string | null
     }> = []
 
     const allKeys = new Set<string>()
@@ -82,7 +83,16 @@ export async function GET(req: Request) {
     while (hasMore) {
       const students = await prisma.student.findMany({
         where,
-        include: { class: { select: { name: true } } },
+        select: {
+          id: true,
+          serialNumber: true,
+          status: true,
+          formData: true,
+          photoUrl: true,
+          originalPhotoUrl: true,
+          submittedAt: true,
+          class: { select: { name: true } },
+        },
         orderBy: { id: "asc" },
         take: 500,
         skip: cursor ? 1 : 0,
@@ -118,6 +128,7 @@ export async function GET(req: Request) {
           className,
           submittedAt: s.submittedAt,
           photoUrl: s.photoUrl,
+          originalPhotoUrl: s.originalPhotoUrl || s.photoUrl,
         })
       }
 
@@ -132,6 +143,7 @@ export async function GET(req: Request) {
       "Serial Number",
       ...dataColumns.map(prettifyKey),
       "Class / Section",
+      "Original Photo",
       "Photo URL",
       "Status",
       "Submitted At",
@@ -168,11 +180,13 @@ export async function GET(req: Request) {
         s.serialNumber,
         ...dataColumns.map((key) => fd[key] || ""),
         s.className,
+        s.originalPhotoUrl || "",
         s.photoUrl || "",
         s.status,
         s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : "",
       ])
     }
+
 
     // Summary sheet
     const summaryData: unknown[][] = [

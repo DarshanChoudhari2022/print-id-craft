@@ -36,6 +36,7 @@ const publicSubmitSchema = z.object({
     .refine((url) => !url || photoUrlRefine(url), { message: "Invalid photo URL origin" }),
   photoPath: z.string().optional().default(""),
   photoDataUrl: z.string().optional().default(""),
+  originalPhotoDataUrl: z.string().optional().default(""),
   photoBgStatus: z
     .enum(["", "PLAIN", "PROCESSED", "SKIPPED", "REPROCESSED"])
     .optional()
@@ -157,10 +158,6 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
       }, { status: 409 })
     }
 
-    // Pre-compute auto-assigned fields OUTSIDE the transaction to avoid
-    // hitting Prisma's default 5 000 ms interactive-transaction timeout.
-    // This is a read-only lookup (findMany take:200) that doesn't need the
-    // serialisation guarantee of the advisory-lock transaction.
     const autoFields = await computeAutoAssignedFields(cls.school.id)
     const finalFormData = normalizeStudentStringFormData({
       ...formDataWithBranch,
@@ -174,10 +171,10 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
       photoUrl: validated.photoUrl,
       photoPath: validated.photoPath,
       photoDataUrl: validated.photoDataUrl,
+      originalPhotoDataUrl: validated.originalPhotoDataUrl,
       schoolId: cls.school.id,
     })
 
-    // Create student with retry for serial number collisions under high concurrency
     let student: any = null
     let retries = 3
     while (retries > 0) {
@@ -201,9 +198,8 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
           })
         }, { timeout: 15000 })
 
-        break // Success — exit retry loop
+        break
       } catch (err: any) {
-        // If unique constraint violation on serialNumber, retry with new number
         if (err?.code === "P2002" && retries > 1) {
           retries--
           continue
@@ -277,7 +273,6 @@ export async function POST(req: Request, props: { params: Promise<{ token: strin
     if (error?.message === "A valid student photo is required. Please upload the photo again.") {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
-    // Return specific prisma error message if available
     const message = error?.message || (typeof error === 'string' ? error : "Internal Server Error")
     return NextResponse.json({ error: message }, { status: 500 })
   } finally {

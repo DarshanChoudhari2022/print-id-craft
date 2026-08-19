@@ -12,6 +12,7 @@ import {
   contentTypeFromPhotoPath,
   nextAiRunCount,
 } from "@/lib/student-photo-ai"
+import { isBlackBoxCorruptedPhoto } from "@/lib/photo-corruption-detector"
 
 export const runtime = "nodejs"
 export const maxDuration = 300
@@ -98,6 +99,14 @@ export async function POST(req: Request, props: { params: Promise<{ id: string; 
     const bgColor = template?.photoBgColor || "#FFFFFF"
     const source = await readSourcePhoto(student)
     const { buffer } = await removeBackgroundForSubmit(source.buffer, source.contentType, source.fileName, bgColor)
+
+    const isCorrupted = await isBlackBoxCorruptedPhoto(buffer)
+    if (isCorrupted) {
+      return NextResponse.json(
+        { error: "AI background removal generated a black block — AI output was rejected to protect the original photo." },
+        { status: 422 }
+      )
+    }
 
     await ensureBucket(BUCKET)
     const runCount = nextAiRunCount(student.photoAiRunCount)

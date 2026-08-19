@@ -15,6 +15,8 @@ type StudentInput = {
   class?: { name: string } | null
   photoPath?: string | null
   photoUrl?: string | null
+  originalPhotoPath?: string | null
+  originalPhotoUrl?: string | null
   submittedAt?: Date | null
 }
 
@@ -42,6 +44,8 @@ export function buildStudentExportEntry(
     schoolName,
     photoPath: student.photoPath,
     photoUrl: student.photoUrl,
+    originalPhotoPath: student.originalPhotoPath,
+    originalPhotoUrl: student.originalPhotoUrl,
     submittedAt: student.submittedAt,
   }
 
@@ -71,7 +75,10 @@ export function buildStudentExportEntry(
       photoFile,
       photoUrl: student.photoUrl,
       photoPath: student.photoPath,
+      originalPhotoUrl: student.originalPhotoUrl,
+      originalPhotoPath: student.originalPhotoPath,
       submittedAt: student.submittedAt,
     },
   }
 }
+
