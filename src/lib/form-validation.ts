@@ -1,4 +1,4 @@
-﻿import { getFieldRole } from "@/lib/field-resolver"
+import { getFieldRole } from "@/lib/field-resolver"
 import { applyFixedBranchToFormData } from "@/lib/fixed-branch"
 import { isValidIndianMobile } from "@/lib/indian-mobile"
 
@@ -51,6 +51,14 @@ export function validatePublicSubmissionDetails(
     }
     if (role === "mobile" && !isValidIndianMobile(value)) {
       return { ok: false, error: "Please enter a valid 10-digit Indian mobile number." }
+    }
+    if ((role === "dob" || role === "doj") && !/^\d{2}\/\d{2}\/\d{4}$/.test(value) && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return {
+        ok: false,
+        error: role === "doj"
+          ? "Please select date of joining in DD/MM/YYYY format."
+          : "Please select date of birth in DD/MM/YYYY format.",
+      }
     }
     if (role === "branch" && field.required && value.length < 2) {
       return { ok: false, error: "Please enter the branch name." }

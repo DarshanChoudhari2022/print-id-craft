@@ -263,6 +263,13 @@ describe("resolveFieldValue", () => {
       expect(getFieldRole("mother_mobile", "Mother's Mobile No.")).toBe("mobile")
     })
 
+    it("detects Date of Joining as doj", () => {
+      expect(getFieldRole("DOJ", "Date of Joining")).toBe("doj")
+      expect(getFieldRole("date_of_joining", "Date of Joining")).toBe("doj")
+      expect(getFieldRole("joining_date", "Joining Date")).toBe("doj")
+      expect(getFieldRole("doj", "DOJ")).toBe("doj")
+    })
+
     it("uses explicit role from template", () => {
       expect(getFieldRole("custom_key", "Custom", "address")).toBe("address")
     })

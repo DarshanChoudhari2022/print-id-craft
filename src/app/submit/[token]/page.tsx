@@ -851,8 +851,10 @@ export default function SubmitPage() {
       if (role === "mobile" && value && !isValidIndianMobile(value)) {
         return "Please enter a valid 10-digit Indian mobile number."
       }
-      if (role === "dob" && f.required && !/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
-        return "Please select date of birth in DD/MM/YYYY format."
+      if ((role === "dob" || role === "doj") && f.required && !/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+        return role === "doj"
+          ? "Please select date of joining in DD/MM/YYYY format."
+          : "Please select date of birth in DD/MM/YYYY format."
       }
       if (role === "branch" && f.required && value.length < 2) return "Please enter the branch name."
     }
@@ -899,8 +901,13 @@ export default function SubmitPage() {
             return
           }
         }
-        if (role === "dob" && f.required && !/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
-          showMissingField(f.key, "Please select the full date of birth: Date, Month, and Year.")
+        if ((role === "dob" || role === "doj") && f.required && !/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+          showMissingField(
+            f.key,
+            role === "doj"
+              ? "Please select the full date of joining: Date, Month, and Year."
+              : "Please select the full date of birth: Date, Month, and Year."
+          )
           return
         }
         if (role === "branch" && f.required && value.length < 2) {
@@ -1882,8 +1889,8 @@ export default function SubmitPage() {
                     )
                   }
 
-                  // ── Date of birth ──
-                  if (role === "dob") {
+                  // ── Date of birth / Date of joining ──
+                  if (role === "dob" || role === "doj") {
                     return (
                       <div key={field.key} className="form-group" data-field-key={field.key} style={getMissingFieldStyle(field.key)}>
                         <label>

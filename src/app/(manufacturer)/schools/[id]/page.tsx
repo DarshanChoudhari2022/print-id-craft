@@ -44,7 +44,7 @@ const DOWNLOAD_EXPORT_STATUS_LABELS: Record<DownloadExportStatus, string> = {
 }
 
 type EditStudentField = FormField & {
-  inputType: "flag" | "mobile" | "address" | "dob" | "text" | "textarea"
+  inputType: "flag" | "mobile" | "address" | "dob" | "doj" | "text" | "textarea"
 }
 
 function canonicalEditStudentFieldKey(fieldKey: string, label: string): string {
@@ -90,7 +90,7 @@ function buildEditStudentFields(templateData: any): EditStudentField[] {
     if (m.type === "flag") inputType = "flag"
     else if (role === "mobile") inputType = "mobile"
     else if (role === "address") inputType = "address"
-    else if (role === "dob") inputType = "dob"
+    else if (role === "dob" || role === "doj") inputType = role
     else if (m.fieldKey.toLowerCase().includes("address")) inputType = "textarea"
     return {
       key,
@@ -4610,7 +4610,7 @@ export default function SchoolDetailPage() {
                         />
                       ) : (
                         <input
-                          type={field.inputType === "dob" ? "date" : "text"}
+                          type={field.inputType === "dob" || field.inputType === "doj" ? "date" : "text"}
                           value={editFormFields[field.key] || ''}
                           onChange={e => setEditFormFields(prev => ({
                             ...prev,

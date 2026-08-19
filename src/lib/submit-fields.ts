@@ -177,8 +177,10 @@ export function buildTemplateFallbackFields(template: any): FormField[] {
     seenKeys.add(norm)
 
     const k = fieldKey.toLowerCase()
+    const l = (m.label || "").toLowerCase()
     let formType = "text"
     if (k.includes("phone") || k.includes("mob") || k === "mob_father" || k === "mother_phone") formType = "tel"
+    else if (k === "dob" || k === "doj" || k.includes("dateofbirth") || k.includes("dateofjoining") || k.includes("birthdate") || k.includes("joiningdate") || /\b(date of birth|date of joining|dob|doj)\b/.test(`${k} ${l}`)) formType = "date"
     fallback.push({ key: m.fieldKey, label: m.label, type: formType, required: m.required !== false })
   }
 

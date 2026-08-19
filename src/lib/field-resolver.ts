@@ -33,6 +33,7 @@ export const FIELD_GROUPS: Record<string, string[]> = {
   rollno: ["rollno", "roll", "srno", "no", "admissionno", "roll number"],
   address: ["address", "addr", "location"],
   dateofbirth: ["dob", "dateofbirth", "birthdate", "birthday"],
+  dateofjoining: ["doj", "dateofjoining", "date_of_joining", "joiningdate", "joining_date", "date of joining", "date of join", "join date", "dte of joining", "dte of join"],
   bloodgroup: ["bloodgroup", "blood group", "bg"],
   employeeid: ["employeeid", "employeecode", "idcode", "id code", "employee code"],
   admissionno: ["admissionno", "admno", "registrationno", "regno"],
@@ -77,6 +78,7 @@ export type FieldRole =
   | "mobile"
   | "rollno"
   | "dob"
+  | "doj"
   | "branch"
   | "flag"
   | "bloodgroup"
@@ -84,7 +86,7 @@ export type FieldRole =
 
 const VALID_ROLES = new Set<string>([
   "name", "father", "mother", "address", "mobile", "rollno",
-  "dob", "branch", "flag", "bloodgroup", "default",
+  "dob", "doj", "branch", "flag", "bloodgroup", "default",
 ])
 
 const GROUP_TO_ROLE: Record<string, FieldRole> = {
@@ -92,6 +94,8 @@ const GROUP_TO_ROLE: Record<string, FieldRole> = {
   father: "father",
   mother: "mother",
   dateofbirth: "dob",
+  dateofjoining: "doj",
+  doj: "doj",
   address: "address",
   mobile: "mobile",
   phone: "mobile",
@@ -109,6 +113,7 @@ export const FIELD_ROLE_SORT_ORDER: Record<FieldRole, number> = {
   father: 20,
   mother: 30,
   dob: 40,
+  doj: 45,
   rollno: 50,
   branch: 55,
   address: 60,
@@ -158,6 +163,7 @@ export function getFieldRole(
   }
   if (/\b(blood ?group|bloodgroup)\b/.test(hay)) return "bloodgroup"
   if (/\b(dob|dateofbirth|date of birth|birthdate|birthday)\b/.test(hay)) return "dob"
+  if (/\b(doj|dateofjoining|date of joining|joining date|date of join|join date|dte of joining|dte of join)\b/.test(hay)) return "doj"
   if (/\b(branch|campus)\b/.test(hay)) return "branch"
 
   if ((l.includes("father") || k.includes("father")) && !/\b(mobile|phone|mob|contact)\b/.test(hay)) {

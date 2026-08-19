@@ -96,4 +96,26 @@ describe("stripIndianPrefix", () => {
       error: "Please enter a valid 10-digit Indian mobile number.",
     })
   })
+
+  it("validates Date of Joining in DD/MM/YYYY format", () => {
+    const fields = [{ key: "doj", label: "Date of Joining", type: "date", required: true, role: "doj" }]
+
+    expect(validatePublicSubmissionDetails({ doj: "15/08/2023" }, fields)).toEqual({ ok: true })
+    expect(validatePublicSubmissionDetails({ doj: "2023-08-15" }, fields)).toEqual({ ok: true })
+    expect(validatePublicSubmissionDetails({ doj: "invalid-date" }, fields)).toEqual({
+      ok: false,
+      error: "Please select date of joining in DD/MM/YYYY format.",
+    })
+  })
+
+  it("validates Date of Birth in DD/MM/YYYY format", () => {
+    const fields = [{ key: "dob", label: "Date of Birth", type: "date", required: true, role: "dob" }]
+
+    expect(validatePublicSubmissionDetails({ dob: "01/01/2015" }, fields)).toEqual({ ok: true })
+    expect(validatePublicSubmissionDetails({ dob: "2015-01-01" }, fields)).toEqual({ ok: true })
+    expect(validatePublicSubmissionDetails({ dob: "bad" }, fields)).toEqual({
+      ok: false,
+      error: "Please select date of birth in DD/MM/YYYY format.",
+    })
+  })
 })
