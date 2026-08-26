@@ -5843,13 +5843,6 @@ export default function SchoolDetailPage() {
             schoolName={school.name}
             classes={classes}
             companyMode={companyMode}
-            dateRangeExporting={exportingFormat === "date-range"}
-            onDateRangeDownload={(dateFrom, dateTo, filters) => handleExport("excel", {
-              dateFrom,
-              dateTo,
-              classIdOverride: filters.classId,
-              statusOverride: filters.status,
-            })}
           />
         )}
 

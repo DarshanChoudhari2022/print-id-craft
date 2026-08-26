@@ -15,6 +15,13 @@ describe("generation filter API wiring", () => {
     expect(source).toContain("buildGenerationFilterOptions(optionStudents)")
   })
 
+  it("applies an inclusive submission-date range to generation queries", () => {
+    expect(source).toContain('const dateFrom = searchParams.get("dateFrom")')
+    expect(source).toContain('const dateTo = searchParams.get("dateTo")')
+    expect(source).toContain("buildSubmissionDateRange(dateFrom, dateTo)")
+    expect(source).toContain("whereClause.submittedAt = submittedAt")
+  })
+
   it("filters returned students before empty handling and render mapping", () => {
     expect(source).toContain('const classGrade = searchParams.get("classGrade")?.trim() || ""')
     expect(source).toContain('const division = searchParams.get("division")?.trim() || ""')

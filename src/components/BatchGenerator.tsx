@@ -35,7 +35,6 @@ import {
   getCoverPhotoPlacement,
   recolorEdgeConnectedPhotoBackground,
 } from "@/lib/card-photo-placement"
-import DateRangeDownload from "@/components/DateRangeDownload"
 
 type FieldMapping = {
   id: string
@@ -101,12 +100,6 @@ type BatchGeneratorProps = {
   schoolName: string
   classes: { id: string; name: string; _count: { students: number } }[]
   companyMode?: boolean
-  dateRangeExporting?: boolean
-  onDateRangeDownload?: (
-    dateFrom: string,
-    dateTo: string,
-    filters: { classId: string; status: string }
-  ) => Promise<void> | void
 }
 
 const normalizeWorkspaceNameForPrint = (value: string) =>
@@ -1339,8 +1332,6 @@ export default function BatchGenerator({
   schoolName,
   classes,
   companyMode = false,
-  dateRangeExporting = false,
-  onDateRangeDownload,
 }: BatchGeneratorProps) {
   const [selectedClassId, setSelectedClassId] = useState("")
   const [selectedClassGrade, setSelectedClassGrade] = useState("")
@@ -1352,6 +1343,8 @@ export default function BatchGenerator({
   const [filterOptionsLoading, setFilterOptionsLoading] = useState(false)
   const [filterOptionsError, setFilterOptionsError] = useState("")
   const [statusFilter, setStatusFilter] = useState("APPROVED")
+  const [submissionDateFrom, setSubmissionDateFrom] = useState("")
+  const [submissionDateTo, setSubmissionDateTo] = useState("")
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("JPEG")
   const [pdfChunkSize, setPdfChunkSize] = useState(100)
   const [generating, setGenerating] = useState(false)
@@ -1433,6 +1426,10 @@ export default function BatchGenerator({
     const params = new URLSearchParams({ status: statusFilter })
     params.set("mode", "filters")
     if (selectedClassId) params.set("classId", selectedClassId)
+    if (submissionDateFrom && submissionDateTo) {
+      params.set("dateFrom", submissionDateFrom)
+      params.set("dateTo", submissionDateTo)
+    }
 
     fetch(`/api/schools/${schoolId}/generate?${params}`, {
       cache: "no-store",
@@ -1453,7 +1450,7 @@ export default function BatchGenerator({
       })
 
     return () => controller.abort()
-  }, [clearGeneratedResults, schoolId, selectedClassId, statusFilter])
+  }, [clearGeneratedResults, schoolId, selectedClassId, statusFilter, submissionDateFrom, submissionDateTo])
 
   useEffect(() => {
     const reconciled = reconcileGenerationScopeSelection(
@@ -1596,6 +1593,15 @@ export default function BatchGenerator({
   }, [generationScopeName, getPdfFileCount, pdfChunkSize, schoolName])
 
   const handleGenerate = useCallback(async () => {
+    if ((submissionDateFrom && !submissionDateTo) || (!submissionDateFrom && submissionDateTo)) {
+      toast.error("Select both the from date and to date, or clear both dates")
+      return
+    }
+    if (submissionDateFrom && submissionDateTo && submissionDateFrom > submissionDateTo) {
+      toast.error("From date cannot be after to date")
+      return
+    }
+
     setGenerating(true)
     setProgress({ current: 0, total: 0, status: "Preparing data..." })
     setPreviewCards([])
@@ -1607,6 +1613,8 @@ export default function BatchGenerator({
       if (selectedClassId) params.set("classId", selectedClassId)
       if (selectedClassGrade) params.set("classGrade", selectedClassGrade)
       if (selectedDivision) params.set("division", selectedDivision)
+      if (submissionDateFrom) params.set("dateFrom", submissionDateFrom)
+      if (submissionDateTo) params.set("dateTo", submissionDateTo)
 
       const res = await fetch(`/api/schools/${schoolId}/generate?${params}`)
       const data = await res.json()
@@ -2089,7 +2097,7 @@ export default function BatchGenerator({
       // Release student photo cache to prevent memory build-up across runs
       clearStudentImageCache()
     }
-  }, [downloadPdfInChunks, generationScopeName, getPdfFileCount, outputFormat, pdfChunkSize, printConfig, schoolId, schoolName, selectedClassGrade, selectedClassId, selectedDivision, statusFilter])
+  }, [downloadPdfInChunks, generationScopeName, getPdfFileCount, outputFormat, pdfChunkSize, printConfig, schoolId, schoolName, selectedClassGrade, selectedClassId, selectedDivision, statusFilter, submissionDateFrom, submissionDateTo])
 
   const handleConfirmDownload = useCallback(async () => {
     if (!pendingSave) return
@@ -2287,21 +2295,77 @@ export default function BatchGenerator({
               Generate & Download ID Cards
             </h3>
             <p style={{ fontSize: 13, color: "#94a3b8" }}>
-              Render print-quality ID cards and download as ZIP (manufacturer only)
+              Render the selected students in your chosen format, preview, then download
             </p>
           </div>
         </div>
 
-        {onDateRangeDownload && (
-          <DateRangeDownload
-            disabled={generating || dateRangeExporting}
-            entityLabel={companyMode ? "employee-generate-tab" : "student-generate-tab"}
-            onDownload={(dateFrom, dateTo) => onDateRangeDownload(dateFrom, dateTo, {
-              classId: selectedClassId,
-              status: statusFilter,
-            })}
-          />
-        )}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            gap: 10,
+            flexWrap: "wrap",
+            padding: 12,
+            marginBottom: 16,
+            border: "1px solid #bfdbfe",
+            borderRadius: 12,
+            background: "#eff6ff",
+          }}
+        >
+          <div style={{ flex: "1 1 155px", maxWidth: 275 }}>
+            <label htmlFor="generate-submission-date-from" style={{ display: "block", marginBottom: 5, color: "#475569", fontSize: 12, fontWeight: 700 }}>
+              From submission date
+            </label>
+            <input
+              id="generate-submission-date-from"
+              type="date"
+              value={submissionDateFrom}
+              max={submissionDateTo || undefined}
+              disabled={generating}
+              onChange={(event) => {
+                setSubmissionDateFrom(event.target.value)
+                clearGeneratedResults()
+              }}
+              style={{ width: "100%", height: 40, padding: "0 10px", border: "1.5px solid #93c5fd", borderRadius: 8, background: "white", fontSize: 13 }}
+            />
+          </div>
+          <div style={{ flex: "1 1 155px", maxWidth: 275 }}>
+            <label htmlFor="generate-submission-date-to" style={{ display: "block", marginBottom: 5, color: "#475569", fontSize: 12, fontWeight: 700 }}>
+              To submission date
+            </label>
+            <input
+              id="generate-submission-date-to"
+              type="date"
+              value={submissionDateTo}
+              min={submissionDateFrom || undefined}
+              disabled={generating}
+              onChange={(event) => {
+                setSubmissionDateTo(event.target.value)
+                clearGeneratedResults()
+              }}
+              style={{ width: "100%", height: 40, padding: "0 10px", border: "1.5px solid #93c5fd", borderRadius: 8, background: "white", fontSize: 13 }}
+            />
+          </div>
+          {(submissionDateFrom || submissionDateTo) && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={generating}
+              onClick={() => {
+                setSubmissionDateFrom("")
+                setSubmissionDateTo("")
+                clearGeneratedResults()
+              }}
+              style={{ minHeight: 40, padding: "9px 14px" }}
+            >
+              Clear Dates
+            </button>
+          )}
+          <span style={{ flex: "1 1 300px", color: "#1d4ed8", fontSize: 12, lineHeight: 1.45 }}>
+            The selected range filters the cards below. Choose PDF, JPEG, BMP, or CDR, then click Render Preview and Download.
+          </span>
+        </div>
 
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
           <div style={{ flex: "1 1 200px" }}>
@@ -2658,7 +2722,7 @@ export default function BatchGenerator({
           <button
             className="btn btn-primary"
             onClick={handleGenerate}
-            disabled={generating}
+            disabled={generating || Boolean(submissionDateFrom) !== Boolean(submissionDateTo) || Boolean(submissionDateFrom && submissionDateTo && submissionDateFrom > submissionDateTo)}
             style={{
               padding: "13px 28px",
               fontSize: 15,

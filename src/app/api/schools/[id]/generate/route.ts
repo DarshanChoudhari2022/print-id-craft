@@ -11,6 +11,7 @@ import {
   sortStudentsForGeneration,
 } from "@/lib/generation-scope"
 import { applyFixedTemplateValuesToFormData } from "@/lib/fixed-template-values"
+import { buildSubmissionDateRange } from "@/lib/export/submission-date-range"
 
 export const maxDuration = 60; // Vercel function timeout config
 
@@ -38,6 +39,8 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     const mode = searchParams.get("mode")
     const classGrade = searchParams.get("classGrade")?.trim() || ""
     const division = searchParams.get("division")?.trim() || ""
+    const dateFrom = searchParams.get("dateFrom")
+    const dateTo = searchParams.get("dateTo")
 
     const whereClause: any = {
       schoolId: params.id,
@@ -45,6 +48,15 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     }
     if (classId) {
       whereClause.classId = classId
+    }
+    try {
+      const submittedAt = buildSubmissionDateRange(dateFrom, dateTo)
+      if (submittedAt) whereClause.submittedAt = submittedAt
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Invalid submission date range" },
+        { status: 400 }
+      )
     }
 
     if (mode === "filters") {
