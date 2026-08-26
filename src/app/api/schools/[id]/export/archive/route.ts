@@ -6,6 +6,7 @@ import { enqueueJob, kickJobWorker } from "@/lib/jobs/enqueue"
 import type { ExportArchivePayload } from "@/lib/jobs/types"
 import { EXPORT_DEFAULT_MAX_STUDENTS, EXPORT_MAX_STUDENTS } from "@/lib/export/constants"
 import { findActiveExportJob } from "@/lib/export/find-active-export-job"
+import { buildSubmissionDateRange } from "@/lib/export/submission-date-range"
 
 export const dynamic = "force-dynamic"
 
@@ -13,6 +14,8 @@ function parseFilters(req: Request, schoolId: string) {
   const url = new URL(req.url)
   const classId = url.searchParams.get("classId")
   const status = url.searchParams.get("status")
+  const dateFrom = url.searchParams.get("dateFrom")
+  const dateTo = url.searchParams.get("dateTo")
   const includePhotos = url.searchParams.get("photos") !== "false"
   const formatParam = url.searchParams.get("format")
   const format: ExportArchivePayload["format"] = formatParam === "excel" ? "excel" : "archive"
@@ -22,7 +25,7 @@ function parseFilters(req: Request, schoolId: string) {
     EXPORT_MAX_STUDENTS
   )
 
-  return { classId, status, includePhotos, format, maxStudents, schoolId }
+  return { classId, status, dateFrom, dateTo, includePhotos, format, maxStudents, schoolId }
 }
 
 async function validateArchiveRequest(schoolId: string, filters: ReturnType<typeof parseFilters>) {
@@ -34,6 +37,17 @@ async function validateArchiveRequest(schoolId: string, filters: ReturnType<type
   const where: Record<string, unknown> = { schoolId }
   if (filters.classId) where.classId = filters.classId
   if (filters.status) where.status = filters.status
+  try {
+    const submittedAt = buildSubmissionDateRange(filters.dateFrom, filters.dateTo)
+    if (submittedAt) where.submittedAt = submittedAt
+  } catch (error) {
+    return {
+      error: NextResponse.json(
+        { error: error instanceof Error ? error.message : "Invalid submission date range" },
+        { status: 400 }
+      ),
+    }
+  }
 
   const totalStudents = await prisma.student.count({ where })
   if (totalStudents > filters.maxStudents) {
@@ -67,6 +81,8 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
   const payload: ExportArchivePayload = {
     classId: filters.classId,
     status: filters.status,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
     includePhotos: filters.includePhotos,
     format: filters.format,
     maxStudents: filters.maxStudents,

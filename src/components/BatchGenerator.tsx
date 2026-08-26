@@ -35,6 +35,7 @@ import {
   getCoverPhotoPlacement,
   recolorEdgeConnectedPhotoBackground,
 } from "@/lib/card-photo-placement"
+import DateRangeDownload from "@/components/DateRangeDownload"
 
 type FieldMapping = {
   id: string
@@ -100,6 +101,12 @@ type BatchGeneratorProps = {
   schoolName: string
   classes: { id: string; name: string; _count: { students: number } }[]
   companyMode?: boolean
+  dateRangeExporting?: boolean
+  onDateRangeDownload?: (
+    dateFrom: string,
+    dateTo: string,
+    filters: { classId: string; status: string }
+  ) => Promise<void> | void
 }
 
 const normalizeWorkspaceNameForPrint = (value: string) =>
@@ -1327,7 +1334,14 @@ async function saveBmpPagesToFolder(
   }
 }
 
-export default function BatchGenerator({ schoolId, schoolName, classes, companyMode = false }: BatchGeneratorProps) {
+export default function BatchGenerator({
+  schoolId,
+  schoolName,
+  classes,
+  companyMode = false,
+  dateRangeExporting = false,
+  onDateRangeDownload,
+}: BatchGeneratorProps) {
   const [selectedClassId, setSelectedClassId] = useState("")
   const [selectedClassGrade, setSelectedClassGrade] = useState("")
   const [selectedDivision, setSelectedDivision] = useState("")
@@ -2277,6 +2291,17 @@ export default function BatchGenerator({ schoolId, schoolName, classes, companyM
             </p>
           </div>
         </div>
+
+        {onDateRangeDownload && (
+          <DateRangeDownload
+            disabled={generating || dateRangeExporting}
+            entityLabel={companyMode ? "employee-generate-tab" : "student-generate-tab"}
+            onDownload={(dateFrom, dateTo) => onDateRangeDownload(dateFrom, dateTo, {
+              classId: selectedClassId,
+              status: statusFilter,
+            })}
+          />
+        )}
 
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
           <div style={{ flex: "1 1 200px" }}>

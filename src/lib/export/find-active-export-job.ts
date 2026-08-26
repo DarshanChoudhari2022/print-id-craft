@@ -9,6 +9,8 @@ function isSameExport(
   return (
     candidate.classId === requested.classId &&
     candidate.status === requested.status &&
+    (candidate.dateFrom || null) === (requested.dateFrom || null) &&
+    (candidate.dateTo || null) === (requested.dateTo || null) &&
     candidate.includePhotos === requested.includePhotos &&
     (candidate.format || "archive") === (requested.format || "archive") &&
     candidate.totalStudents === requested.totalStudents

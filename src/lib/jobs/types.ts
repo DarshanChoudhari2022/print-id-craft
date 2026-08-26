@@ -12,6 +12,8 @@ export const EXPORT_PREFIX = "exports"
 export type ExportArchivePayload = {
   classId: string | null
   status: string | null
+  dateFrom?: string | null
+  dateTo?: string | null
   includePhotos: boolean
   maxStudents: number
   totalStudents: number
@@ -60,6 +62,8 @@ export class JobValidationError extends Error {
 export const exportArchivePayloadSchema = z.object({
   classId: nullableIdSchema,
   status: z.string().min(1).nullable(),
+  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   includePhotos: z.boolean(),
   maxStudents: z.number().int().positive().max(15000),
   totalStudents: z.number().int().nonnegative(),

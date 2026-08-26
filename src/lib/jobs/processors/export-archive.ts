@@ -13,6 +13,7 @@ import {
   EXPORT_PHOTO_CONCURRENCY,
 } from "@/lib/export/constants"
 import { uploadExportZip } from "@/lib/export/zip-upload"
+import { buildSubmissionDateRange } from "@/lib/export/submission-date-range"
 import {
   buildDynamicExportHeaders,
   buildDynamicStudentExportRow,
@@ -72,7 +73,7 @@ export async function processExportArchive(
   schoolId: string,
   payload: ExportArchivePayload
 ) {
-  const { classId, status, includePhotos, maxStudents, format = "archive" } = payload
+  const { classId, status, dateFrom, dateTo, includePhotos, maxStudents, format = "archive" } = payload
   const isExcelExport = format === "excel"
   const startedAt = Date.now()
 
@@ -104,6 +105,8 @@ export async function processExportArchive(
   const where: Record<string, unknown> = { schoolId: school.id }
   if (classId) where.classId = classId
   if (status) where.status = status
+  const submittedAt = buildSubmissionDateRange(dateFrom, dateTo)
+  if (submittedAt) where.submittedAt = submittedAt
 
   const totalStudents = await prisma.student.count({ where })
   if (totalStudents > maxStudents) {
@@ -122,7 +125,7 @@ export async function processExportArchive(
     exportedAt: new Date().toISOString(),
     format,
     school: { id: school.id, name: school.name },
-    filters: { classId, status, includePhotos, maxStudents, format },
+    filters: { classId, status, dateFrom, dateTo, includePhotos, maxStudents, format },
     counts: { students: 0, photosIncluded: 0, photosMissing: 0, qrIncluded: 0 },
     performance: {
       dbPageSize: EXPORT_DB_PAGE_SIZE,
@@ -350,7 +353,8 @@ export async function processExportArchive(
     compressionOptions: { level: 1 },
   })
 
-  const suffix = isExcelExport ? "excel-export" : "archive"
+  const dateRangeSuffix = dateFrom && dateTo ? `${dateFrom}-to-${dateTo}-` : ""
+  const suffix = isExcelExport ? `${dateRangeSuffix}excel-export` : `${dateRangeSuffix}archive`
   const fileName = `${safeExportFileName(school.name)}-${suffix}-${new Date().toISOString().slice(0, 10)}.zip`
   const storagePath = `${EXPORT_PREFIX}/${schoolId}/${jobId}/${fileName}`
   const { bytes, storageParts, error } = await uploadExportZip(

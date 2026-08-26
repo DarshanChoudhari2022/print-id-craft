@@ -65,4 +65,44 @@ describe("GET /api/schools/[id]/export/archive", () => {
     })
     expect(enqueueJob).not.toHaveBeenCalled()
   })
+
+  it("queues an export limited to the inclusive India submission-date range", async () => {
+    ;(prisma.student.count as any).mockResolvedValue(12)
+    ;(prisma.job.findMany as any).mockResolvedValue([])
+    ;(enqueueJob as any).mockResolvedValue({ id: "date-job", status: "PENDING" })
+
+    const req = new Request(
+      "http://localhost:3000/api/schools/s1/export/archive?format=excel&status=APPROVED&dateFrom=2026-08-05&dateTo=2026-08-06"
+    )
+    const res = await GET(req, { params: Promise.resolve({ id: "s1" }) })
+
+    expect(res.status).toBe(200)
+    expect(prisma.student.count).toHaveBeenCalledWith({
+      where: {
+        schoolId: "s1",
+        status: "APPROVED",
+        submittedAt: {
+          gte: new Date("2026-08-04T18:30:00.000Z"),
+          lt: new Date("2026-08-06T18:30:00.000Z"),
+        },
+      },
+    })
+    expect(enqueueJob).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({
+        dateFrom: "2026-08-05",
+        dateTo: "2026-08-06",
+        totalStudents: 12,
+      }),
+    }))
+  })
+
+  it("rejects an invalid or reversed date range before counting students", async () => {
+    const req = new Request(
+      "http://localhost:3000/api/schools/s1/export/archive?dateFrom=2026-08-06&dateTo=2026-08-05"
+    )
+    const res = await GET(req, { params: Promise.resolve({ id: "s1" }) })
+
+    expect(res.status).toBe(400)
+    expect(prisma.student.count).not.toHaveBeenCalled()
+  })
 })

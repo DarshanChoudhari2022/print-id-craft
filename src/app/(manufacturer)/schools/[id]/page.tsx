@@ -33,6 +33,7 @@ import {
   applyFixedTemplateValuesToFormData,
   getFixedTemplateFieldKeys,
 } from "@/lib/fixed-template-values"
+import DateRangeDownload from "@/components/DateRangeDownload"
 
 const EDIT_ADDRESS_MIN_WORDS = 5
 type DownloadExportStatus = "APPROVED" | "SUBMITTED" | "PRINTED"
@@ -361,7 +362,7 @@ export default function SchoolDetailPage() {
   const [gradeClassFilter, setGradeClassFilter] = useState("")
   const [showStudentAddSection, setShowStudentAddSection] = useState(false)
   const [studentTabNewSectionName, setStudentTabNewSectionName] = useState("")
-  const [exportingFormat, setExportingFormat] = useState<"csv" | "excel" | "status-excel" | "archive" | null>(null)
+  const [exportingFormat, setExportingFormat] = useState<"csv" | "excel" | "status-excel" | "date-range" | "archive" | null>(null)
   const [downloadExportStatus, setDownloadExportStatus] = useState<DownloadExportStatus>("APPROVED")
   const [statusExportJob, setStatusExportJob] = useState<{
     jobId: string
@@ -2482,24 +2483,38 @@ export default function SchoolDetailPage() {
 
   const handleExport = async (
     format: "csv" | "excel" | "archive",
-    options?: { statusOverride?: DownloadExportStatus }
+    options?: {
+      statusOverride?: string
+      classIdOverride?: string
+      dateFrom?: string
+      dateTo?: string
+    }
   ) => {
     const params = new URLSearchParams()
-    const exportKey = format === "excel" && options?.statusOverride ? "status-excel" : format
-    if (classFilter) params.set("classId", classFilter)
-    const effectiveStatus = options?.statusOverride ?? statusFilter
+    const exportKey = options?.dateFrom && options?.dateTo
+      ? "date-range"
+      : format === "excel" && options?.statusOverride
+        ? "status-excel"
+        : format
+    const effectiveClassId = options?.classIdOverride !== undefined ? options.classIdOverride : classFilter
+    if (effectiveClassId) params.set("classId", effectiveClassId)
+    const effectiveStatus = options?.statusOverride !== undefined ? options.statusOverride : statusFilter
     if (effectiveStatus) params.set("status", effectiveStatus)
+    if (options?.dateFrom) params.set("dateFrom", options.dateFrom)
+    if (options?.dateTo) params.set("dateTo", options.dateTo)
     setExportingFormat(exportKey)
     if (format === "excel" || format === "archive") {
       try {
         if (format === "excel") params.set("format", "excel")
-        const selectedClassName = classFilter ? classes.find((c) => c.id === classFilter)?.name : ""
+        const selectedClassName = effectiveClassId ? classes.find((c) => c.id === effectiveClassId)?.name : ""
         const scopeLabel = selectedClassName ? `${selectedClassName} class` : "school"
-        const exportStatusLabel = options?.statusOverride
-          ? DOWNLOAD_EXPORT_STATUS_LABELS[options.statusOverride]
+        const exportStatusLabel = options?.statusOverride && options.statusOverride in DOWNLOAD_EXPORT_STATUS_LABELS
+          ? DOWNLOAD_EXPORT_STATUS_LABELS[options.statusOverride as DownloadExportStatus]
           : ""
         toast.message(format === "excel"
-          ? `Preparing ${exportStatusLabel ? `${exportStatusLabel.toLowerCase()} ` : ""}${scopeLabel} backup with named photos...`
+          ? options?.dateFrom && options?.dateTo
+            ? `Preparing submissions from ${options.dateFrom} through ${options.dateTo} with named photos...`
+            : `Preparing ${exportStatusLabel ? `${exportStatusLabel.toLowerCase()} ` : ""}${scopeLabel} backup with named photos...`
           : "Preparing archive export...")
         const res = await fetch(`/api/schools/${schoolId}/export/archive?${params}`)
         const data = await res.json()
@@ -2519,18 +2534,20 @@ export default function SchoolDetailPage() {
           setStatusExportJob({
             jobId,
             status: "running",
-            exportStatus: options.statusOverride,
+            exportStatus: options.statusOverride as DownloadExportStatus,
             totalStudents,
           })
           toast.success(`${exportStatusLabel} backup started. The button will change when the ZIP is ready.`)
           setExportingFormat(null)
-          void pollStatusExportJob(jobId, options.statusOverride, totalStudents)
+          void pollStatusExportJob(jobId, options.statusOverride as DownloadExportStatus, totalStudents)
           return
         }
         await pollExportJob(
           jobId,
           format === "excel"
-            ? "Backup ZIP ready - data and named photos downloaded"
+            ? options?.dateFrom && options?.dateTo
+              ? `Date range ZIP ready - ${data.data?.totalStudents ?? 0} records downloaded`
+              : "Backup ZIP ready - data and named photos downloaded"
             : "Archive ready — download started",
           data.data?.totalStudents
         )
@@ -3760,6 +3777,12 @@ export default function SchoolDetailPage() {
                 </button>
               )}
             </div>
+
+            <DateRangeDownload
+              disabled={exportingFormat !== null}
+              entityLabel={companyMode ? "employee-students-tab" : "student-students-tab"}
+              onDownload={(dateFrom, dateTo) => handleExport("excel", { dateFrom, dateTo })}
+            />
 
             <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
               <input placeholder={companyMode ? "Search by employee name, ID, or serial..." : "Search by name or serial..."} value={searchInput} onChange={e => { const v = e.target.value; setSearchInput(v); if (searchTimerRef.current) clearTimeout(searchTimerRef.current); searchTimerRef.current = setTimeout(() => { setSearchQuery(v); setStudentPage(1); }, 400); }} style={{ height: 40, padding: '0 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, flex: 1, minWidth: 200 }} />
@@ -5820,6 +5843,13 @@ export default function SchoolDetailPage() {
             schoolName={school.name}
             classes={classes}
             companyMode={companyMode}
+            dateRangeExporting={exportingFormat === "date-range"}
+            onDateRangeDownload={(dateFrom, dateTo, filters) => handleExport("excel", {
+              dateFrom,
+              dateTo,
+              classIdOverride: filters.classId,
+              statusOverride: filters.status,
+            })}
           />
         )}
 
