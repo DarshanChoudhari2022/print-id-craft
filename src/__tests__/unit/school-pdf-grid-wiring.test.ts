@@ -25,6 +25,7 @@ describe("school PDF grid", () => {
     )
     expect(source).toContain("const usesFrontThenBackPdfOrder")
     expect(source).toContain('normalized.includes("ahura") && normalized.includes("ktech")')
+    expect(source).toContain('normalized.includes("kilbil") && normalized.includes("ktech")')
     expect(source).toContain("const pairedLayout = hasBackSide && !usesFrontThenBackPdfOrder(schoolName)")
     expect(source).toContain(
       'const pairedLayout = fmt === "PDF_PRINT" && hasBackSide && !usesFrontThenBackPdfOrder(schoolName)',

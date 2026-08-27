@@ -107,7 +107,10 @@ const normalizeWorkspaceNameForPrint = (value: string) =>
 
 const usesFrontThenBackPdfOrder = (workspaceName: string) => {
   const normalized = normalizeWorkspaceNameForPrint(workspaceName)
-  return normalized.includes("ahura") && normalized.includes("ktech")
+  return (
+    (normalized.includes("ahura") && normalized.includes("ktech")) ||
+    (normalized.includes("kilbil") && normalized.includes("ktech"))
+  )
 }
 
 // normalizeKey, FIELD_GROUPS, resolveDisplayFieldValue imported from @/lib/field-resolver
@@ -722,9 +725,7 @@ async function renderIdCardSvg(
   let w: number
   let h: number
   if (cardWidthMm && cardHeightMm && cardWidthMm > 0 && cardHeightMm > 0) {
-    ;({ widthPx: w } = printCanvasSize(cardWidthMm, cardHeightMm))
-    // Maintain the template image's natural aspect ratio so it matches the editor exactly
-    h = (templateImg.naturalHeight / templateImg.naturalWidth) * w
+    ;({ widthPx: w, heightPx: h } = printCanvasSize(cardWidthMm, cardHeightMm))
   } else {
     w = templateImg.naturalWidth
     h = templateImg.naturalHeight

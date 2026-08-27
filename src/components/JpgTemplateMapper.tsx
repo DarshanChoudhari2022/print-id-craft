@@ -1706,6 +1706,7 @@ export default function JpgTemplateMapper({
               position: "relative",
               display: "block",
               width: `${zoomLevel}%`,
+              aspectRatio: cardWidth > 0 && cardHeight > 0 ? `${cardWidth} / ${cardHeight}` : undefined,
               background: "transparent",
               border: "none",
               borderRadius: 8,
@@ -1845,7 +1846,7 @@ export default function JpgTemplateMapper({
               alt="Template"
               style={{
                 width: "100%",
-                height: "auto",
+                height: cardWidth > 0 && cardHeight > 0 ? "100%" : "auto",
                 display: "block",
                 borderRadius: 8,
               }}

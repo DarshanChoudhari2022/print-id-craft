@@ -470,9 +470,7 @@ export default function JpgCardPreview({
       if (cardWidthMm && cardHeightMm && cardWidthMm > 0 && cardHeightMm > 0) {
         const base = printCanvasSize(cardWidthMm, cardHeightMm, PREVIEW_DPI)
         w = base.widthPx * scale
-        // Maintain the template image's natural aspect ratio to match the editor exactly
-        // and prevent photo squash/stretch.
-        h = (img.naturalHeight / img.naturalWidth) * w
+        h = base.heightPx * scale
       } else {
         w = img.naturalWidth * scale
         h = img.naturalHeight * scale
@@ -670,6 +668,7 @@ export async function generateJpgCard(
   outputScale: number = 1,
   flagImageUrl?: string,
   cardWidthMm: number = DEFAULT_CARD_WIDTH_MM,
+  cardHeightMm?: number,
   schoolName?: string,
   photoBgColor?: string,
 ): Promise<string> {
@@ -678,8 +677,16 @@ export async function generateJpgCard(
   if (!ctx) throw new Error("Canvas context failed")
 
   const img = await loadImage(templateImageUrl)
-  const w = img.naturalWidth * outputScale
-  const h = img.naturalHeight * outputScale
+  let w: number
+  let h: number
+  if (cardWidthMm && cardHeightMm && cardWidthMm > 0 && cardHeightMm > 0) {
+    const base = printCanvasSize(cardWidthMm, cardHeightMm, PREVIEW_DPI)
+    w = base.widthPx * outputScale
+    h = base.heightPx * outputScale
+  } else {
+    w = img.naturalWidth * outputScale
+    h = img.naturalHeight * outputScale
+  }
   canvas.width = w
   canvas.height = h
 
