@@ -14,6 +14,7 @@ import { getDefaultTemplate } from "@/lib/template-resolver"
 import { buildImportIdentityKeys } from "@/lib/import-identity"
 import { normalizeStudentStringFormData } from "@/lib/student-text-normalization"
 import { uploadPhotoFromRowLink } from "@/lib/row-photo-import"
+import { isValidIndianMobile } from "@/lib/indian-mobile"
 
 export const maxDuration = 300; // Vercel Pro function timeout config
 
@@ -275,6 +276,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       const raw = rawRows[i]
       const rowNum = i + 2 // Excel row (1-indexed header + data)
       const studentFormData: Record<string, string> = {}
+      const fieldLabelsByKey: Record<string, string> = {}
       let photoId = ""
       let photoUrl = ""
       let rowClassName = ""
@@ -299,8 +301,10 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
           studentFormData["class"] = val
         } else if (fieldKey === "srNo" || fieldKey === "branch") {
           studentFormData[fieldKey] = val
+          fieldLabelsByKey[fieldKey] = excelHeader
         } else {
           studentFormData[fieldKey] = val
+          fieldLabelsByKey[fieldKey] = excelHeader
         }
       }
 
@@ -310,6 +314,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
           const key = header.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "")
           if (isImportColumn(header) && key && String(value).trim()) {
             studentFormData[key] = String(value).trim()
+            fieldLabelsByKey[key] = header
           }
         }
       }
@@ -351,8 +356,23 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         }
       }
 
+      const normalizedFormData = normalizeStudentStringFormData(studentFormData, fieldConfig)
+      let hasInvalidMobile = false
+      for (const [key, value] of Object.entries(normalizedFormData)) {
+        const label = fieldLabelsByKey[key] || fieldConfig.find(f => f.key === key)?.label || key
+        if (value && inferFieldRole(key, label) === "mobile" && !isValidIndianMobile(value)) {
+          errors.push({
+            row: rowNum,
+            field: label,
+            message: "Please enter a valid 10-digit Indian mobile number.",
+          })
+          hasInvalidMobile = true
+        }
+      }
+      if (hasInvalidMobile) continue
+
       validRows.push({
-        formData: normalizeStudentStringFormData(studentFormData, fieldConfig),
+        formData: normalizedFormData,
         photoId,
         photoUrl,
         className: rowClassName || "Default",

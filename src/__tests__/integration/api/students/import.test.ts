@@ -71,7 +71,7 @@ describe('POST /api/schools/[id]/students/import', () => {
 
   describe('Bulk Data Processing', () => {
     it('correctly parses CSV data rows into database student objects and calls createMany', async () => {
-      const csvStr = 'Full Name,Roll No.,Phone No\nJohn Doe,10,12345\nJane Smith,11,67890'
+      const csvStr = 'Full Name,Roll No.,Phone No\nJohn Doe,10,9876543210\nJane Smith,11,8765432109'
       const req = new Request('http://localhost:3000/api/schools/s1/students/import', {
         method: 'POST',
         body: createMockFormData(csvStr)
@@ -103,6 +103,29 @@ describe('POST /api/schools/[id]/students/import', () => {
       const createManyCall = (prisma.student.createMany as any).mock.calls[0][0]
       expect(createManyCall.data[0].formData.fullName).toBe('Iqra Banu Raveen')
       expect(createManyCall.data[0].formData.address).toBe('Flat No. 307, Hosing Residency, Pune')
+    })
+
+    it('rejects 9-digit mobile numbers during import validation', async () => {
+      const csvStr = 'Full Name,Mob.\nAsma Mustak Shaikh,+91 930942887'
+      const formData = createMockFormData(csvStr)
+      formData.set('mode', 'validate')
+      const req = new Request('http://localhost:3000/api/schools/s1/students/import', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const res = await POST(req, { params: Promise.resolve({ id: 's1' }) })
+      const data = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(data.success).toBe(true)
+      expect(data.data.validRows).toBe(0)
+      expect(data.data.errorRows).toBe(1)
+      expect(data.data.errors).toContainEqual({
+        row: 2,
+        field: 'Mob.',
+        message: 'Please enter a valid 10-digit Indian mobile number.',
+      })
     })
 
     it('does not create duplicate employees when the same ID Code is uploaded again', async () => {
