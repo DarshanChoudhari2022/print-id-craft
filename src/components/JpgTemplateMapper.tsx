@@ -6,7 +6,7 @@ import {
   type IdSizeConfig, type FontConfig, type PhotoSizeConfig,
   type PhotoBorderConfig, type WrapTextConfig,
 } from "./IDMakerDialogs"
-import { resolveDisplayFieldValue, formatDateValue, isPrefixedAddressField } from "@/lib/field-resolver"
+import { resolveDisplayFieldValue, formatDateValue, getCardTextLayout, isPrefixedAddressField } from "@/lib/field-resolver"
 import { isClassDivisionFieldKey } from "@/lib/section-class"
 import { getFixedTemplateValue } from "@/lib/fixed-template-values"
 
@@ -2090,6 +2090,12 @@ export default function JpgTemplateMapper({
                       const fontScale = editorImgWidth > 0 && cardWidth > 0
                         ? (editorImgWidth * 25.4) / (cardWidth * 72)
                         : editorImgWidth / EDITOR_REFERENCE_WIDTH
+                      const { wrapMode, textAlign } = getCardTextLayout(
+                        m.fieldKey,
+                        m.label,
+                        m.textWrap,
+                        m.textAlign,
+                      )
                       const baseStyle: React.CSSProperties = {
                         fontSize: m.fontSize * fontScale,
                         color: m.fontColor,
@@ -2102,13 +2108,13 @@ export default function JpgTemplateMapper({
                         textTransform: (m.textTransform || "none") as any,
                         textShadow: showPreview ? "none" : `0 0 3px rgba(0,0,0,0.4), 0 0 1px rgba(0,0,0,0.6)`,
                         WebkitTextStroke: !showPreview ? "0.3px rgba(0,0,0,0.2)" : undefined,
-                        textAlign: m.textAlign || "left",
+                        textAlign,
                       }
                       // "multiline" mode → wrap to next line while preserving the chosen
                       // font size. Best for long addresses where shrinking the text would
                       // make it unreadable. Text that overflows the box vertically is
                       // clipped (overflow:hidden) rather than truncated with "...".
-                      if (m.textWrap === "multiline") {
+                      if (wrapMode === "multiline") {
                         return (
                           <span
                             style={{
@@ -2127,12 +2133,12 @@ export default function JpgTemplateMapper({
                         )
                       }
                       // "wrap" mode → keep selected font size and wrap text inside the box.
-                      if (m.textWrap === "wrap" || m.textWrap === "centeredWrap") {
+                      if (wrapMode === "wrap" || wrapMode === "centeredWrap") {
                         return (
                           <FixedWrapText
                             text={displayText}
                             style={baseStyle}
-                            centered={m.textWrap === "centeredWrap"}
+                            centered={wrapMode === "centeredWrap"}
                           />
                         )
                       }

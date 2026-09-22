@@ -7,6 +7,7 @@ import {
   resolveEditFieldValue,
   FIELD_GROUPS,
   getFieldRole,
+  getCardTextLayout,
   computeDuplicateFingerprint,
   normalizeFormValue,
   sortFieldsByRole,
@@ -51,6 +52,37 @@ describe("normalizeKey", () => {
 
   it("preserves digits", () => {
     expect(normalizeKey("Class10A")).toBe("class10a")
+  })
+})
+
+describe("ID-card identity field layout", () => {
+  it("keeps names and mobile numbers on a shared left edge", () => {
+    expect(getCardTextLayout("name", "Name", "centeredWrap", "right")).toEqual({
+      wrapMode: "wrap",
+      textAlign: "left",
+    })
+    expect(getCardTextLayout("mobile_no", "Mobile No.", "multiline", "center")).toEqual({
+      wrapMode: "nowrap",
+      textAlign: "left",
+    })
+  })
+
+  it("always renders addresses as left-aligned multiline text", () => {
+    expect(getCardTextLayout("address", "Address", "nowrap", "right")).toEqual({
+      wrapMode: "multiline",
+      textAlign: "left",
+    })
+    expect(getCardTextLayout("addressWithLabel", "Add.", "centeredWrap", "center")).toEqual({
+      wrapMode: "multiline",
+      textAlign: "left",
+    })
+  })
+
+  it("preserves configured layout for unrelated fields", () => {
+    expect(getCardTextLayout("dateOfBirth", "DOB", "nowrap", "right")).toEqual({
+      wrapMode: "nowrap",
+      textAlign: "right",
+    })
   })
 })
 

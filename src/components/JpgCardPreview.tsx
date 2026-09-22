@@ -3,7 +3,7 @@ import { useRef, useEffect, useState, useCallback, memo } from "react"
 import {
   resolveDisplayFieldValue as resolveDisplayFieldValueShared,
   resolveFieldValue as resolveFieldValueShared,
-  getCardTextWrapMode,
+  getCardTextLayout,
   formatDateValue,
 } from "@/lib/field-resolver"
 import {
@@ -550,9 +550,15 @@ export default function JpgCardPreview({
             const fontFamily = field.fontFamily || "Arial"
             const fontWeight = field.fontWeight || "normal"
             const fStyle = field.fontStyle || "normal"
+            const { wrapMode, textAlign } = getCardTextLayout(
+              field.fieldKey,
+              field.label,
+              field.textWrap,
+              field.textAlign,
+            )
             const { lines, fontSize, lineHeight: baseLineHeight } = fitTextToBox(
               ctx, String(value), fw, fh, fontFamily, fontWeight, scale,
-              w, field.fontSize, getCardTextWrapMode(field.fieldKey, field.textWrap), fStyle,
+              w, field.fontSize, wrapMode, fStyle,
               cardWidthMm || DEFAULT_CARD_WIDTH_MM,
             )
             // Honour the user's lineHeight multiplier if set.
@@ -567,7 +573,7 @@ export default function JpgCardPreview({
             }
 
             ctx.fillStyle = field.fontColor || "#000"
-            const align = field.textWrap === "centeredWrap" ? "center" : (field.textAlign || "left")
+            const align = wrapMode === "centeredWrap" ? "center" : textAlign
             ctx.textAlign = align
             ctx.textBaseline = "middle"
             ctx.save()
@@ -580,7 +586,7 @@ export default function JpgCardPreview({
             //     even if the address overflows the bottom of the box.
             //   • everything else → centered (legacy behaviour).
             const totalH = lines.length * lineHeight
-            const isMultiline = (field.textWrap || "wrap") === "multiline"
+            const isMultiline = wrapMode === "multiline"
             const firstLineY = isMultiline
               ? fy + padding + lineHeight / 2
               : fy + (fh - totalH) / 2 + lineHeight / 2
@@ -739,15 +745,21 @@ export async function generateJpgCard(
         const padding = 4 * outputScale
         const fontFamily = field.fontFamily || "Arial"
         const fontWeight = field.fontWeight || "normal"
+        const { wrapMode, textAlign } = getCardTextLayout(
+          field.fieldKey,
+          field.label,
+          field.textWrap,
+          field.textAlign,
+        )
         const { lines, fontSize, lineHeight } = fitTextToBox(
           ctx, String(value), fw, fh, fontFamily, fontWeight, outputScale,
-          w, field.fontSize, getCardTextWrapMode(field.fieldKey, field.textWrap),
+          w, field.fontSize, wrapMode,
           "normal",
           cardWidthMm || DEFAULT_CARD_WIDTH_MM,
         )
 
         ctx.fillStyle = field.fontColor || "#000"
-        const align = field.textWrap === "centeredWrap" ? "center" : (field.textAlign || "left")
+        const align = wrapMode === "centeredWrap" ? "center" : textAlign
         ctx.textAlign = align
         ctx.textBaseline = "middle"
         ctx.save()
@@ -756,7 +768,7 @@ export async function generateJpgCard(
         ctx.clip()
         const textX = align === "center" ? fx + fw / 2 : align === "right" ? fx + fw - padding : fx + padding
         const totalH = lines.length * lineHeight
-        const isMultiline = (field.textWrap || "wrap") === "multiline"
+        const isMultiline = wrapMode === "multiline"
         const firstLineY = isMultiline
           ? fy + padding + lineHeight / 2
           : fy + (fh - totalH) / 2 + lineHeight / 2

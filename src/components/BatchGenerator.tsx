@@ -6,7 +6,7 @@ import {
   resolveDisplayFieldValue,
   FIELD_GROUPS,
   formatDateValue,
-  getCardTextWrapMode,
+  getCardTextLayout,
 } from "@/lib/field-resolver"
 import { PrintDialog, type PrintConfig } from "./IDMakerDialogs"
 import { calculatePairedEmployeeSheetLayout, generateDirectPdf } from "@/lib/pdf-layout"
@@ -636,9 +636,15 @@ async function renderIdCard(
         const fontFamily = field.fontFamily || "Arial"
         const fontWeight = field.fontWeight || "normal"
         const fStyle = field.fontStyle || "normal"
+        const { wrapMode, textAlign } = getCardTextLayout(
+          field.fieldKey,
+          field.label,
+          field.textWrap,
+          field.textAlign,
+        )
         const { lines, fontSize, lineHeight: baseLineHeight } = fitTextToBoxCanvas(
           ctx, value, fw, fh, fontFamily, fontWeight,
-          printW, field.fontSize, getCardTextWrapMode(field.fieldKey, field.textWrap), fStyle,
+          printW, field.fontSize, wrapMode, fStyle,
           cardWidthMm || DEFAULT_CARD_WIDTH_MM,
         )
         // Honour the user's lineHeight multiplier if set (default 1.2 for multiline, ~1.15 otherwise).
@@ -653,7 +659,7 @@ async function renderIdCard(
         }
 
         ctx.fillStyle = field.fontColor || "#000"
-        const align = field.textWrap === "centeredWrap" ? "center" : (field.textAlign || "left")
+        const align = wrapMode === "centeredWrap" ? "center" : textAlign
         ctx.textAlign = align
         ctx.textBaseline = "middle"
         ctx.save()
@@ -664,7 +670,7 @@ async function renderIdCard(
         const totalH = lines.length * lineHeight
         // Multi-line addresses must top-align so the first line is always visible
         // even when the address overflows the bottom of the box.
-        const isMultiline = (field.textWrap || "wrap") === "multiline"
+        const isMultiline = wrapMode === "multiline"
         const firstLineY = isMultiline
           ? fy + padding + lineHeight / 2
           : fy + (fh - totalH) / 2 + lineHeight / 2
@@ -801,8 +807,13 @@ async function renderIdCardSvg(
         String(val || ""),
       ).trim()
       if (value) {
-        const wrapMode = getCardTextWrapMode(field.fieldKey, (field as any).textWrap)
-        const effectiveTextAlign = wrapMode === "centeredWrap" ? "center" : field.textAlign
+        const { wrapMode, textAlign } = getCardTextLayout(
+          field.fieldKey,
+          field.label,
+          field.textWrap,
+          field.textAlign,
+        )
+        const effectiveTextAlign = wrapMode === "centeredWrap" ? "center" : textAlign
         const textAnchor = effectiveTextAlign === "center" ? "middle" : effectiveTextAlign === "right" ? "end" : "start"
         const padding = 4
         const textX = effectiveTextAlign === "center" ? fx + fw / 2 : effectiveTextAlign === "right" ? fx + fw - padding : fx + padding

@@ -539,6 +539,46 @@ export function getCardTextWrapMode(
   return "wrap"
 }
 
+export type CardTextWrapMode = "nowrap" | "wrap" | "multiline" | "centeredWrap"
+export type CardTextAlignment = "left" | "center" | "right"
+
+/**
+ * Resolve the final text layout used by every card renderer.
+ *
+ * Identity details are read as a single column, so their values must keep the
+ * same left edge regardless of content length. Addresses need a predictable
+ * multi-line layout; names auto-fit on one line where possible; mobile numbers
+ * stay on one line. Other fields retain the template designer's choices.
+ */
+export function getCardTextLayout(
+  fieldKey: string,
+  label: string = "",
+  configuredWrap?: string,
+  configuredAlign?: string,
+): { wrapMode: CardTextWrapMode; textAlign: CardTextAlignment } {
+  const role = getFieldRole(fieldKey, label)
+
+  if (role === "address") {
+    return { wrapMode: "multiline", textAlign: "left" }
+  }
+  if (role === "name") {
+    return { wrapMode: "wrap", textAlign: "left" }
+  }
+  if (role === "mobile") {
+    return { wrapMode: "nowrap", textAlign: "left" }
+  }
+
+  const textAlign: CardTextAlignment =
+    configuredAlign === "center" || configuredAlign === "right"
+      ? configuredAlign
+      : "left"
+
+  return {
+    wrapMode: getCardTextWrapMode(fieldKey, configuredWrap),
+    textAlign,
+  }
+}
+
 /**
  * Formats a date string according to the user's chosen format.
  * Parses DD/MM/YYYY, YYYY-MM-DD, and DD-MM-YYYY inputs.
