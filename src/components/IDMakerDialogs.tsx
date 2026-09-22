@@ -194,6 +194,9 @@ function WinInput({
   min,
   max,
   step,
+  onBlur,
+  onFocus,
+  onKeyDown,
 }: {
   value: string | number
   onChange: (v: string) => void
@@ -203,6 +206,9 @@ function WinInput({
   min?: number
   max?: number
   step?: number
+  onBlur?: React.FocusEventHandler<HTMLInputElement>
+  onFocus?: React.FocusEventHandler<HTMLInputElement>
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>
 }) {
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     let v = e.target.value
@@ -224,6 +230,9 @@ function WinInput({
       min={min}
       max={max}
       step={step}
+      onBlur={onBlur}
+      onFocus={onFocus}
+      onKeyDown={onKeyDown}
       autoComplete="off"
       spellCheck={false}
       style={{
@@ -237,6 +246,69 @@ function WinInput({
         maxWidth: "100%",
         boxSizing: "border-box",
         ...style,
+      }}
+    />
+  )
+}
+
+function formatMmInputValue(value: number) {
+  if (!Number.isFinite(value)) return "0"
+  return Number(value.toFixed(2)).toString()
+}
+
+function MmInput({
+  value,
+  onCommit,
+  style,
+  min = 0,
+}: {
+  value: number
+  onCommit: (value: number) => void
+  style?: React.CSSProperties
+  min?: number
+}) {
+  const [draft, setDraft] = useState(formatMmInputValue(value))
+  const [focused, setFocused] = useState(false)
+
+  useEffect(() => {
+    if (!focused) setDraft(formatMmInputValue(value))
+  }, [focused, value])
+
+  const commitDraft = useCallback(() => {
+    const normalized = draft.trim().replace(",", ".")
+    const parsed = Number(normalized)
+
+    if (normalized !== "" && Number.isFinite(parsed)) {
+      const next = Math.max(min, parsed)
+      onCommit(next)
+      setDraft(formatMmInputValue(next))
+    } else {
+      setDraft(formatMmInputValue(value))
+    }
+
+    setFocused(false)
+  }, [draft, min, onCommit, value])
+
+  return (
+    <WinInput
+      type="text"
+      value={draft}
+      onChange={(next) => {
+        const normalized = next.replace(",", ".")
+        if (/^\d*\.?\d*$/.test(normalized)) setDraft(normalized)
+      }}
+      style={{ textAlign: "right", ...style }}
+      onBlur={commitDraft}
+      onFocus={(e) => {
+        setFocused(true)
+        e.currentTarget.select()
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur()
+        if (e.key === "Escape") {
+          setDraft(formatMmInputValue(value))
+          e.currentTarget.blur()
+        }
       }}
     />
   )
@@ -1076,17 +1148,15 @@ export function PrintDialog({
         <div style={{ fontWeight: 700, marginBottom: 8 }}>Paper Setting</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
           <label style={{ width: 80 }}>Paper Size</label>
-          <WinInput
-            type="number"
+          <MmInput
             value={paperWidth}
-            onChange={(v) => { setPaperWidth(Number(v)) }}
+            onCommit={setPaperWidth}
             style={{ width: 60 }}
           />
           <span>×</span>
-          <WinInput
-            type="number"
+          <MmInput
             value={paperHeight}
-            onChange={(v) => { setPaperHeight(Number(v)) }}
+            onCommit={setPaperHeight}
             style={{ width: 60 }}
           />
           <span style={{ fontSize: 11, color: "#555" }}>(mm)</span>
@@ -1124,20 +1194,18 @@ export function PrintDialog({
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
           <label style={{ width: 150, fontSize: 11 }}>Horizontal Gap (column)</label>
-          <WinInput
-            type="number"
+          <MmInput
             value={gapH}
-            onChange={(v) => setGapH(Math.max(0, Number(v) || 0))}
+            onCommit={setGapH}
             style={{ width: 55 }}
           />
           <span style={{ fontSize: 11, color: "#555" }}>(mm)</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
           <label style={{ width: 150, fontSize: 11 }}>Vertical Gap (row)</label>
-          <WinInput
-            type="number"
+          <MmInput
             value={gapV}
-            onChange={(v) => setGapV(Math.max(0, Number(v) || 0))}
+            onCommit={setGapV}
             style={{ width: 55 }}
           />
           <span style={{ fontSize: 11, color: "#555" }}>(mm)</span>
@@ -1153,20 +1221,18 @@ export function PrintDialog({
         <div style={{ fontWeight: 700, marginBottom: 6 }}>Horizontal</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
           <label style={{ width: 150, fontSize: 11 }}>1st ID-Card Position</label>
-          <WinInput
-            type="number"
+          <MmInput
             value={h1}
-            onChange={(v) => setH1(Math.max(0, Number(v) || 0))}
+            onCommit={setH1}
             style={{ width: 55 }}
           />
           <span style={{ fontSize: 11, color: "#555" }}>(in mm)</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
           <label style={{ width: 150, fontSize: 11 }}>2nd Card Start X (pitch)</label>
-          <WinInput
-            type="number"
+          <MmInput
             value={Number(hPitch.toFixed(1))}
-            onChange={(v) => setGapH(Math.max(0, (Number(v) || cardW) - cardW))}
+            onCommit={(v) => setGapH(Math.max(0, v - cardW))}
             style={{ width: 55 }}
           />
           <span style={{ fontSize: 11, color: "#555" }}>(in mm)</span>
@@ -1174,20 +1240,18 @@ export function PrintDialog({
         <div style={{ fontWeight: 700, marginBottom: 6 }}>Vertical</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
           <label style={{ width: 150, fontSize: 11 }}>1st ID-Card Position</label>
-          <WinInput
-            type="number"
+          <MmInput
             value={v1}
-            onChange={(v) => setV1(Math.max(0, Number(v) || 0))}
+            onCommit={setV1}
             style={{ width: 55 }}
           />
           <span style={{ fontSize: 11, color: "#555" }}>(in mm)</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <label style={{ width: 150, fontSize: 11 }}>2nd Card Start Y (pitch)</label>
-          <WinInput
-            type="number"
+          <MmInput
             value={Number(vPitch.toFixed(1))}
-            onChange={(v) => setGapV(Math.max(0, (Number(v) || cardH) - cardH))}
+            onCommit={(v) => setGapV(Math.max(0, v - cardH))}
             style={{ width: 55 }}
           />
           <span style={{ fontSize: 11, color: "#555" }}>(in mm)</span>
